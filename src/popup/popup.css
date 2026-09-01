@@ -478,8 +478,8 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   border-radius: 10px;
   background:
     linear-gradient(180deg, rgba(65, 211, 155, .065), rgba(65, 211, 155, .025)),
-    rgba(8, 11, 13, .82);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035), 0 12px 32px rgba(0, 0, 0, .16);
+    var(--credential);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035), 0 12px 32px var(--shadow);
   animation: credential-in .18s ease-out;
 }
 @keyframes credential-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
@@ -500,7 +500,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   border: 1px solid rgba(65, 211, 155, .16);
   border-radius: 8px;
   background: rgba(65, 211, 155, .10);
-  color: #9df0d0;
+  color: var(--green-text);
 }
 .credential-icon svg { width: 15px; height: 15px; }
 .credential h2 { margin: 1px 0 3px; color: var(--text-0); font-size: 12px; }
@@ -695,3 +695,100 @@ button:focus-visible,
 :root[data-theme="light"] .empty svg { stroke: #9aabba; }
 :root[data-theme="light"] .status { color: #536b82; }
 :root[data-theme="light"] .statusbar > svg { color: #0b9968; }
+:root[data-theme="light"] .credential {
+  border-color: rgba(11, 153, 104, .28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .92), 0 12px 32px rgba(30, 55, 78, .10);
+}
+:root[data-theme="light"] .credential-icon {
+  border-color: rgba(11, 153, 104, .25);
+  background: rgba(11, 153, 104, .11);
+  color: #076b49;
+}
+:root[data-theme="light"] .icon-button:hover {
+  background: rgba(30, 55, 78, .08);
+}
+:root[data-theme="light"] .tab:hover {
+  background: rgba(30, 55, 78, .06);
+  color: #334b62;
+}
+:root[data-theme="light"] .content-area::-webkit-scrollbar-thumb {
+  background: rgba(71, 101, 126, .34);
+}
+:root[data-theme="light"] .search-field svg {
+  color: #6a8095;
+}
+:root[data-theme="light"] .search input:focus,
+:root[data-theme="light"] .field-row input:focus {
+  border-color: #087d56;
+  box-shadow: 0 0 0 3px rgba(8, 125, 86, .16);
+}
+:root[data-theme="light"] .search > button {
+  border-color: #087d56;
+  background: #087d56;
+  color: #ffffff;
+}
+:root[data-theme="light"] .search > button:hover {
+  border-color: #076b49;
+  background: #076b49;
+  color: #ffffff;
+}
+:root[data-theme="light"] .item:hover {
+  background: #f1f7f4;
+}
+:root[data-theme="light"] .item-icon {
+  border-color: rgba(11, 153, 104, .22);
+  background: linear-gradient(145deg, #e8f7f0, #f7fcf9);
+  color: #087d56;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .92);
+}
+:root[data-theme="light"] .item.account-item .item-icon {
+  border-color: rgba(66, 133, 218, .20);
+  background: linear-gradient(145deg, #edf4ff, #f7faff);
+  color: #3978c6;
+}
+:root[data-theme="light"] .actions button:not(.primary),
+:root[data-theme="light"] .item > button:not(.primary),
+:root[data-theme="light"] .field-row button {
+  border-color: rgba(48, 79, 103, .24);
+  background: #f8fbfc;
+  color: #29435a;
+}
+:root[data-theme="light"] .actions button:not(.primary):hover,
+:root[data-theme="light"] .item > button:not(.primary):hover,
+:root[data-theme="light"] .field-row button:hover {
+  border-color: rgba(8, 125, 86, .42);
+  background: #eaf6f0;
+  color: #076b49;
+}
+:root[data-theme="light"] .link-button {
+  color: #087d56;
+}
+:root[data-theme="light"] .link-button:hover {
+  background: #e6f5ed;
+  color: #065f44;
+}
+:root[data-theme="light"] .credential > label:not(.reveal),
+:root[data-theme="light"] .reveal {
+  color: #415d73;
+}
+:root[data-theme="light"] button:focus-visible,
+:root[data-theme="light"] .tab:focus-visible,
+:root[data-theme="light"] .reveal:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(8, 125, 86, .28);
+}
+:root[data-theme="light"] .actions .primary,
+:root[data-theme="light"] .item > .primary {
+  border-color: #087d56;
+  background: #087d56;
+  color: #ffffff;
+}
+:root[data-theme="light"] .actions .primary:hover,
+:root[data-theme="light"] .item > .primary:hover {
+  border-color: #076b49;
+  background: #076b49;
+  color: #ffffff;
+}
+:root[data-theme="light"] .actions .primary:focus-visible,
+:root[data-theme="light"] .item > .primary:focus-visible {
+  box-shadow: 0 0 0 3px rgba(8, 125, 86, .28);
+}
