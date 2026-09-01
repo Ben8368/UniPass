@@ -37,7 +37,9 @@ export type BackgroundRequest =
   | { type: "listApps"; keyword: string }
   | { type: "accountsForApp"; appId: string | number }
   | { type: "appUrl"; appId: string | number }
-  | { type: "credential"; accountId: string | number; fallbackUsername: string };
+  | { type: "credential"; accountId: string | number; fallbackUsername: string }
+  | { type: "getJupiterKeepalive" }
+  | { type: "setJupiterKeepalive"; enabled: boolean; appId?: string | number; accountId?: string | number; username?: string };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }
@@ -47,6 +49,15 @@ export interface PluginVersionSettings {
   override: string;
   effective: string;
   source: "manual" | "store" | "fallback";
+}
+
+export interface JupiterKeepaliveSettings {
+  enabled: boolean;
+  appId?: string | number;
+  accountId?: string | number;
+  username?: string;
+  lastSuccessAt?: number;
+  lastError?: string;
 }
 
 export interface AccountListResult {

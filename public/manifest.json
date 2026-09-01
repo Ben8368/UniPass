@@ -20,12 +20,15 @@
     "activeTab",
     "scripting",
     "clipboardWrite",
-    "storage"
+    "storage",
+    "alarms",
+    "tabs"
   ],
   "host_permissions": [
     "https://portal.unipass.top/*",
     "https://clients2.google.com/*",
-    "https://clients2.googleusercontent.com/*"
+    "https://clients2.googleusercontent.com/*",
+    "https://jupiter.tec-do.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

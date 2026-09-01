@@ -85,6 +85,9 @@ svg { display: block; }
 .window-controls { gap: 8px; margin-left: auto; }
 .session-badge {
   display: inline-flex;
+  appearance: none;
+  cursor: default;
+  font: inherit;
   max-width: 142px;
   height: 27px;
   align-items: center;
@@ -96,6 +99,9 @@ svg { display: block; }
   color: var(--text-1);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
 }
+.session-badge:not(:disabled) { cursor: pointer; }
+.session-badge:not(:disabled):hover { filter: brightness(1.08); }
+.session-badge:not(:disabled):active { transform: scale(.97); }
 .session-badge strong {
   min-width: 0;
   overflow: hidden;
@@ -117,7 +123,7 @@ svg { display: block; }
   background: rgba(65, 211, 155, .08);
   color: #a8f5d7;
 }
-.session-badge.online .session-dot {
+:root[data-theme="light"] .session-badge.online .session-dot {
   background: var(--green);
   box-shadow: 0 0 0 3px rgba(65, 211, 155, .13), 0 0 12px rgba(65, 211, 155, .34);
 }
@@ -233,10 +239,10 @@ main {
 @keyframes view-in { from { opacity: .45; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
 .view-heading {
-  display: flex;
+  display: grid;
   min-height: 42px;
-  align-items: flex-start;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -257,6 +263,7 @@ main {
 }
 .host-chip {
   display: flex;
+  align-self: center;
   min-width: 0;
   max-width: 205px;
   height: 27px;
@@ -295,6 +302,12 @@ main {
   background: var(--list);
 }
 .settings-form > label { color: var(--text-1); font-size: 10.5px; font-weight: 700; }
+.plugin-store-link { display: inline-flex; width: fit-content; align-items: center; gap: 3px; color: var(--text-1); font-size: 10.5px; font-weight: 700; text-decoration: none; }
+.plugin-store-link svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .14s ease; }
+.plugin-store-link:hover { color: var(--green-text); }
+.plugin-store-link:hover svg { transform: translateX(2px); }
+.plugin-store-link:focus-visible { outline: none; border-radius: 3px; box-shadow: 0 0 0 3px rgba(65, 211, 155, .28); }
+.actions .keepalive-enabled { border-color: rgba(65, 211, 155, .32); background: rgba(65, 211, 155, .16); color: #b9ffdf; }
 .settings-form > input {
   width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text-0); font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px;
 }
@@ -469,7 +482,7 @@ main {
 .item-main { min-width: 0; }
 .item-title {
   overflow: hidden;
-  color: rgba(255, 255, 255, .92);
+  color: var(--text-0);
   font-size: 12.5px;
   font-weight: 650;
   line-height: 1.2;
@@ -486,6 +499,32 @@ main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.item-meta-link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-size: inherit;
+  line-height: inherit;
+}
+.item-meta-link:hover { color: var(--green); }
+.item-meta-link svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .14s ease;
+}
+.item-meta-link:hover svg { transform: translateX(2px); }
 .actions { display: flex; gap: 5px; }
 .actions button,
 .item > button { height: 28px; min-height: 28px; padding: 0 9px; }
@@ -501,6 +540,7 @@ main {
 .actions .primary:hover,
 .item > .primary:hover { border-color: rgba(65, 211, 155, .34); background: rgba(65, 211, 155, .17); color: #c3ffe8; }
 button:disabled { cursor: not-allowed; opacity: .38; }
+.session-badge:disabled { cursor: default; opacity: 1; }
 
 .link-button {
   display: inline-flex;
@@ -717,6 +757,9 @@ button:focus-visible,
   color: #34556b;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .88), 0 2px 8px rgba(30, 55, 78, .06);
 }
+:root[data-theme="light"] .plugin-store-link { color: #075f41; }
+:root[data-theme="light"] .plugin-store-link:hover { color: #054c37; }
+:root[data-theme="light"] .actions .keepalive-enabled { border-color: rgba(8, 125, 86, .38); background: #e3f5eb; color: #065f44; }
 :root[data-theme="light"] .session-badge strong {
   color: #075f41;
   font-weight: 700;
@@ -839,3 +882,5 @@ button:focus-visible,
 :root[data-theme="light"] .item > .primary:focus-visible {
   box-shadow: 0 0 0 3px rgba(8, 125, 86, .28);
 }
+:root[data-theme="light"] .session-badge.online:disabled { opacity: 1; }
+:root[data-theme="light"] .session-badge.online strong { color: #075f41; }

@@ -10,13 +10,15 @@ import type {
   UniPassAccount,
   UniPassApp,
   PluginVersionSettings,
+  JupiterKeepaliveSettings,
 } from "../shared/types";
 
 const PORTAL_URL = "https://portal.unipass.top/application";
+const LOGIN_URL = "https://portal.unipass.top/login";
 const CREDENTIAL_TTL_SECONDS = 60;
 
 const identity = get("identity");
-const sessionBadge = get("sessionBadge");
+const sessionBadge = get<HTMLButtonElement>("sessionBadge");
 const appsListHeading = get("appsListHeading");
 const pageHost = get("pageHost");
 const status = get("status");
@@ -65,10 +67,14 @@ async function initialize(): Promise<void> {
     catalogStorageKey = accountCatalogStorageKey(user);
     sessionBadge.classList.remove("pending", "offline");
     sessionBadge.classList.add("online");
+    sessionBadge.disabled = true;
+    sessionBadge.title = "UniPass 登录状态";
   } catch (error) {
-    identity.textContent = "未登录";
+    identity.textContent = "点击登录";
     sessionBadge.classList.remove("pending", "online");
     sessionBadge.classList.add("offline");
+    sessionBadge.disabled = false;
+    sessionBadge.title = "登录 UniPass";
     setStatus(errorText(error), true);
   }
   await loadCurrentPage();
@@ -85,6 +91,9 @@ function bindControls(): void {
   });
   get<HTMLButtonElement>("openPortal").addEventListener("click", () => {
     window.open(PORTAL_URL, "_blank");
+  });
+  sessionBadge.addEventListener("click", () => {
+    if (!sessionBadge.disabled) window.open(LOGIN_URL, "_blank");
   });
   refreshCatalog.addEventListener("click", () => void refreshCurrentPageCatalog());
   pluginVersionSettingsButton.addEventListener("click", () => void openPluginVersionSettings());
@@ -189,7 +198,7 @@ async function loadCurrentPage(): Promise<void> {
     if (!catalog || Date.now() - catalog.syncedAt > ACCOUNT_CATALOG_TTL_MS) {
       catalog = await syncAccountCatalog();
     }
-    renderAccounts(currentAccounts, accountsForCurrentUrl(catalog.entries, tab.url), tab.id);
+    await renderAccounts(currentAccounts, accountsForCurrentUrl(catalog.entries, tab.url), tab.id);
   } catch (error) {
     currentAccounts.innerHTML = empty(errorText(error));
   }
@@ -255,10 +264,13 @@ async function syncAccountCatalog(): Promise<CachedAccountCatalog> {
 
 function accountsForCurrentUrl(entries: AccountCatalogEntry[], currentUrl: string): UniPassAccount[] {
   const target = comparableUrl(currentUrl);
+  const targetOrigin = comparableOrigin(currentUrl);
   const accounts: UniPassAccount[] = [];
   const seen = new Set<string>();
   for (const entry of entries) {
-    if (comparableUrl(entry.appUrl) !== target) continue;
+    // App records often store the site root while the active tab is on /login
+    // or another route. Prefer an exact match, then accept the same origin.
+    if (comparableUrl(entry.appUrl) !== target && comparableOrigin(entry.appUrl) !== targetOrigin) continue;
     for (const account of entry.accounts) {
       const id = account.id ?? account.accountId ?? account.appAccountUserId;
       const key = id == null ? JSON.stringify(account) : String(id);
@@ -278,28 +290,74 @@ function comparableUrl(value: string): string {
   return url.toString();
 }
 
+function comparableOrigin(value: string): string {
+  const url = new URL(value);
+  return url.origin.toLowerCase();
+}
+
 async function loadApps(keyword = ""): Promise<void> {
   appsContainer.innerHTML = loading("正在加载应用");
   showAppList();
   try {
     const apps = await send<UniPassApp[]>({ type: "listApps", keyword });
-    renderApps(apps);
+    await renderApps(apps);
   } catch (error) {
     appsContainer.innerHTML = empty(errorText(error));
   }
 }
 
-function renderApps(apps: UniPassApp[]): void {
+async function renderApps(apps: UniPassApp[]): Promise<void> {
   appsContainer.replaceChildren();
   if (!apps.length) {
     appsContainer.innerHTML = empty("未找到应用");
     return;
   }
+  const keepalive = await send<JupiterKeepaliveSettings>({ type: "getJupiterKeepalive" });
   for (const app of apps) {
-    const item = createItem(app.name || app.appName || `应用 ${app.id}`, app.favorite ? "已收藏" : "", ["查看账号", "打开页面"]);
+    const title = app.name || app.appName || `应用 ${app.id}`;
+    const isJupiter = /木星|jupiter/i.test(title);
+    const item = createItem(title, isJupiter && keepalive.enabled && String(keepalive.appId) === String(app.id) ? `保活中 · ${keepalive.username}` : app.favorite ? "已收藏" : "", ["查看账号"]);
     item.buttons[0].addEventListener("click", () => void loadAppAccounts(app));
-    item.buttons[1].addEventListener("click", () => void openAppPage(app));
+    const pageLink = createAppPageLink(app);
+    item.root.querySelector<HTMLElement>(".item-meta")?.replaceChildren(pageLink);
+    if (isJupiter) {
+      const isEnabled = keepalive.enabled && String(keepalive.appId) === String(app.id);
+      const keepaliveButton = button(isEnabled ? "关闭托管" : "自动托管", isEnabled ? "keepalive-enabled" : "");
+      keepaliveButton.title = "每 25 分钟重新登录木星以保持会话";
+      keepaliveButton.addEventListener("click", () => void toggleJupiterKeepalive(app, isEnabled, keepaliveButton));
+      item.root.querySelector<HTMLElement>(".actions")?.prepend(keepaliveButton);
+    }
     appsContainer.append(item.root);
+  }
+}
+
+
+function createAppPageLink(app: UniPassApp): HTMLButtonElement {
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "item-meta-link";
+  link.title = "打开应用页面";
+  link.append(document.createTextNode("打开页面"));
+  link.insertAdjacentHTML("beforeend", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>');
+  link.addEventListener("click", () => void openAppPage(app));
+  return link;
+}
+
+async function toggleJupiterKeepalive(app: UniPassApp, enabled: boolean, control: HTMLButtonElement): Promise<void> {
+  control.disabled = true;
+  try {
+    if (enabled) {
+      await send<JupiterKeepaliveSettings>({ type: "setJupiterKeepalive", enabled: false });
+      setStatus("木星应用保活已关闭");
+    } else {
+      const result = await send<JupiterKeepaliveSettings>({ type: "setJupiterKeepalive", enabled: true, appId: app.id });
+      setStatus(result.lastError ? `木星保活已开启，但首次续期失败：${result.lastError}` : "木星应用保活已开启");
+    }
+    await loadApps(get<HTMLInputElement>("searchInput").value);
+  } catch (error) {
+    setStatus(errorText(error), true);
+  } finally {
+    control.disabled = false;
   }
 }
 
@@ -323,19 +381,34 @@ async function loadAppAccounts(app: UniPassApp): Promise<void> {
   try {
     const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id });
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    renderAccounts(appAccounts, result.accounts, tab?.id);
+    await renderAccounts(appAccounts, result.accounts, tab?.id);
   } catch (error) {
     appAccounts.innerHTML = empty(errorText(error));
   }
 }
 
-function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabId?: number): void {
-  container.replaceChildren();
-  if (!accounts.length) {
+async function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabId?: number): Promise<void> {
+  const availableAccounts = (await Promise.all(accounts.map(async (account) => {
+    const accountId = account.id ?? account.accountId ?? account.appAccountUserId;
+    if (accountId == null) return null;
+    const username = account.account || account.phoneNumber || account.email || "未命名账号";
+    try {
+      const credential = await send<Credential>({ type: "credential", accountId, fallbackUsername: username });
+      const hasPassword = credential.password.trim().length > 0;
+      credential.password = "";
+      return hasPassword ? account : null;
+    } catch (error) {
+      // Keep accounts visible when the availability check itself fails; only hide known empty-password records.
+      const message = errorText(error);
+      return /没有可用密码|密码解密失败/.test(message) ? null : account;
+    }
+  }))).filter((account): account is UniPassAccount => account != null);
+  if (!availableAccounts.length) {
     container.innerHTML = empty("没有可用账号");
     return;
   }
-  for (const account of accounts) {
+  container.replaceChildren();
+  for (const account of availableAccounts) {
     const accountId = account.id ?? account.accountId ?? account.appAccountUserId;
     if (accountId == null) continue;
     const username = account.account || account.phoneNumber || account.email || "未命名账号";
@@ -357,7 +430,6 @@ function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabI
     container.append(root);
   }
 }
-
 async function revealAccount(accountId: string | number, username: string): Promise<void> {
   try {
     setStatus("正在获取凭据");
