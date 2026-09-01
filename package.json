@@ -1,0 +1,19 @@
+{
+  "name": "unipass-extension-minimal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.326",
+    "@types/crypto-js": "^4.2.2",
+    "esbuild": "^0.25.9",
+    "typescript": "^5.9.2"
+  }
+}

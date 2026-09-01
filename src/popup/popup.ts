@@ -1,0 +1,286 @@
+import type {
+  AccountListResult,
+  BackgroundRequest,
+  BackgroundResponse,
+  Credential,
+  CurrentUser,
+  FillRequest,
+  FillResult,
+  UniPassAccount,
+  UniPassApp,
+} from "../shared/types";
+
+const PORTAL_URL = "https://portal.unipass.top/application";
+const CREDENTIAL_TTL_SECONDS = 60;
+
+const identity = get("identity");
+const pageHost = get("pageHost");
+const status = get("status");
+const currentAccounts = get("currentAccounts");
+const appsContainer = get("apps");
+const appAccounts = get("appAccounts");
+const backToApps = get<HTMLButtonElement>("backToApps");
+const credentialPanel = get("credentialPanel");
+const credentialUsername = get<HTMLInputElement>("credentialUsername");
+const credentialPassword = get<HTMLInputElement>("credentialPassword");
+const credentialCountdown = get("credentialCountdown");
+const showPassword = get<HTMLInputElement>("showPassword");
+
+let currentCredential: Credential | null = null;
+let clearTimer: number | undefined;
+let countdownTimer: number | undefined;
+let clearAt = 0;
+
+void initialize();
+
+async function initialize(): Promise<void> {
+  bindControls();
+  try {
+    const user = await send<CurrentUser>({ type: "session" });
+    identity.textContent = user.fullName || user.nickName || user.name || user.username || user.email || "已登录";
+  } catch (error) {
+    identity.textContent = "未登录";
+    setStatus(errorText(error), true);
+  }
+  await loadCurrentPage();
+}
+
+function bindControls(): void {
+  get<HTMLButtonElement>("openPortal").addEventListener("click", () => {
+    window.open(PORTAL_URL, "_blank");
+  });
+  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current"));
+  });
+  get<HTMLFormElement>("searchForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    void loadApps(get<HTMLInputElement>("searchInput").value);
+  });
+  backToApps.addEventListener("click", showAppList);
+  get<HTMLButtonElement>("copyUsername").addEventListener("click", () => void copyCredential("username"));
+  get<HTMLButtonElement>("copyPassword").addEventListener("click", () => void copyCredential("password"));
+  showPassword.addEventListener("change", () => {
+    credentialPassword.type = showPassword.checked ? "text" : "password";
+  });
+  window.addEventListener("pagehide", clearCredential);
+}
+
+async function loadCurrentPage(): Promise<void> {
+  currentAccounts.innerHTML = loading("正在查询当前页面账号");
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url || !/^https?:\/\//i.test(tab.url)) throw new Error("当前标签页不支持凭据填充");
+    pageHost.textContent = new URL(tab.url).hostname;
+    const result = await send<AccountListResult>({ type: "accountsForUrl", url: tab.url });
+    renderAccounts(currentAccounts, result.accounts, tab.id);
+  } catch (error) {
+    currentAccounts.innerHTML = empty(errorText(error));
+  }
+}
+
+async function loadApps(keyword = ""): Promise<void> {
+  appsContainer.innerHTML = loading("正在加载应用");
+  showAppList();
+  try {
+    const apps = await send<UniPassApp[]>({ type: "listApps", keyword });
+    renderApps(apps);
+  } catch (error) {
+    appsContainer.innerHTML = empty(errorText(error));
+  }
+}
+
+function renderApps(apps: UniPassApp[]): void {
+  appsContainer.replaceChildren();
+  if (!apps.length) {
+    appsContainer.innerHTML = empty("未找到应用");
+    return;
+  }
+  for (const app of apps) {
+    const item = createItem(app.name || app.appName || `应用 ${app.id}`, app.favorite ? "已收藏" : "", "查看账号");
+    item.button.addEventListener("click", () => void loadAppAccounts(app));
+    appsContainer.append(item.root);
+  }
+}
+
+async function loadAppAccounts(app: UniPassApp): Promise<void> {
+  appsContainer.classList.add("hidden");
+  backToApps.classList.remove("hidden");
+  appAccounts.classList.remove("hidden");
+  appAccounts.innerHTML = loading("正在加载账号");
+  try {
+    const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    renderAccounts(appAccounts, result.accounts, tab?.id);
+  } catch (error) {
+    appAccounts.innerHTML = empty(errorText(error));
+  }
+}
+
+function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabId?: number): void {
+  container.replaceChildren();
+  if (!accounts.length) {
+    container.innerHTML = empty("没有可用账号");
+    return;
+  }
+  for (const account of accounts) {
+    const accountId = account.id ?? account.accountId ?? account.appAccountUserId;
+    if (accountId == null) continue;
+    const username = account.account || account.phoneNumber || account.email || "未命名账号";
+    const root = document.createElement("article");
+    root.className = "item";
+    const main = document.createElement("div");
+    main.className = "item-main";
+    main.append(textElement("div", "item-title", username), textElement("div", "item-meta", account.remark || (account.topPriority ? "优先账号" : "无备注")));
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const fillButton = button("填入", "primary");
+    fillButton.disabled = tabId == null;
+    fillButton.addEventListener("click", () => void fillAccount(tabId, accountId, username));
+    const viewButton = button("查看");
+    viewButton.addEventListener("click", () => void revealAccount(accountId, username));
+    actions.append(fillButton, viewButton);
+    root.append(main, actions);
+    container.append(root);
+  }
+}
+
+async function revealAccount(accountId: string | number, username: string): Promise<void> {
+  try {
+    setStatus("正在获取凭据");
+    const credential = await send<Credential>({ type: "credential", accountId, fallbackUsername: username });
+    showCredential(credential);
+    setStatus("凭据只保留在当前弹窗内存中");
+  } catch (error) {
+    setStatus(errorText(error), true);
+  }
+}
+
+async function fillAccount(tabId: number | undefined, accountId: string | number, username: string): Promise<void> {
+  if (tabId == null) return;
+  let credential: Credential | null = null;
+  try {
+    setStatus("正在填入当前页面");
+    credential = await send<Credential>({ type: "credential", accountId, fallbackUsername: username });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content-script.js"] });
+    const result = await chrome.tabs.sendMessage<FillRequest, FillResult>(tabId, {
+      type: "fillCredentials",
+      credential,
+      mode: "all",
+    });
+    if (!result?.ok) throw new Error(result?.error || "填充失败");
+    setStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
+  } catch (error) {
+    setStatus(errorText(error), true);
+  } finally {
+    if (credential) credential.password = "";
+  }
+}
+
+function showCredential(credential: Credential): void {
+  clearCredential();
+  currentCredential = credential;
+  credentialUsername.value = credential.username;
+  credentialPassword.value = credential.password;
+  credentialPassword.type = "password";
+  showPassword.checked = false;
+  credentialPanel.classList.remove("hidden");
+  clearAt = Date.now() + CREDENTIAL_TTL_SECONDS * 1000;
+  updateCountdown();
+  countdownTimer = window.setInterval(updateCountdown, 1000);
+  clearTimer = window.setTimeout(clearCredential, CREDENTIAL_TTL_SECONDS * 1000);
+}
+
+function clearCredential(): void {
+  if (currentCredential) currentCredential.password = "";
+  currentCredential = null;
+  credentialUsername.value = "";
+  credentialPassword.value = "";
+  credentialPassword.type = "password";
+  showPassword.checked = false;
+  credentialPanel.classList.add("hidden");
+  if (clearTimer) window.clearTimeout(clearTimer);
+  if (countdownTimer) window.clearInterval(countdownTimer);
+  clearTimer = undefined;
+  countdownTimer = undefined;
+}
+
+function updateCountdown(): void {
+  const seconds = Math.max(0, Math.ceil((clearAt - Date.now()) / 1000));
+  credentialCountdown.textContent = `${seconds} 秒后清除`;
+}
+
+async function copyCredential(field: keyof Credential): Promise<void> {
+  const value = currentCredential?.[field];
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus(field === "password" ? "密码已复制" : "账号已复制");
+  } catch {
+    setStatus("浏览器拒绝写入剪贴板", true);
+  }
+}
+
+function switchView(view: "current" | "apps"): void {
+  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  get("currentView").classList.toggle("hidden", view !== "current");
+  get("appsView").classList.toggle("hidden", view !== "apps");
+  if (view === "apps" && !appsContainer.childElementCount) void loadApps();
+}
+
+function showAppList(): void {
+  appsContainer.classList.remove("hidden");
+  backToApps.classList.add("hidden");
+  appAccounts.classList.add("hidden");
+  appAccounts.replaceChildren();
+}
+
+function createItem(title: string, meta: string, action: string): { root: HTMLElement; button: HTMLButtonElement } {
+  const root = document.createElement("article");
+  root.className = "item";
+  const main = document.createElement("div");
+  main.className = "item-main";
+  main.append(textElement("div", "item-title", title), textElement("div", "item-meta", meta));
+  const actionButton = button(action, "primary");
+  root.append(main, actionButton);
+  return { root, button: actionButton };
+}
+
+function textElement(tag: string, className: string, text: string): HTMLElement {
+  const element = document.createElement(tag);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function button(label: string, className = ""): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = className;
+  element.textContent = label;
+  return element;
+}
+
+function loading(text: string): string { return `<div class="empty">${escapeHtml(text)}</div>`; }
+function empty(text: string): string { return `<div class="empty">${escapeHtml(text)}</div>`; }
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+function setStatus(text: string, isError = false): void {
+  status.textContent = text;
+  status.classList.toggle("error", isError);
+}
+
+function errorText(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+
+async function send<T>(message: BackgroundRequest): Promise<T> {
+  const response = await chrome.runtime.sendMessage<BackgroundRequest, BackgroundResponse<T>>(message);
+  if (!response?.ok) throw new Error(response?.error || "扩展后台没有响应");
+  return response.data;
+}
+
+function get<T extends HTMLElement = HTMLElement>(id: string): T {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Missing element: ${id}`);
+  return element as T;
+}

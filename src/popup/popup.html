@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UniPass</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>UniPass</h1>
+        <p id="identity">正在检查登录状态</p>
+      </div>
+      <button id="openPortal" class="icon-button" type="button" title="打开 UniPass" aria-label="打开 UniPass">↗</button>
+    </header>
+
+    <main>
+      <nav class="tabs" aria-label="凭据来源">
+        <button class="tab active" type="button" data-view="current">当前页面</button>
+        <button class="tab" type="button" data-view="apps">全部应用</button>
+      </nav>
+
+      <section id="currentView" class="view">
+        <p id="pageHost" class="context"></p>
+        <div id="currentAccounts" class="list" aria-live="polite"></div>
+      </section>
+
+      <section id="appsView" class="view hidden">
+        <form id="searchForm" class="search">
+          <input id="searchInput" type="search" autocomplete="off" placeholder="搜索应用" aria-label="搜索应用" />
+          <button type="submit">搜索</button>
+        </form>
+        <div id="apps" class="list" aria-live="polite"></div>
+        <button id="backToApps" class="link-button hidden" type="button">返回应用列表</button>
+        <div id="appAccounts" class="list hidden" aria-live="polite"></div>
+      </section>
+
+      <section id="credentialPanel" class="credential hidden" aria-live="polite">
+        <div class="credential-heading">
+          <h2>临时凭据</h2>
+          <span id="credentialCountdown"></span>
+        </div>
+        <label for="credentialUsername">账号</label>
+        <div class="field-row">
+          <input id="credentialUsername" readonly />
+          <button id="copyUsername" type="button">复制</button>
+        </div>
+        <label for="credentialPassword">密码</label>
+        <div class="field-row">
+          <input id="credentialPassword" type="password" readonly />
+          <button id="copyPassword" type="button">复制</button>
+        </div>
+        <label class="reveal"><input id="showPassword" type="checkbox" /> 显示密码</label>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
