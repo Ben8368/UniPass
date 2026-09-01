@@ -1,6 +1,6 @@
 import {
+  accountCatalog,
   accountsForApp,
-  accountsForUrl,
   appUrlForApp,
   credentialForAccount,
   currentUser,
@@ -24,8 +24,8 @@ function handle(message: BackgroundRequest): Promise<unknown> {
   switch (message.type) {
     case "session":
       return currentUser();
-    case "accountsForUrl":
-      return accountsForUrl(message.url);
+    case "accountCatalog":
+      return accountCatalog();
     case "listApps":
       return listApps(message.keyword);
     case "accountsForApp":

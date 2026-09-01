@@ -1,4 +1,5 @@
 import type {
+  AccountCatalogEntry,
   AccountListResult,
   BackgroundRequest,
   BackgroundResponse,
@@ -28,15 +29,23 @@ const credentialPassword = get<HTMLInputElement>("credentialPassword");
 const credentialCountdown = get("credentialCountdown");
 const showPassword = get<HTMLInputElement>("showPassword");
 const themeToggle = get<HTMLButtonElement>("themeToggle");
+const refreshCatalog = get<HTMLButtonElement>("refreshCatalog");
 
 const THEME_STORAGE_KEY = "unipass-theme";
+const ACCOUNT_CATALOG_STORAGE_PREFIX = "unipass-account-catalog-v1:";
+const ACCOUNT_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 type Theme = "light" | "dark";
+interface CachedAccountCatalog {
+  syncedAt: number;
+  entries: AccountCatalogEntry[];
+}
 const systemTheme = window.matchMedia("(prefers-color-scheme: light)");
 
 let currentCredential: Credential | null = null;
 let clearTimer: number | undefined;
 let countdownTimer: number | undefined;
 let clearAt = 0;
+let catalogStorageKey: string | null = null;
 
 void initialize();
 
@@ -45,6 +54,7 @@ async function initialize(): Promise<void> {
   try {
     const user = await send<CurrentUser>({ type: "session" });
     identity.textContent = user.fullName || user.nickName || user.name || user.username || user.email || "已登录";
+    catalogStorageKey = accountCatalogStorageKey(user);
     sessionBadge.classList.remove("pending", "offline");
     sessionBadge.classList.add("online");
   } catch (error) {
@@ -68,6 +78,7 @@ function bindControls(): void {
   get<HTMLButtonElement>("openPortal").addEventListener("click", () => {
     window.open(PORTAL_URL, "_blank");
   });
+  refreshCatalog.addEventListener("click", () => void refreshCurrentPageCatalog());
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current"));
   });
@@ -116,16 +127,86 @@ function updateThemeToggle(): void {
   themeToggle.dataset.theme = dark ? "dark" : "light";
 }
 async function loadCurrentPage(): Promise<void> {
-  currentAccounts.innerHTML = loading("正在查询当前页面账号");
+  currentAccounts.innerHTML = loading("正在本地匹配账号目录");
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !tab.url || !/^https?:\/\//i.test(tab.url)) throw new Error("当前标签页不支持凭据填充");
     pageHost.textContent = new URL(tab.url).hostname;
-    const result = await send<AccountListResult>({ type: "accountsForUrl", url: tab.url });
-    renderAccounts(currentAccounts, result.accounts, tab.id);
+    let catalog = loadCachedCatalog();
+    if (!catalog || Date.now() - catalog.syncedAt > ACCOUNT_CATALOG_TTL_MS) {
+      catalog = await syncAccountCatalog();
+    }
+    renderAccounts(currentAccounts, accountsForCurrentUrl(catalog.entries, tab.url), tab.id);
   } catch (error) {
     currentAccounts.innerHTML = empty(errorText(error));
   }
+}
+
+async function refreshCurrentPageCatalog(): Promise<void> {
+  try {
+    await syncAccountCatalog();
+    await loadCurrentPage();
+  } catch (error) {
+    currentAccounts.innerHTML = empty(errorText(error));
+  }
+}
+
+function accountCatalogStorageKey(user: CurrentUser): string {
+  const identity = user.username || user.email || user.name || user.nickName || user.fullName || "default";
+  return `${ACCOUNT_CATALOG_STORAGE_PREFIX}${identity}`;
+}
+
+function loadCachedCatalog(): CachedAccountCatalog | null {
+  if (!catalogStorageKey) return null;
+  try {
+    const value = localStorage.getItem(catalogStorageKey);
+    if (!value) return null;
+    const parsed = JSON.parse(value) as CachedAccountCatalog;
+    if (!Number.isFinite(parsed.syncedAt) || !Array.isArray(parsed.entries)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function syncAccountCatalog(): Promise<CachedAccountCatalog> {
+  if (!catalogStorageKey) throw new Error("尚未登录 UniPass");
+  refreshCatalog.disabled = true;
+  currentAccounts.innerHTML = loading("正在同步账号目录");
+  try {
+    const entries = await send<AccountCatalogEntry[]>({ type: "accountCatalog" });
+    const catalog = { syncedAt: Date.now(), entries };
+    localStorage.setItem(catalogStorageKey, JSON.stringify(catalog));
+    setStatus("账号目录已同步；当前页仅在本地匹配");
+    return catalog;
+  } finally {
+    refreshCatalog.disabled = false;
+  }
+}
+
+function accountsForCurrentUrl(entries: AccountCatalogEntry[], currentUrl: string): UniPassAccount[] {
+  const target = comparableUrl(currentUrl);
+  const accounts: UniPassAccount[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (comparableUrl(entry.appUrl) !== target) continue;
+    for (const account of entry.accounts) {
+      const id = account.id ?? account.accountId ?? account.appAccountUserId;
+      const key = id == null ? JSON.stringify(account) : String(id);
+      if (!seen.has(key)) {
+        seen.add(key);
+        accounts.push(account);
+      }
+    }
+  }
+  return accounts;
+}
+
+function comparableUrl(value: string): string {
+  const url = new URL(value);
+  url.hash = "";
+  if (!url.hostname.includes("huaban") && !url.hostname.includes("gaoding")) url.search = "";
+  return url.toString();
 }
 
 async function loadApps(keyword = ""): Promise<void> {

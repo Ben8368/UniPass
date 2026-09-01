@@ -31,7 +31,7 @@ export interface CurrentUser {
 
 export type BackgroundRequest =
   | { type: "session" }
-  | { type: "accountsForUrl"; url: string }
+  | { type: "accountCatalog" }
   | { type: "listApps"; keyword: string }
   | { type: "accountsForApp"; appId: string | number }
   | { type: "appUrl"; appId: string | number }
@@ -42,6 +42,13 @@ export type BackgroundResponse<T = unknown> =
   | { ok: false; error: string };
 
 export interface AccountListResult {
+  appUrl: string;
+  accounts: UniPassAccount[];
+}
+
+export interface AccountCatalogEntry {
+  appId: string | number;
+  appName: string;
   appUrl: string;
   accounts: UniPassAccount[];
 }

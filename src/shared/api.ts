@@ -1,5 +1,6 @@
 import CryptoJS from "crypto-js";
 import type {
+  AccountCatalogEntry,
   AccountListResult,
   Credential,
   CurrentUser,
@@ -49,6 +50,25 @@ export async function accountsForUrl(url: string): Promise<AccountListResult> {
     true,
   );
   return { appUrl: normalized, accounts: validateAccounts(result?.accounts) };
+}
+
+export async function accountCatalog(): Promise<AccountCatalogEntry[]> {
+  const apps = await listApps("");
+  const entries: AccountCatalogEntry[] = [];
+  for (const app of apps) {
+    try {
+      const result = await accountsForApp(app.id);
+      entries.push({
+        appId: app.id,
+        appName: app.name || app.appName || `App ${app.id}`,
+        appUrl: result.appUrl,
+        accounts: result.accounts,
+      });
+    } catch {
+      // One unavailable app must not stop the rest of the catalog syncing.
+    }
+  }
+  return entries;
 }
 
 export async function listApps(keyword: string): Promise<UniPassApp[]> {
