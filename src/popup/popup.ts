@@ -27,6 +27,11 @@ const credentialUsername = get<HTMLInputElement>("credentialUsername");
 const credentialPassword = get<HTMLInputElement>("credentialPassword");
 const credentialCountdown = get("credentialCountdown");
 const showPassword = get<HTMLInputElement>("showPassword");
+const themeToggle = get<HTMLButtonElement>("themeToggle");
+
+const THEME_STORAGE_KEY = "unipass-theme";
+type Theme = "light" | "dark";
+const systemTheme = window.matchMedia("(prefers-color-scheme: light)");
 
 let currentCredential: Credential | null = null;
 let clearTimer: number | undefined;
@@ -52,6 +57,14 @@ async function initialize(): Promise<void> {
 }
 
 function bindControls(): void {
+  applyStoredTheme();
+  themeToggle.addEventListener("click", toggleTheme);
+  systemTheme.addEventListener("change", () => {
+    if (!getStoredTheme()) {
+      document.documentElement.dataset.theme = systemTheme.matches ? "light" : "dark";
+      updateThemeToggle();
+    }
+  });
   get<HTMLButtonElement>("openPortal").addEventListener("click", () => {
     window.open(PORTAL_URL, "_blank");
   });
@@ -71,6 +84,37 @@ function bindControls(): void {
   window.addEventListener("pagehide", clearCredential);
 }
 
+function getStoredTheme(): Theme | null {
+  const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  return storedTheme === "light" || storedTheme === "dark" ? storedTheme : null;
+}
+
+function applyStoredTheme(): void {
+  document.documentElement.dataset.theme = getStoredTheme() ?? (systemTheme.matches ? "light" : "dark");
+  updateThemeToggle();
+}
+
+function toggleTheme(): void {
+  const nextTheme = getEffectiveTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = nextTheme;
+  localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  updateThemeToggle();
+}
+
+function getEffectiveTheme(): "light" | "dark" {
+  return document.documentElement.dataset.theme === "light" ||
+    (document.documentElement.dataset.theme !== "dark" && systemTheme.matches)
+    ? "light"
+    : "dark";
+}
+
+function updateThemeToggle(): void {
+  const dark = getEffectiveTheme() === "dark";
+  const nextLabel = dark ? "切换浅色模式" : "切换深色模式";
+  themeToggle.title = nextLabel;
+  themeToggle.setAttribute("aria-label", nextLabel);
+  themeToggle.dataset.theme = dark ? "dark" : "light";
+}
 async function loadCurrentPage(): Promise<void> {
   currentAccounts.innerHTML = loading("正在查询当前页面账号");
   try {
