@@ -31,6 +31,8 @@ export interface CurrentUser {
 
 export type BackgroundRequest =
   | { type: "session" }
+  | { type: "getPluginVersionSettings" }
+  | { type: "setPluginVersionOverride"; version: string }
   | { type: "accountCatalog" }
   | { type: "listApps"; keyword: string }
   | { type: "accountsForApp"; appId: string | number }
@@ -40,6 +42,12 @@ export type BackgroundRequest =
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+export interface PluginVersionSettings {
+  override: string;
+  effective: string;
+  source: "manual" | "store" | "fallback";
+}
 
 export interface AccountListResult {
   appUrl: string;

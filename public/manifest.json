@@ -19,10 +19,12 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "clipboardWrite"
+    "clipboardWrite",
+    "storage"
   ],
   "host_permissions": [
-    "https://portal.unipass.top/*"
+    "https://portal.unipass.top/*",
+    "https://chromewebstore.google.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

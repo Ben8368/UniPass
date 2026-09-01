@@ -9,6 +9,7 @@ import type {
   FillResult,
   UniPassAccount,
   UniPassApp,
+  PluginVersionSettings,
 } from "../shared/types";
 
 const PORTAL_URL = "https://portal.unipass.top/application";
@@ -30,6 +31,10 @@ const credentialCountdown = get("credentialCountdown");
 const showPassword = get<HTMLInputElement>("showPassword");
 const themeToggle = get<HTMLButtonElement>("themeToggle");
 const refreshCatalog = get<HTMLButtonElement>("refreshCatalog");
+const versionForm = get<HTMLFormElement>("versionForm");
+const pluginVersionOverride = get<HTMLInputElement>("pluginVersionOverride");
+const effectivePluginVersion = get("effectivePluginVersion");
+const pluginVersionSource = get("pluginVersionSource");
 
 const THEME_STORAGE_KEY = "unipass-theme";
 const ACCOUNT_CATALOG_STORAGE_PREFIX = "unipass-account-catalog-v1:";
@@ -79,8 +84,16 @@ function bindControls(): void {
     window.open(PORTAL_URL, "_blank");
   });
   refreshCatalog.addEventListener("click", () => void refreshCurrentPageCatalog());
+  versionForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void savePluginVersion();
+  });
+  void loadPluginVersionSettings();
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
-    button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current"));
+    button.addEventListener("click", () => {
+      const view = button.dataset.view;
+      switchView(view === "apps" ? "apps" : view === "settings" ? "settings" : "current");
+    });
   });
   get<HTMLFormElement>("searchForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -126,6 +139,36 @@ function updateThemeToggle(): void {
   themeToggle.setAttribute("aria-label", nextLabel);
   themeToggle.dataset.theme = dark ? "dark" : "light";
 }
+async function loadPluginVersionSettings(): Promise<void> {
+  try {
+    applyPluginVersionSettings(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));
+  } catch (error) {
+    effectivePluginVersion.textContent = "5.3.0";
+    pluginVersionSource.textContent = "暂时无法获取，使用回退版本";
+    setStatus(errorText(error), true);
+  }
+}
+
+function applyPluginVersionSettings(settings: PluginVersionSettings): void {
+  pluginVersionOverride.value = settings.override;
+  effectivePluginVersion.textContent = settings.effective;
+  pluginVersionSource.textContent = settings.source === "manual" ? "手动指定" : settings.source === "store" ? "Chrome Web Store" : "网络不可用，回退版本";
+}
+
+async function savePluginVersion(): Promise<void> {
+  const saveButton = versionForm.querySelector<HTMLButtonElement>("button[type=submit]");
+  if (saveButton) saveButton.disabled = true;
+  try {
+    const settings = await send<PluginVersionSettings>({ type: "setPluginVersionOverride", version: pluginVersionOverride.value });
+    applyPluginVersionSettings(settings);
+    setStatus("版本设置已保存");
+  } catch (error) {
+    setStatus(errorText(error), true);
+  } finally {
+    if (saveButton) saveButton.disabled = false;
+  }
+}
+
 async function loadCurrentPage(): Promise<void> {
   currentAccounts.innerHTML = loading("正在本地匹配账号目录");
   try {
@@ -365,7 +408,7 @@ async function copyCredential(field: keyof Credential): Promise<void> {
   }
 }
 
-function switchView(view: "current" | "apps"): void {
+function switchView(view: "current" | "apps" | "settings"): void {
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
     const isActive = button.dataset.view === view;
     button.classList.toggle("active", isActive);
@@ -373,6 +416,7 @@ function switchView(view: "current" | "apps"): void {
   });
   get("currentView").classList.toggle("hidden", view !== "current");
   get("appsView").classList.toggle("hidden", view !== "apps");
+  get("settingsView").classList.toggle("hidden", view !== "settings");
   if (view === "apps" && !appsContainer.childElementCount) void loadApps();
 }
 

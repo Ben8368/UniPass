@@ -5,6 +5,8 @@ import {
   credentialForAccount,
   currentUser,
   listApps,
+  pluginVersionSettings,
+  setPluginVersionOverride,
 } from "../shared/api";
 import type { BackgroundRequest, BackgroundResponse } from "../shared/types";
 
@@ -24,6 +26,10 @@ function handle(message: BackgroundRequest): Promise<unknown> {
   switch (message.type) {
     case "session":
       return currentUser();
+    case "getPluginVersionSettings":
+      return pluginVersionSettings();
+    case "setPluginVersionOverride":
+      return setPluginVersionOverride(message.version);
     case "accountCatalog":
       return accountCatalog();
     case "listApps":

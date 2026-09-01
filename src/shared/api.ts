@@ -6,11 +6,13 @@ import type {
   CurrentUser,
   UniPassAccount,
   UniPassApp,
+  PluginVersionSettings,
 } from "./types";
 
 const PORTAL_ORIGIN = "https://portal.unipass.top";
 const API_ROOT = `${PORTAL_ORIGIN}/api/v1`;
 const API_COMPAT_VERSION = "5.3.0";
+const WEBSTORE_VERSION_URL = "https://chromewebstore.google.com/detail/unipass/gjphikebcceegfolnbfncepfmjnhdkam";
 const PASSWORD_KEY = "VlXCSJg7qO66MNrMMJir3g==";
 
 interface ApiEnvelope<T> {
@@ -37,17 +39,34 @@ interface AppConfig {
   };
 }
 
+let resolvedVersionPromise: Promise<string> | undefined;
+let resolvedVersionSource: "store" | "fallback" = "fallback";
+
 export async function currentUser(): Promise<CurrentUser> {
-  const login = await request<boolean>("/login/isLogin", true);
+  const login = await request<boolean>("/login/isLogin");
   if (login !== true) throw new Error("尚未登录 UniPass");
   return (await request<CurrentUser>("/session/current_user")) ?? {};
+}
+
+export async function pluginVersionSettings(): Promise<PluginVersionSettings> {
+  const override = await readVersionOverride();
+  if (override) return { override, effective: override, source: "manual" };
+  const storeVersion = await resolvePluginVersion();
+  return { override: "", effective: storeVersion, source: resolvedVersionSource };
+}
+
+export async function setPluginVersionOverride(version: string): Promise<PluginVersionSettings> {
+  const normalized = version.trim();
+  if (normalized && !isPluginVersion(normalized)) throw new Error("版本号格式应为 x.y.z，例如 5.3.0");
+  await chrome.storage.local.set({ pluginVersionOverride: normalized });
+  resolvedVersionPromise = undefined;
+  return pluginVersionSettings();
 }
 
 export async function accountsForUrl(url: string): Promise<AccountListResult> {
   const normalized = normalizeTargetUrl(url);
   const result = await request<AccountEnvelope>(
-    `/app/account/account/list/url?url=${encodeURIComponent(normalized)}`,
-    true,
+    `/app/account/account/list/url?url=${encodeURIComponent(normalized)}`
   );
   return { appUrl: normalized, accounts: validateAccounts(result?.accounts) };
 }
@@ -105,8 +124,7 @@ export async function credentialForAccount(
   fallbackUsername: string,
 ): Promise<Credential> {
   const config = await request<AppConfig>(
-    `/app/app_config?accountId=${encodeURIComponent(String(accountId))}`,
-    true,
+    `/app/app_config?accountId=${encodeURIComponent(String(accountId))}`
   );
   const encryptedPassword = config?.user?.password;
   if (!encryptedPassword) throw new Error("该账号没有可用密码");
@@ -116,9 +134,11 @@ export async function credentialForAccount(
   };
 }
 
-async function request<T>(path: string, includePluginVersion = false): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (includePluginVersion) headers["X-Browser-Plugin-Version"] = API_COMPAT_VERSION;
+async function request<T>(path: string): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "X-Browser-Plugin-Version": await resolvePluginVersion(),
+  };
   const response = await fetch(`${API_ROOT}${path}`, {
     method: "GET",
     credentials: "include",
@@ -129,6 +149,56 @@ async function request<T>(path: string, includePluginVersion = false): Promise<T
   if (!response.ok) throw new Error(body?.message || `UniPass 请求失败（HTTP ${response.status}）`);
   if (!body || body.success === false) throw new Error(body?.message || "UniPass 请求失败");
   return body.result as T;
+}
+
+async function resolvePluginVersion(): Promise<string> {
+  const override = await readVersionOverride();
+  if (override) return override;
+  if (!resolvedVersionPromise) {
+    resolvedVersionPromise = fetchStoreVersion()
+      .then((version) => { resolvedVersionSource = "store"; return version; })
+      .catch(() => { resolvedVersionSource = "fallback"; return API_COMPAT_VERSION; })
+      .finally(() => { resolvedVersionPromise = undefined; });
+  }
+  return resolvedVersionPromise;
+}
+
+async function readVersionOverride(): Promise<string> {
+  const stored = await chrome.storage.local.get("pluginVersionOverride");
+  const override = stored.pluginVersionOverride;
+  return typeof override === "string" && isPluginVersion(override.trim()) ? override.trim() : "";
+}
+
+async function fetchStoreVersion(): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(WEBSTORE_VERSION_URL, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Web Store request failed: ${response.status}`);
+    const html = await response.text();
+    const version = extractVersionFromStorePage(html);
+    if (!version || !isPluginVersion(version)) throw new Error("Web Store version not found");
+    return version;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractVersionFromStorePage(html: string): string | undefined {
+  const patterns = [
+    /"version"\s*:\s*"(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)"/i,
+    /version\\?"\s*:\s*\\?"(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\\?"/i,
+    />?\s*Version\s*<[^>]*>\s*(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/i,
+  ];
+  for (const pattern of patterns) {
+    const version = html.match(pattern)?.[1];
+    if (version && isPluginVersion(version)) return version;
+  }
+  return undefined;
+}
+
+function isPluginVersion(version: string): boolean {
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version);
 }
 
 function normalizeTargetUrl(value: string): string {
