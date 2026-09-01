@@ -123,7 +123,7 @@ svg { display: block; }
   background: rgba(65, 211, 155, .08);
   color: #a8f5d7;
 }
-:root[data-theme="light"] .session-badge.online .session-dot {
+.session-badge.online .session-dot {
   background: var(--green);
   box-shadow: 0 0 0 3px rgba(65, 211, 155, .13), 0 0 12px rgba(65, 211, 155, .34);
 }
