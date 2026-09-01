@@ -2,6 +2,16 @@
 
 这是对原 UniPass 扩展的最小权限 TypeScript 重构。它不会修改原始 `extension-source` 目录。
 
+## 下载与安装
+
+每个正式版本都可从 [GitHub Releases](https://github.com/Ben8368/UniPass/releases) 直接下载 `UniPass-v*.zip`：
+
+1. 下载并解压 ZIP 文件到一个固定目录；
+2. 打开 `chrome://extensions`，开启右上角的**开发者模式**；
+3. 点击**加载已解压的扩展程序**，选择解压后的目录（其中应直接包含 `manifest.json`）。
+
+同一 Release 中的 `.sha256` 文件可用于校验 ZIP 下载完整性。每次推送符合版本号的 Git 标签（例如 `v0.1.0`）后，GitHub Actions 会自动构建扩展、生成 ZIP 和校验文件，并创建 GitHub Release。
+
 ## 权限边界
 
 - `activeTab`：仅在用户点击扩展后读取当前标签页地址，并授权本次填充。
@@ -11,7 +21,7 @@
 
 扩展不申请 `tabs`、`cookies`、`privacy`、`storage`、`webNavigation`、`contextMenus`、`declarativeNetRequest` 或 `<all_urls>`，也不注册常驻 Content Script。
 
-## 构建与加载
+## 本地构建与加载
 
 ```powershell
 npm install
@@ -20,6 +30,21 @@ npm run build
 ```
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。
+
+## 发版流程
+
+1. 在 `package.json` 和 `public/manifest.json` 中设置相同的版本号；
+2. 提交并推送变更；
+3. 创建与版本号完全一致的标签，例如版本 `0.1.0` 对应 `v0.1.0`：
+
+   ```powershell
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+4. 在 [GitHub Actions](https://github.com/Ben8368/UniPass/actions) 等待 **Release extension** 成功；ZIP 会出现在相应的 [GitHub Release](https://github.com/Ben8368/UniPass/releases) 页面。
+
+`main` 的每次推送和 Pull Request 还会运行 CI：依赖安装、TypeScript 类型检查、构建，并保留一个可下载的未压缩构建产物。
 
 ## 安全与行为
 
