@@ -14,6 +14,8 @@ const PORTAL_URL = "https://portal.unipass.top/application";
 const CREDENTIAL_TTL_SECONDS = 60;
 
 const identity = get("identity");
+const sessionBadge = get("sessionBadge");
+const appsListHeading = get("appsListHeading");
 const pageHost = get("pageHost");
 const status = get("status");
 const currentAccounts = get("currentAccounts");
@@ -38,8 +40,12 @@ async function initialize(): Promise<void> {
   try {
     const user = await send<CurrentUser>({ type: "session" });
     identity.textContent = user.fullName || user.nickName || user.name || user.username || user.email || "已登录";
+    sessionBadge.classList.remove("pending", "offline");
+    sessionBadge.classList.add("online");
   } catch (error) {
     identity.textContent = "未登录";
+    sessionBadge.classList.remove("pending", "online");
+    sessionBadge.classList.add("offline");
     setStatus(errorText(error), true);
   }
   await loadCurrentPage();
@@ -104,6 +110,7 @@ function renderApps(apps: UniPassApp[]): void {
 
 async function loadAppAccounts(app: UniPassApp): Promise<void> {
   appsContainer.classList.add("hidden");
+  appsListHeading.classList.add("hidden");
   backToApps.classList.remove("hidden");
   appAccounts.classList.remove("hidden");
   appAccounts.innerHTML = loading("正在加载账号");
@@ -127,7 +134,8 @@ function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabI
     if (accountId == null) continue;
     const username = account.account || account.phoneNumber || account.email || "未命名账号";
     const root = document.createElement("article");
-    root.className = "item";
+    root.className = "item account-item";
+    const icon = accountIcon();
     const main = document.createElement("div");
     main.className = "item-main";
     main.append(textElement("div", "item-title", username), textElement("div", "item-meta", account.remark || (account.topPriority ? "优先账号" : "无备注")));
@@ -139,7 +147,7 @@ function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabI
     const viewButton = button("查看");
     viewButton.addEventListener("click", () => void revealAccount(accountId, username));
     actions.append(fillButton, viewButton);
-    root.append(main, actions);
+    root.append(icon, main, actions);
     container.append(root);
   }
 }
@@ -221,7 +229,11 @@ async function copyCredential(field: keyof Credential): Promise<void> {
 }
 
 function switchView(view: "current" | "apps"): void {
-  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
+    const isActive = button.dataset.view === view;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
   get("currentView").classList.toggle("hidden", view !== "current");
   get("appsView").classList.toggle("hidden", view !== "apps");
   if (view === "apps" && !appsContainer.childElementCount) void loadApps();
@@ -229,6 +241,7 @@ function switchView(view: "current" | "apps"): void {
 
 function showAppList(): void {
   appsContainer.classList.remove("hidden");
+  appsListHeading.classList.remove("hidden");
   backToApps.classList.add("hidden");
   appAccounts.classList.add("hidden");
   appAccounts.replaceChildren();
@@ -237,12 +250,24 @@ function showAppList(): void {
 function createItem(title: string, meta: string, action: string): { root: HTMLElement; button: HTMLButtonElement } {
   const root = document.createElement("article");
   root.className = "item";
+  const icon = document.createElement("span");
+  icon.className = "item-icon";
+  icon.textContent = title.trim().charAt(0) || "A";
+  icon.setAttribute("aria-hidden", "true");
   const main = document.createElement("div");
   main.className = "item-main";
-  main.append(textElement("div", "item-title", title), textElement("div", "item-meta", meta));
+  main.append(textElement("div", "item-title", title), textElement("div", "item-meta", meta || "UniPass 应用"));
   const actionButton = button(action, "primary");
-  root.append(main, actionButton);
+  root.append(icon, main, actionButton);
   return { root, button: actionButton };
+}
+
+function accountIcon(): HTMLElement {
+  const icon = document.createElement("span");
+  icon.className = "item-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>';
+  return icon;
 }
 
 function textElement(tag: string, className: string, text: string): HTMLElement {
@@ -260,8 +285,12 @@ function button(label: string, className = ""): HTMLButtonElement {
   return element;
 }
 
-function loading(text: string): string { return `<div class="empty">${escapeHtml(text)}</div>`; }
-function empty(text: string): string { return `<div class="empty">${escapeHtml(text)}</div>`; }
+function loading(text: string): string {
+  return `<div class="empty loading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-5.3-7.5" /></svg><span>${escapeHtml(text)}</span></div>`;
+}
+function empty(text: string): string {
+  return `<div class="empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14v11H5zM8 7.5V5h8v2.5M9 12h6" /></svg><span>${escapeHtml(text)}</span></div>`;
+}
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }

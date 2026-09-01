@@ -7,55 +7,111 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <h1>UniPass</h1>
-        <p id="identity">正在检查登录状态</p>
-      </div>
-      <button id="openPortal" class="icon-button" type="button" title="打开 UniPass" aria-label="打开 UniPass">↗</button>
-    </header>
-
-    <main>
-      <nav class="tabs" aria-label="凭据来源">
-        <button class="tab active" type="button" data-view="current">当前页面</button>
-        <button class="tab" type="button" data-view="apps">全部应用</button>
-      </nav>
-
-      <section id="currentView" class="view">
-        <p id="pageHost" class="context"></p>
-        <div id="currentAccounts" class="list" aria-live="polite"></div>
-      </section>
-
-      <section id="appsView" class="view hidden">
-        <form id="searchForm" class="search">
-          <input id="searchInput" type="search" autocomplete="off" placeholder="搜索应用" aria-label="搜索应用" />
-          <button type="submit">搜索</button>
-        </form>
-        <div id="apps" class="list" aria-live="polite"></div>
-        <button id="backToApps" class="link-button hidden" type="button">返回应用列表</button>
-        <div id="appAccounts" class="list hidden" aria-live="polite"></div>
-      </section>
-
-      <section id="credentialPanel" class="credential hidden" aria-live="polite">
-        <div class="credential-heading">
-          <h2>临时凭据</h2>
-          <span id="credentialCountdown"></span>
+    <div class="app-window">
+      <header class="topbar">
+        <div class="window-brand">
+          <img src="icons/icon48.png" alt="" />
+          <div class="brand-copy">
+            <h1>UniPass</h1>
+            <p>安全凭据助手</p>
+          </div>
         </div>
-        <label for="credentialUsername">账号</label>
-        <div class="field-row">
-          <input id="credentialUsername" readonly />
-          <button id="copyUsername" type="button">复制</button>
+        <div class="window-controls">
+          <div id="sessionBadge" class="session-badge pending" title="UniPass 登录状态">
+            <span class="session-dot" aria-hidden="true"></span>
+            <strong id="identity">检查中</strong>
+          </div>
+          <button id="openPortal" class="icon-button" type="button" title="打开 UniPass 门户" aria-label="打开 UniPass 门户">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 5h5v5M19 5l-8 8M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+            </svg>
+          </button>
         </div>
-        <label for="credentialPassword">密码</label>
-        <div class="field-row">
-          <input id="credentialPassword" type="password" readonly />
-          <button id="copyPassword" type="button">复制</button>
-        </div>
-        <label class="reveal"><input id="showPassword" type="checkbox" /> 显示密码</label>
-      </section>
+      </header>
 
-      <p id="status" class="status" role="status"></p>
-    </main>
+      <main>
+        <nav class="tabs" aria-label="凭据来源">
+          <button class="tab active" type="button" data-view="current" aria-selected="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4zM9 20h6M12 16v4" /></svg>
+            <span>当前页面</span>
+          </button>
+          <button class="tab" type="button" data-view="apps" aria-selected="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg>
+            <span>全部应用</span>
+          </button>
+        </nav>
+
+        <div class="content-area">
+          <section id="currentView" class="view">
+            <div class="view-heading">
+              <div>
+                <span class="eyebrow">ACTIVE TAB</span>
+                <h2>当前页面账号</h2>
+              </div>
+              <div class="host-chip">
+                <span aria-hidden="true"></span>
+                <p id="pageHost">正在识别页面</p>
+              </div>
+            </div>
+            <div id="currentAccounts" class="list" aria-live="polite"></div>
+          </section>
+
+          <section id="appsView" class="view hidden">
+            <form id="searchForm" class="search">
+              <label class="search-field" for="searchInput">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+                <input id="searchInput" type="search" autocomplete="off" placeholder="搜索应用名称" aria-label="搜索应用" />
+              </label>
+              <button type="submit">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 3 3 5-6" /></svg>
+                搜索
+              </button>
+            </form>
+            <div id="appsListHeading" class="list-heading">
+              <span>应用目录</span>
+              <small>选择应用以查看账号</small>
+            </div>
+            <button id="backToApps" class="link-button hidden" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+              返回应用列表
+            </button>
+            <div id="apps" class="list" aria-live="polite"></div>
+            <div id="appAccounts" class="list hidden" aria-live="polite"></div>
+          </section>
+
+          <section id="credentialPanel" class="credential hidden" aria-live="polite">
+            <div class="credential-heading">
+              <div class="credential-title">
+                <span class="credential-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+                </span>
+                <div>
+                  <h2>临时凭据</h2>
+                  <p>仅保存在当前弹窗内存中</p>
+                </div>
+              </div>
+              <span id="credentialCountdown" class="countdown"></span>
+            </div>
+            <label for="credentialUsername">账号</label>
+            <div class="field-row">
+              <input id="credentialUsername" readonly />
+              <button id="copyUsername" type="button">复制</button>
+            </div>
+            <label for="credentialPassword">密码</label>
+            <div class="field-row">
+              <input id="credentialPassword" type="password" readonly />
+              <button id="copyPassword" type="button">复制</button>
+            </div>
+            <label class="reveal"><input id="showPassword" type="checkbox" /> <span>显示密码</span></label>
+          </section>
+        </div>
+      </main>
+
+      <footer class="statusbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 2.8 7.6 7 9 4.2-1.4 7-4.6 7-9V6z" /><path d="m9 12 2 2 4-4" /></svg>
+        <p id="status" class="status" role="status">密码不会写入本地存储</p>
+      </footer>
+    </div>
     <script type="module" src="popup.js"></script>
   </body>
 </html>
