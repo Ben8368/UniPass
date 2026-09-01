@@ -68,9 +68,16 @@ export async function listApps(keyword: string): Promise<UniPassApp[]> {
 }
 
 export async function accountsForApp(appId: string | number): Promise<AccountListResult> {
+  const appUrl = await appUrlForApp(appId);
+  return accountsForUrl(appUrl);
+}
+
+export async function appUrlForApp(appId: string | number): Promise<string> {
   const appUrl = await request<string>(`/app/get_app/url?appId=${encodeURIComponent(String(appId))}`);
   if (!appUrl) throw new Error("该应用没有可用的登录地址");
-  return accountsForUrl(appUrl);
+  const url = new URL(appUrl);
+  if (!/^https?:$/.test(url.protocol)) throw new Error("该应用的登录地址不支持跳转");
+  return url.toString();
 }
 
 export async function credentialForAccount(

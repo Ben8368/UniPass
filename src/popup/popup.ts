@@ -146,9 +146,21 @@ function renderApps(apps: UniPassApp[]): void {
     return;
   }
   for (const app of apps) {
-    const item = createItem(app.name || app.appName || `应用 ${app.id}`, app.favorite ? "已收藏" : "", "查看账号");
-    item.button.addEventListener("click", () => void loadAppAccounts(app));
+    const item = createItem(app.name || app.appName || `应用 ${app.id}`, app.favorite ? "已收藏" : "", ["查看账号", "打开页面"]);
+    item.buttons[0].addEventListener("click", () => void loadAppAccounts(app));
+    item.buttons[1].addEventListener("click", () => void openAppPage(app));
     appsContainer.append(item.root);
+  }
+}
+
+async function openAppPage(app: UniPassApp): Promise<void> {
+  try {
+    setStatus("正在获取应用地址");
+    const appUrl = await send<string>({ type: "appUrl", appId: app.id });
+    await chrome.tabs.create({ url: appUrl });
+    setStatus("已打开应用页面");
+  } catch (error) {
+    setStatus(errorText(error), true);
   }
 }
 
@@ -291,7 +303,7 @@ function showAppList(): void {
   appAccounts.replaceChildren();
 }
 
-function createItem(title: string, meta: string, action: string): { root: HTMLElement; button: HTMLButtonElement } {
+function createItem(title: string, meta: string, actions: string[]): { root: HTMLElement; buttons: HTMLButtonElement[] } {
   const root = document.createElement("article");
   root.className = "item";
   const icon = document.createElement("span");
@@ -301,9 +313,12 @@ function createItem(title: string, meta: string, action: string): { root: HTMLEl
   const main = document.createElement("div");
   main.className = "item-main";
   main.append(textElement("div", "item-title", title), textElement("div", "item-meta", meta || "UniPass 应用"));
-  const actionButton = button(action, "primary");
-  root.append(icon, main, actionButton);
-  return { root, button: actionButton };
+  const actionContainer = document.createElement("div");
+  actionContainer.className = "actions";
+  const actionButtons = actions.map((action, index) => button(action, index === 0 ? "primary" : ""));
+  actionContainer.append(...actionButtons);
+  root.append(icon, main, actionContainer);
+  return { root, buttons: actionButtons };
 }
 
 function accountIcon(): HTMLElement {

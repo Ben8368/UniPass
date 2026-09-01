@@ -1,6 +1,7 @@
 import {
   accountsForApp,
   accountsForUrl,
+  appUrlForApp,
   credentialForAccount,
   currentUser,
   listApps,
@@ -29,6 +30,8 @@ function handle(message: BackgroundRequest): Promise<unknown> {
       return listApps(message.keyword);
     case "accountsForApp":
       return accountsForApp(message.appId);
+    case "appUrl":
+      return appUrlForApp(message.appId);
     case "credential":
       return credentialForAccount(message.accountId, message.fallbackUsername);
     default:

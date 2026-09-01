@@ -34,6 +34,7 @@ export type BackgroundRequest =
   | { type: "accountsForUrl"; url: string }
   | { type: "listApps"; keyword: string }
   | { type: "accountsForApp"; appId: string | number }
+  | { type: "appUrl"; appId: string | number }
   | { type: "credential"; accountId: string | number; fallbackUsername: string };
 
 export type BackgroundResponse<T = unknown> =
