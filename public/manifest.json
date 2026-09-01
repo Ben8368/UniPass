@@ -24,7 +24,8 @@
   ],
   "host_permissions": [
     "https://portal.unipass.top/*",
-    "https://chromewebstore.google.com/*"
+    "https://clients2.google.com/*",
+    "https://clients2.googleusercontent.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

@@ -31,6 +31,9 @@ const credentialCountdown = get("credentialCountdown");
 const showPassword = get<HTMLInputElement>("showPassword");
 const themeToggle = get<HTMLButtonElement>("themeToggle");
 const refreshCatalog = get<HTMLButtonElement>("refreshCatalog");
+const pluginVersionSettingsButton = get<HTMLButtonElement>("pluginVersionSettingsButton");
+const versionSettingsDialog = get("versionSettingsDialog");
+const closeVersionSettingsButton = get<HTMLButtonElement>("closeVersionSettings");
 const versionForm = get<HTMLFormElement>("versionForm");
 const pluginVersionOverride = get<HTMLInputElement>("pluginVersionOverride");
 const effectivePluginVersion = get("effectivePluginVersion");
@@ -84,15 +87,19 @@ function bindControls(): void {
     window.open(PORTAL_URL, "_blank");
   });
   refreshCatalog.addEventListener("click", () => void refreshCurrentPageCatalog());
+  pluginVersionSettingsButton.addEventListener("click", () => void openPluginVersionSettings());
+  closeVersionSettingsButton.addEventListener("click", closePluginVersionSettings);
+  versionSettingsDialog.addEventListener("click", (event) => {
+    if (event.target === versionSettingsDialog) closePluginVersionSettings();
+  });
   versionForm.addEventListener("submit", (event) => {
     event.preventDefault();
     void savePluginVersion();
   });
-  void loadPluginVersionSettings();
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
     button.addEventListener("click", () => {
       const view = button.dataset.view;
-      switchView(view === "apps" ? "apps" : view === "settings" ? "settings" : "current");
+      switchView(view === "apps" ? "apps" : "current");
     });
   });
   get<HTMLFormElement>("searchForm").addEventListener("submit", (event) => {
@@ -104,6 +111,9 @@ function bindControls(): void {
   get<HTMLButtonElement>("copyPassword").addEventListener("click", () => void copyCredential("password"));
   showPassword.addEventListener("change", () => {
     credentialPassword.type = showPassword.checked ? "text" : "password";
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !versionSettingsDialog.classList.contains("hidden")) closePluginVersionSettings();
   });
   window.addEventListener("pagehide", clearCredential);
 }
@@ -152,7 +162,7 @@ async function loadPluginVersionSettings(): Promise<void> {
 function applyPluginVersionSettings(settings: PluginVersionSettings): void {
   pluginVersionOverride.value = settings.override;
   effectivePluginVersion.textContent = settings.effective;
-  pluginVersionSource.textContent = settings.source === "manual" ? "手动指定" : settings.source === "store" ? "Chrome Web Store" : "网络不可用，回退版本";
+  pluginVersionSource.textContent = settings.source === "manual" ? "手动指定" : settings.source === "store" ? "自动获取" : "网络不可用，回退版本";
 }
 
 async function savePluginVersion(): Promise<void> {
@@ -183,6 +193,22 @@ async function loadCurrentPage(): Promise<void> {
   } catch (error) {
     currentAccounts.innerHTML = empty(errorText(error));
   }
+}
+
+async function openPluginVersionSettings(): Promise<void> {
+  versionSettingsDialog.classList.remove("hidden");
+  pluginVersionSettingsButton.setAttribute("aria-expanded", "true");
+  pluginVersionOverride.value = "";
+  effectivePluginVersion.textContent = "检查中";
+  pluginVersionSource.textContent = "";
+  pluginVersionOverride.focus();
+  await loadPluginVersionSettings();
+}
+
+function closePluginVersionSettings(): void {
+  versionSettingsDialog.classList.add("hidden");
+  pluginVersionSettingsButton.setAttribute("aria-expanded", "false");
+  pluginVersionSettingsButton.focus();
 }
 
 async function refreshCurrentPageCatalog(): Promise<void> {
@@ -408,7 +434,7 @@ async function copyCredential(field: keyof Credential): Promise<void> {
   }
 }
 
-function switchView(view: "current" | "apps" | "settings"): void {
+function switchView(view: "current" | "apps"): void {
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
     const isActive = button.dataset.view === view;
     button.classList.toggle("active", isActive);
@@ -416,7 +442,6 @@ function switchView(view: "current" | "apps" | "settings"): void {
   });
   get("currentView").classList.toggle("hidden", view !== "current");
   get("appsView").classList.toggle("hidden", view !== "apps");
-  get("settingsView").classList.toggle("hidden", view !== "settings");
   if (view === "apps" && !appsContainer.childElementCount) void loadApps();
 }
 

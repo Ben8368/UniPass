@@ -12,7 +12,8 @@ import type {
 const PORTAL_ORIGIN = "https://portal.unipass.top";
 const API_ROOT = `${PORTAL_ORIGIN}/api/v1`;
 const API_COMPAT_VERSION = "5.3.0";
-const WEBSTORE_VERSION_URL = "https://chromewebstore.google.com/detail/unipass/gjphikebcceegfolnbfncepfmjnhdkam";
+const EXTENSION_UPDATE_URL =
+  "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0.0.0&acceptformat=crx3&x=id%3Dgjphikebcceegfolnbfncepfmjnhdkam%26installsource%3Dondemand%26uc";
 const PASSWORD_KEY = "VlXCSJg7qO66MNrMMJir3g==";
 
 interface ApiEnvelope<T> {
@@ -51,14 +52,15 @@ export async function currentUser(): Promise<CurrentUser> {
 export async function pluginVersionSettings(): Promise<PluginVersionSettings> {
   const override = await readVersionOverride();
   if (override) return { override, effective: override, source: "manual" };
-  const storeVersion = await resolvePluginVersion();
-  return { override: "", effective: storeVersion, source: resolvedVersionSource };
+  const latestVersion = await resolvePluginVersion();
+  return { override: "", effective: latestVersion, source: resolvedVersionSource };
 }
 
 export async function setPluginVersionOverride(version: string): Promise<PluginVersionSettings> {
   const normalized = version.trim();
   if (normalized && !isPluginVersion(normalized)) throw new Error("版本号格式应为 x.y.z，例如 5.3.0");
-  await chrome.storage.local.set({ pluginVersionOverride: normalized });
+  if (normalized) await chrome.storage.local.set({ pluginVersionOverride: normalized });
+  else await chrome.storage.local.remove("pluginVersionOverride");
   resolvedVersionPromise = undefined;
   return pluginVersionSettings();
 }
@@ -155,7 +157,7 @@ async function resolvePluginVersion(): Promise<string> {
   const override = await readVersionOverride();
   if (override) return override;
   if (!resolvedVersionPromise) {
-    resolvedVersionPromise = fetchStoreVersion()
+    resolvedVersionPromise = fetchLatestPluginVersion()
       .then((version) => { resolvedVersionSource = "store"; return version; })
       .catch(() => { resolvedVersionSource = "fallback"; return API_COMPAT_VERSION; })
       .finally(() => { resolvedVersionPromise = undefined; });
@@ -169,32 +171,27 @@ async function readVersionOverride(): Promise<string> {
   return typeof override === "string" && isPluginVersion(override.trim()) ? override.trim() : "";
 }
 
-async function fetchStoreVersion(): Promise<string> {
+async function fetchLatestPluginVersion(): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const response = await fetch(WEBSTORE_VERSION_URL, { signal: controller.signal });
-    if (!response.ok) throw new Error(`Web Store request failed: ${response.status}`);
-    const html = await response.text();
-    const version = extractVersionFromStorePage(html);
-    if (!version || !isPluginVersion(version)) throw new Error("Web Store version not found");
+    const response = await fetch(EXTENSION_UPDATE_URL, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Extension update request failed: ${response.status}`);
+    const version = extractVersionFromCrxUrl(response.url);
+    if (!version || !isPluginVersion(version)) throw new Error("Extension version not found");
     return version;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function extractVersionFromStorePage(html: string): string | undefined {
-  const patterns = [
-    /"version"\s*:\s*"(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)"/i,
-    /version\\?"\s*:\s*\\?"(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\\?"/i,
-    />?\s*Version\s*<[^>]*>\s*(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/i,
-  ];
-  for (const pattern of patterns) {
-    const version = html.match(pattern)?.[1];
-    if (version && isPluginVersion(version)) return version;
-  }
-  return undefined;
+function extractVersionFromCrxUrl(url: string): string | undefined {
+  const match = url.match(/_(\d+)_(\d+)_(\d+)(?:_\d+)?\.crx(?:$|[?#])/i);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : undefined;
 }
 
 function isPluginVersion(version: string): boolean {
