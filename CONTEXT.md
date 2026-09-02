@@ -9,7 +9,7 @@
 - 填充仅允许 HTTPS 且需匹配应用 origin/path；Content Script 按用户操作临时注入，不自动提交。
 - UniPass 网络请求始终发送 `chrome.runtime.getManifest().version`；商店 CRX 版号只在验证时由官方更新接口动态核验，不在扩展运行时缓存或回退。
 - 最近客观验证：2026-09-02 `npm run verify` 通过（治理检查、静态绿灯审计、11 项测试、类型检查和构建）；TD-001 已完成。真实 UniPass/Jupiter 登录态仍需浏览器手动验收。
-- 私人本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`。仅允许开发者模式加载，不具备商店发布或签名权。
+- 私人本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
 ## 近期优先级
 

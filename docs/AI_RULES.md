@@ -73,6 +73,8 @@
 
 ## 5. 私人本地替身门禁
 
-本项目的本地构建必须替换商店扩展，而非与其并存。`public/manifest.json` 的公开 key 必须派生为 `gjphikebcceegfolnbfncepfmjnhdkam`；`package.json`、manifest 和所有 UniPass 网络请求使用同一个构建版号。每次 `npm run audit:static` 都必须从 Chrome 官方更新接口解析该 ID 的当前商店 CRX 版号；本地版本须与其主、次版本相同，且补丁号恰高 `1`。查询超时、网络失败或重定向版号无法解析，均按失败处理，不得沿用缓存或静态基线。Popup 的版号自定义值不得改变网络请求或构建物版本。
+本项目的本地构建必须替换商店扩展，而非与其并存。`public/manifest.json` 的公开 key 必须派生为 `gjphikebcceegfolnbfncepfmjnhdkam`；`package.json`、manifest 和所有 UniPass 网络请求使用同一个构建版号。每次开发修改后的 `npm run verify` 都必须从 Chrome 官方更新接口解析该 ID 的当前商店 CRX 版号；本地版本须与其主、次版本相同，且补丁号恰高 `1`。查询超时、网络失败或重定向版号无法解析，均按失败处理，不得沿用缓存或静态基线。Popup 的版号自定义值不得改变网络请求或构建物版本。
 
-上述任一 ID、版本关系或网络版号来源不匹配，均为 🔴 阻断项；`npm run audit:static` 必须失败，修复前不得构建、验收或提交。
+当审计首次发现商店版号变更时，必须把 `package.json` 和 manifest 同步为商店当前版的下一补丁版，完成验证并只创建一次同版号 GitHub Release。首次的判定记录是成功发布的 `v<本地构建版号>` GitHub Release；若只存在 tag 而 Release workflow 失败，应修复并完成该 Release，不得另起版号或移动 tag。商店版号未再次变更前，后续开发保持该构建版号，不得因同一商店基线重复创建 Release；商店再次升级后才开始新的单次跟随发布周期。
+
+ID、版本关系或网络版号来源不匹配时，`npm run audit:static` 必须失败；首次跟随发布缺失时，发布审查为 🔴 阻断项。Release workflow 必须同时校验 tag、构建版号及动态商店关系；修复前不得构建、验收或提交。

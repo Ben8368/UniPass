@@ -12,14 +12,14 @@
 2. 打开 `chrome://extensions`，开启右上角的**开发者模式**；
 3. 点击**加载已解压的扩展程序**，选择解压后的目录（其中应直接包含 `manifest.json`）。
 
-同一 Release 中的 `.sha256` 文件可用于校验 ZIP 下载完整性。每次推送符合版本号的 Git 标签（例如 `v0.1.0`）后，GitHub Actions 会自动构建扩展、生成 ZIP 和校验文件，并创建 GitHub Release。
+同一 Release 中的 `.sha256` 文件可用于校验 ZIP 下载完整性。仅在 [替身门禁](docs/AI_RULES.md#5-私人本地替身门禁) 要求的首次跟随发布时推送符合版本号的 Git 标签（例如 `v0.1.0`）；GitHub Actions 会自动构建扩展、生成 ZIP 和校验文件，并创建 GitHub Release。
 
 ## 权限边界
 
 - `activeTab`：仅在用户点击扩展后读取当前标签页地址，并授权本次填充。
 - `scripting`：仅在用户点击“填入”后向当前标签页注入固定的填充脚本。
 - `clipboardWrite`：仅响应用户点击，将用户选择的账号或密码写入系统剪贴板。
-- `storage`：保存插件版本设置、短期凭据可用性状态，以及用户主动开启的木星保活设置；密码不会写入持久化存储。
+- `storage`：保存短期凭据可用性状态，以及用户主动开启的 Jupiter 保活配置和结果；密码不会写入持久化存储。
 - `alarms`：仅用于用户主动开启后的木星会话定时保活。
 - `tabs`：识别当前页面，并把新获取的木星会话同步到已打开的木星标签页。
 - `https://portal.unipass.top/*`：调用 UniPass API，并使用浏览器已有的 UniPass 登录会话。
@@ -50,7 +50,7 @@ npm run verify
 
 ## 发版流程
 
-1. 在 `package.json` 和 `public/manifest.json` 中设置相同的版本号；
+1. 仅在商店版号首次变更时，按[替身门禁](docs/AI_RULES.md#5-私人本地替身门禁)将 `package.json` 和 `public/manifest.json` 设为同一个下一补丁版；
 2. 提交并推送变更；
 3. 创建与版本号完全一致的标签，例如版本 `0.1.0` 对应 `v0.1.0`：
 

@@ -10,7 +10,7 @@ UniPass 是处理敏感凭据的 Manifest V3 扩展。人类贡献入口以本�
 - 只检查治理文档：`npm run docs:governance:check`。
 - 构建后在 `chrome://extensions` 以开发者模式加载 `dist/`。
 
-`npm run verify` 会依次执行治理检查、测试、TypeScript 类型检查和扩展构建。真实 UniPass/Jupiter 登录、Cookie、alarm 和页面注入仍需浏览器手动验收。
+`npm run verify` 会依次执行治理检查、动态商店版号静态审计、测试、TypeScript 类型检查和扩展构建；`npm run build` 也会重复执行审计。真实 UniPass/Jupiter 登录、Cookie、alarm 和页面注入仍需浏览器手动验收。
 
 ## 改动要求
 
@@ -25,4 +25,4 @@ UniPass 是处理敏感凭据的 Manifest V3 扩展。人类贡献入口以本�
 - 建议使用短生命周期分支；commit 可采用 `feat:`、`fix:`、`docs:`、`test:` 等 Conventional Commit 前缀。
 - 提交和 push 由维护者或用户明确决定，自动化工具不得因绿灯自行执行。
 - PR 描述应包含改动目的、风险边界、`🚦 Audit Report`、验证命令与结果，以及未完成的真实浏览器验收。
-- 版本发布前确保 `package.json`、`public/manifest.json` 和 tag 一致，并由 Release workflow 生成 ZIP 与 SHA-256。
+- 仅在[替身门禁](docs/AI_RULES.md#5-私人本地替身门禁)要求的首次跟随发布时创建 tag；发布前确保 `package.json`、`public/manifest.json` 和 tag 一致，并由 Release workflow 生成 ZIP 与 SHA-256。
