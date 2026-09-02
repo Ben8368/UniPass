@@ -1,6 +1,8 @@
 # UniPass Minimal
 
 这是对原 UniPass 扩展的最小权限 TypeScript 重构。它不会修改原始 `extension-source` 目录。
+本项目仅供私人本地开发使用。构建 manifest 固定为商店插件 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID，版本为 `5.3.1`（高于当前商店版 `5.3.0`）。因此在同一 Chrome Profile 中它不能与商店版同时启用；仅通过开发者模式加载 `dist`，不用于 Chrome Web Store 或其他公开分发。公开 key 只能固定 ID，不能提供商店发布或 CRX 签名权限。
+
 
 ## 下载与安装
 
@@ -33,7 +35,7 @@ npm install
 npm run verify
 ```
 
-打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。
+打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
 ## 项目治理
 

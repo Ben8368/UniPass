@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "UniPass Minimal",
   "description": "用户主动操作后查询 UniPass，并自动填写或手动复制凭据。",
-  "version": "0.1.0",
+  "version": "5.3.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiE4ln8VZ/ZxmHyvRrQVG1Xc3fCRSMemjjs/bPGwd7bDayZ/jZbUHLS85uHPv6rl9PvVT5dFkYwjvj9EIDdod8XXW6IcMfcuclKhCqjPVz70SnuXnjD2F7F9T38nwLY38f3qo8P9SCcljqNbe0r2YpPGsGzR611iwceU7BV8G58XaGm8+QVhQLdvs80bW+eCmZgBHgQoJml+ekqg4/th5WlPV7GyC0xIxJEGpMQKVUlhV7gnw7iFXGVOhiT0rB1q1mOQLg394tm17jE1vdLeSq8RlEenn6mvgS4UxTfceSXQMZhuNcia2ZqTsxz8DMCM+KfBxTttGZux0nAWMNUuHAQIDAQAB",
   "action": {
     "default_title": "UniPass",
     "default_popup": "popup.html",

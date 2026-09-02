@@ -27,6 +27,8 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ## 关键数据流
 
+- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与版本设置）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。
+
 ### 当前页面账号
 
 1. Popup 读取活动 HTTPS 标签页。
@@ -53,4 +55,4 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 - 消息字段变化同时更新 `types.ts`、发送端、接收端和测试。
 - URL 或权限边界优先写成 `shared` 纯函数并单测。
 - 新外部服务必须先定义 host permission、超时、错误语义、敏感数据生命周期和关闭方式。
-- Popup 已超过规模黄灯阈值；新增独立功能前按 [TD-001](TECH_DEBT.md#td-001-popup-职责拆分) 拆分。
+- Popup 模块职责已拆分；新增功能应归入对应模块，保持入口只负责初始化与事件协调。
