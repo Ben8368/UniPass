@@ -1,4 +1,5 @@
 import type { FillRequest, FillResult } from "../shared/types";
+import { appUrlMatches } from "../shared/url";
 
 const marker = "data-unipass-minimal-listener";
 if (document.documentElement.getAttribute(marker) !== "ready") {
@@ -12,6 +13,9 @@ if (document.documentElement.getAttribute(marker) !== "ready") {
 }
 
 function fill(request: FillRequest): FillResult {
+  if (!appUrlMatches(request.expectedAppUrl, location.href)) {
+    return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前页面不属于所选应用，已取消填充" };
+  }
   const password = visibleInputs('input[type="password"], input[autocomplete="current-password"]')[0];
   if (!password) {
     return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前页面未找到可见密码框" };

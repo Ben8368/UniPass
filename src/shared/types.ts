@@ -37,6 +37,7 @@ export type BackgroundRequest =
   | { type: "listApps"; keyword: string }
   | { type: "accountsForApp"; appId: string | number }
   | { type: "appUrl"; appId: string | number }
+  | { type: "credentialAvailability"; accountIds: Array<string | number>; userScope: string }
   | { type: "credential"; accountId: string | number; fallbackUsername: string }
   | { type: "getJupiterKeepalive" }
   | { type: "setJupiterKeepalive"; enabled: boolean; appId?: string | number; accountId?: string | number; username?: string };
@@ -72,9 +73,30 @@ export interface AccountCatalogEntry {
   accounts: UniPassAccount[];
 }
 
+export interface AccountCatalogFailure {
+  appId: string | number;
+  appName: string;
+  error: string;
+}
+
+export interface AccountCatalogResult {
+  entries: AccountCatalogEntry[];
+  failures: AccountCatalogFailure[];
+  complete: boolean;
+}
+
+export type CredentialAvailabilityStatus = "available" | "empty" | "error";
+
+export interface CredentialAvailabilityResult {
+  accountId: string | number;
+  status: CredentialAvailabilityStatus;
+  error?: string;
+}
+
 export interface FillRequest {
   type: "fillCredentials";
   credential: Credential;
+  expectedAppUrl: string;
   mode: "all" | "password";
 }
 

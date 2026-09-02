@@ -29,11 +29,8 @@ jobs:
       - name: Verify release version
         run: node scripts/verify-release-version.mjs "${{ github.ref_name }}"
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Build extension
-        run: npm run build
+      - name: Verify
+        run: npm run verify
 
       - name: Create installable ZIP and checksum
         shell: bash

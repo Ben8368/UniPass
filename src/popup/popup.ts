@@ -1,9 +1,11 @@
 import type {
   AccountCatalogEntry,
+  AccountCatalogResult,
   AccountListResult,
   BackgroundRequest,
   BackgroundResponse,
   Credential,
+  CredentialAvailabilityResult,
   CurrentUser,
   FillRequest,
   FillResult,
@@ -12,6 +14,7 @@ import type {
   PluginVersionSettings,
   JupiterKeepaliveSettings,
 } from "../shared/types";
+import { appUrlMatches, isHttpsUrl } from "../shared/url";
 
 const PORTAL_URL = "https://portal.unipass.top/application";
 const LOGIN_URL = "https://portal.unipass.top/login";
@@ -42,7 +45,8 @@ const effectivePluginVersion = get("effectivePluginVersion");
 const pluginVersionSource = get("pluginVersionSource");
 
 const THEME_STORAGE_KEY = "unipass-theme";
-const ACCOUNT_CATALOG_STORAGE_PREFIX = "unipass-account-catalog-v1:";
+const ACCOUNT_CATALOG_STORAGE_PREFIX = "unipass-account-catalog-v2:";
+const LEGACY_ACCOUNT_CATALOG_STORAGE_PREFIX = "unipass-account-catalog-v1:";
 const ACCOUNT_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 type Theme = "light" | "dark";
 interface CachedAccountCatalog {
@@ -61,6 +65,7 @@ void initialize();
 
 async function initialize(): Promise<void> {
   bindControls();
+  removeLegacyAccountCatalogs();
   try {
     const user = await send<CurrentUser>({ type: "session" });
     identity.textContent = user.fullName || user.nickName || user.name || user.username || user.email || "已登录";
@@ -188,17 +193,18 @@ async function savePluginVersion(): Promise<void> {
   }
 }
 
-async function loadCurrentPage(): Promise<void> {
+async function loadCurrentPage(catalogOverride?: CachedAccountCatalog): Promise<void> {
   currentAccounts.innerHTML = loading("正在本地匹配账号目录");
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || !tab.url || !/^https?:\/\//i.test(tab.url)) throw new Error("当前标签页不支持凭据填充");
+    if (!tab?.id || !tab.url || !isHttpsUrl(tab.url)) throw new Error("为保护凭据安全，仅支持 HTTPS 页面填充");
     pageHost.textContent = new URL(tab.url).hostname;
-    let catalog = loadCachedCatalog();
-    if (!catalog || Date.now() - catalog.syncedAt > ACCOUNT_CATALOG_TTL_MS) {
+    let catalog = catalogOverride ?? loadCachedCatalog();
+    if (!catalogOverride && (!catalog || Date.now() - catalog.syncedAt > ACCOUNT_CATALOG_TTL_MS)) {
       catalog = await syncAccountCatalog();
     }
-    await renderAccounts(currentAccounts, accountsForCurrentUrl(catalog.entries, tab.url), tab.id);
+    if (!catalog) throw new Error("账号目录不可用，请重新同步");
+    await renderAccounts(currentAccounts, accountsForCurrentUrl(catalog.entries, tab.url), tab.id, tab.url);
   } catch (error) {
     currentAccounts.innerHTML = empty(errorText(error));
   }
@@ -222,8 +228,8 @@ function closePluginVersionSettings(): void {
 
 async function refreshCurrentPageCatalog(): Promise<void> {
   try {
-    await syncAccountCatalog();
-    await loadCurrentPage();
+    const catalog = await syncAccountCatalog();
+    await loadCurrentPage(catalog);
   } catch (error) {
     currentAccounts.innerHTML = empty(errorText(error));
   }
@@ -252,25 +258,31 @@ async function syncAccountCatalog(): Promise<CachedAccountCatalog> {
   refreshCatalog.disabled = true;
   currentAccounts.innerHTML = loading("正在同步账号目录");
   try {
-    const entries = await send<AccountCatalogEntry[]>({ type: "accountCatalog" });
-    const catalog = { syncedAt: Date.now(), entries };
-    localStorage.setItem(catalogStorageKey, JSON.stringify(catalog));
-    setStatus("账号目录已同步；当前页仅在本地匹配");
-    return catalog;
+    const result = await send<AccountCatalogResult>({ type: "accountCatalog" });
+    if (result.complete) {
+      const catalog = { syncedAt: Date.now(), entries: result.entries };
+      localStorage.setItem(catalogStorageKey, JSON.stringify(catalog));
+      setStatus("账号目录已同步；当前页仅在本地匹配");
+      return catalog;
+    }
+
+    const previous = loadCachedCatalog();
+    if (previous) {
+      setStatus(`有 ${result.failures.length} 个应用同步失败，继续使用上次完整目录`, true);
+      return previous;
+    }
+    setStatus(`有 ${result.failures.length} 个应用同步失败，本次结果不会缓存`, true);
+    return { syncedAt: 0, entries: result.entries };
   } finally {
     refreshCatalog.disabled = false;
   }
 }
 
 function accountsForCurrentUrl(entries: AccountCatalogEntry[], currentUrl: string): UniPassAccount[] {
-  const target = comparableUrl(currentUrl);
-  const targetOrigin = comparableOrigin(currentUrl);
   const accounts: UniPassAccount[] = [];
   const seen = new Set<string>();
   for (const entry of entries) {
-    // App records often store the site root while the active tab is on /login
-    // or another route. Prefer an exact match, then accept the same origin.
-    if (comparableUrl(entry.appUrl) !== target && comparableOrigin(entry.appUrl) !== targetOrigin) continue;
+    if (!appUrlMatches(entry.appUrl, currentUrl)) continue;
     for (const account of entry.accounts) {
       const id = account.id ?? account.accountId ?? account.appAccountUserId;
       const key = id == null ? JSON.stringify(account) : String(id);
@@ -283,16 +295,11 @@ function accountsForCurrentUrl(entries: AccountCatalogEntry[], currentUrl: strin
   return accounts;
 }
 
-function comparableUrl(value: string): string {
-  const url = new URL(value);
-  url.hash = "";
-  if (!url.hostname.includes("huaban") && !url.hostname.includes("gaoding")) url.search = "";
-  return url.toString();
-}
-
-function comparableOrigin(value: string): string {
-  const url = new URL(value);
-  return url.origin.toLowerCase();
+function removeLegacyAccountCatalogs(): void {
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(LEGACY_ACCOUNT_CATALOG_STORAGE_PREFIX)) localStorage.removeItem(key);
+  }
 }
 
 async function loadApps(keyword = ""): Promise<void> {
@@ -381,30 +388,44 @@ async function loadAppAccounts(app: UniPassApp): Promise<void> {
   try {
     const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id });
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    await renderAccounts(appAccounts, result.accounts, tab?.id);
+    const fillTabId = tab?.id != null && tab.url && appUrlMatches(result.appUrl, tab.url) ? tab.id : undefined;
+    await renderAccounts(appAccounts, result.accounts, fillTabId, result.appUrl);
   } catch (error) {
     appAccounts.innerHTML = empty(errorText(error));
   }
 }
 
-async function renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabId?: number): Promise<void> {
-  const availableAccounts = (await Promise.all(accounts.map(async (account) => {
-    const accountId = account.id ?? account.accountId ?? account.appAccountUserId;
-    if (accountId == null) return null;
-    const username = account.account || account.phoneNumber || account.email || "未命名账号";
-    try {
-      const credential = await send<Credential>({ type: "credential", accountId, fallbackUsername: username });
-      const hasPassword = credential.password.trim().length > 0;
-      credential.password = "";
-      return hasPassword ? account : null;
-    } catch (error) {
-      // Keep accounts visible when the availability check itself fails; only hide known empty-password records.
-      const message = errorText(error);
-      return /没有可用密码|密码解密失败/.test(message) ? null : account;
-    }
-  }))).filter((account): account is UniPassAccount => account != null);
-  if (!availableAccounts.length) {
+async function renderAccounts(
+  container: HTMLElement,
+  accounts: UniPassAccount[],
+  tabId?: number,
+  expectedAppUrl?: string,
+): Promise<void> {
+  const candidates = accounts.filter((account) =>
+    (account.id ?? account.accountId ?? account.appAccountUserId) != null
+  );
+  if (!candidates.length) {
     container.innerHTML = empty("没有可用账号");
+    return;
+  }
+  if (!catalogStorageKey) throw new Error("尚未登录 UniPass");
+
+  const availability = await send<CredentialAvailabilityResult[]>({
+    type: "credentialAvailability",
+    accountIds: candidates.map((account) => account.id ?? account.accountId ?? account.appAccountUserId as string | number),
+    userScope: catalogStorageKey,
+  });
+  const availabilityById = new Map(availability.map((result) => [String(result.accountId), result]));
+  const availableAccounts = candidates.filter((account) => {
+    const accountId = account.id ?? account.accountId ?? account.appAccountUserId;
+    return accountId != null && availabilityById.get(String(accountId))?.status === "available";
+  });
+  const failedChecks = availability.filter((result) => result.status === "error");
+  if (failedChecks.length) {
+    setStatus(`有 ${failedChecks.length} 个账号暂时无法验证，已跳过显示`, true);
+  }
+  if (!availableAccounts.length) {
+    container.innerHTML = empty(failedChecks.length ? "暂时无法验证账号凭据，请稍后重试" : "没有可用账号");
     return;
   }
   container.replaceChildren();
@@ -421,8 +442,9 @@ async function renderAccounts(container: HTMLElement, accounts: UniPassAccount[]
     const actions = document.createElement("div");
     actions.className = "actions";
     const fillButton = button("填入", "primary");
-    fillButton.disabled = tabId == null;
-    fillButton.addEventListener("click", () => void fillAccount(tabId, accountId, username));
+    fillButton.disabled = tabId == null || !expectedAppUrl;
+    fillButton.title = fillButton.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面";
+    fillButton.addEventListener("click", () => void fillAccount(tabId, accountId, username, expectedAppUrl));
     const viewButton = button("查看");
     viewButton.addEventListener("click", () => void revealAccount(accountId, username));
     actions.append(fillButton, viewButton);
@@ -441,18 +463,33 @@ async function revealAccount(accountId: string | number, username: string): Prom
   }
 }
 
-async function fillAccount(tabId: number | undefined, accountId: string | number, username: string): Promise<void> {
-  if (tabId == null) return;
+async function fillAccount(
+  tabId: number | undefined,
+  accountId: string | number,
+  username: string,
+  expectedAppUrl?: string,
+): Promise<void> {
+  if (tabId == null || !expectedAppUrl) return;
   let credential: Credential | null = null;
   try {
     setStatus("正在填入当前页面");
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.active || !tab.url || !appUrlMatches(expectedAppUrl, tab.url)) {
+      throw new Error("当前标签页已切换或不属于该应用，已取消填充");
+    }
     credential = await send<Credential>({ type: "credential", accountId, fallbackUsername: username });
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content-script.js"] });
+    const injectionTab = await chrome.tabs.get(tabId);
+    if (!injectionTab.active || !injectionTab.url || !appUrlMatches(expectedAppUrl, injectionTab.url)) {
+      throw new Error("获取凭据期间标签页已切换或离开该应用，已取消填充");
+    }
+    const [injection] = await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content-script.js"] });
+    if (!injection?.documentId) throw new Error("无法确认凭据填充页面");
     const result = await chrome.tabs.sendMessage<FillRequest, FillResult>(tabId, {
       type: "fillCredentials",
       credential,
+      expectedAppUrl,
       mode: "all",
-    });
+    }, { documentId: injection.documentId });
     if (!result?.ok) throw new Error(result?.error || "填充失败");
     setStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
   } catch (error) {
