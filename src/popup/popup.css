@@ -308,10 +308,6 @@ main {
 .plugin-store-link:hover svg { transform: translateX(2px); }
 .plugin-store-link:focus-visible { outline: none; border-radius: 3px; box-shadow: 0 0 0 3px rgba(65, 211, 155, .28); }
 .actions .keepalive-enabled { border-color: rgba(65, 211, 155, .32); background: rgba(65, 211, 155, .16); color: #b9ffdf; }
-.settings-form > input {
-  width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text-0); font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px;
-}
-.settings-form > input:focus { border-color: rgba(65, 211, 155, .44); box-shadow: 0 0 0 2px rgba(65, 211, 155, .10); }
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -341,6 +337,7 @@ main {
 .version-status { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: baseline; padding-top: 5px; color: var(--text-2); font-size: 9.5px; }
 .version-status strong { color: var(--green-text); font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
 .version-status small { grid-column: 2; color: var(--text-2); font-size: 9px; }
+.version-status code { font-family: "Cascadia Mono", Consolas, monospace; font-size: inherit; }
 .settings-save {
   display: inline-flex; height: 32px; align-items: center; justify-content: center; gap: 6px; margin-top: 3px; border: 1px solid rgba(65, 211, 155, .28); border-radius: 6px; background: var(--green-strong); color: #06110d; font-size: 10.5px; font-weight: 750;
 }

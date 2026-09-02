@@ -3,18 +3,17 @@ import {
   accountCatalog,
   accountsForApp,
   appUrlForApp,
-  credentialAvailableForAccount,
   credentialForAccount,
   currentUser,
   listApps,
   pluginVersionSettings,
-  setPluginVersionOverride,
 } from "../shared/api";
+import { isStableUserScope, popupSessionUserFor, requireStableUserScope, userScopeFor } from "../shared/user-scope";
+import { fetchJsonWithTimeout } from "../shared/fetch";
+import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import type {
   BackgroundRequest,
   BackgroundResponse,
-  CredentialAvailabilityResult,
-  CredentialAvailabilityStatus,
   JupiterKeepaliveSettings,
   UniPassAccount,
 } from "../shared/types";
@@ -25,15 +24,6 @@ const JUPITER_KEEPALIVE_STORAGE_KEY = "jupiterKeepaliveSettings";
 const JUPITER_KEEPALIVE_ALARM = "jupiter-keepalive";
 const JUPITER_KEEPALIVE_SESSION_KEY = "jupiterKeepaliveSession";
 const JUPITER_KEEPALIVE_PERIOD_MINUTES = 25;
-const CREDENTIAL_AVAILABILITY_CACHE_KEY = "credentialAvailabilityCacheV1";
-const CREDENTIAL_AVAILABILITY_TTL_MS = 15 * 60 * 1000;
-const CREDENTIAL_AVAILABILITY_CONCURRENCY = 4;
-
-interface CredentialAvailabilityCacheEntry {
-  status: Exclude<CredentialAvailabilityStatus, "error">;
-  expiresAt: number;
-}
-
 interface JupiterLoginResponse {
   code?: number | string;
   message?: string;
@@ -43,6 +33,8 @@ interface JupiterLoginResponse {
     [key: string]: unknown;
   };
 }
+
+class UserScopeMismatchError extends Error {}
 
 void restoreJupiterKeepaliveAlarm();
 
@@ -73,40 +65,39 @@ chrome.runtime.onMessage.addListener(
 function handle(message: BackgroundRequest): Promise<unknown> {
   switch (message.type) {
     case "session":
-      return currentUser();
+      return currentUser().then(popupSessionUserFor);
     case "getPluginVersionSettings":
       return pluginVersionSettings();
-    case "setPluginVersionOverride":
-      return setPluginVersionOverride(message.version);
     case "accountCatalog":
-      return refreshAccountCatalog();
+      return withUserScope(message.userScope, refreshAccountCatalog);
     case "listApps":
-      return listApps(message.keyword);
+      return withUserScope(message.userScope, () => listApps(message.keyword));
     case "accountsForApp":
-      return accountsForApp(message.appId);
+      return withUserScope(message.userScope, () => accountsForApp(message.appId));
     case "appUrl":
-      return appUrlForApp(message.appId);
+      return withUserScope(message.userScope, () => appUrlForApp(message.appId));
     case "credentialAvailability":
-      return credentialAvailability(message.accountIds, message.userScope);
+      return withUserScope(message.userScope, () => credentialAvailability(message.accountIds, message.userScope));
     case "credential":
-      return credentialForAccount(message.accountId, message.fallbackUsername);
+      return withUserScope(message.userScope, () => credentialForAccount(message.accountId, message.fallbackUsername));
     case "getJupiterKeepalive":
-      return getJupiterKeepaliveSettings();
+      return withUserScope(message.userScope, () => getJupiterKeepaliveSettings(message.userScope));
     case "setJupiterKeepalive":
-      return setJupiterKeepalive(message.enabled, message.appId, message.accountId, message.username);
+      return withUserScope(message.userScope, () => setJupiterKeepalive(message.userScope, message.enabled, message.appId, message.accountId, message.username));
     default:
       return Promise.reject(new Error("不支持的扩展请求"));
   }
 }
 
 
-async function getJupiterKeepaliveSettings(): Promise<JupiterKeepaliveSettings> {
+async function readStoredJupiterKeepaliveSettings(): Promise<JupiterKeepaliveSettings> {
   const stored = await chrome.storage.local.get(JUPITER_KEEPALIVE_STORAGE_KEY);
   const value = stored[JUPITER_KEEPALIVE_STORAGE_KEY];
   if (!value || typeof value !== "object") return { enabled: false };
   const settings = value as Partial<JupiterKeepaliveSettings>;
   return {
     enabled: settings.enabled === true,
+    userScope: typeof settings.userScope === "string" ? settings.userScope : undefined,
     appId: settings.appId,
     accountId: settings.accountId,
     username: settings.username,
@@ -115,7 +106,18 @@ async function getJupiterKeepaliveSettings(): Promise<JupiterKeepaliveSettings> 
   };
 }
 
+async function getJupiterKeepaliveSettings(userScope: string): Promise<JupiterKeepaliveSettings> {
+  const settings = await readStoredJupiterKeepaliveSettings();
+  if (!settings.enabled) return settings;
+  if (settings.userScope !== userScope.trim()) {
+    await disableJupiterKeepalive();
+    return { enabled: false };
+  }
+  return settings;
+}
+
 async function setJupiterKeepalive(
+  userScope: string,
   enabled: boolean,
   appId?: string | number,
   accountId?: string | number,
@@ -140,11 +142,11 @@ async function setJupiterKeepalive(
   if (selectedAccountId == null || !selectedUsername) throw new Error("木星应用没有可用的登录凭据");
   if (!selectedUsername.includes("@")) throw new Error("木星应用凭据不是登录邮箱");
 
-  const settings: JupiterKeepaliveSettings = { enabled: true, appId, accountId: selectedAccountId, username: selectedUsername };
+  const settings: JupiterKeepaliveSettings = { enabled: true, userScope: userScope.trim(), appId, accountId: selectedAccountId, username: selectedUsername };
   await chrome.storage.local.set({ [JUPITER_KEEPALIVE_STORAGE_KEY]: settings });
   await chrome.alarms.create(JUPITER_KEEPALIVE_ALARM, { periodInMinutes: JUPITER_KEEPALIVE_PERIOD_MINUTES });
   await keepJupiterAlive();
-  return getJupiterKeepaliveSettings();
+  return getJupiterKeepaliveSettings(userScope);
 }
 
 function preferredJupiterAccount(accounts: UniPassAccount[]): UniPassAccount | undefined {
@@ -152,15 +154,29 @@ function preferredJupiterAccount(accounts: UniPassAccount[]): UniPassAccount | u
 }
 
 async function restoreJupiterKeepaliveAlarm(): Promise<void> {
-  const settings = await getJupiterKeepaliveSettings();
-  if (settings.enabled) {
+  const settings = await readStoredJupiterKeepaliveSettings();
+  if (!settings.enabled) return;
+  if (!settings.userScope || !isStableUserScope(settings.userScope)) {
+    await disableJupiterKeepalive();
+    return;
+  }
+  try {
+    await assertCurrentUserScope(settings.userScope);
     await chrome.alarms.create(JUPITER_KEEPALIVE_ALARM, { periodInMinutes: JUPITER_KEEPALIVE_PERIOD_MINUTES });
+  } catch (error) {
+    if (error instanceof UserScopeMismatchError) await disableJupiterKeepalive();
   }
 }
 
 async function keepJupiterAlive(): Promise<void> {
-  const settings = await getJupiterKeepaliveSettings();
-  if (!settings.enabled || settings.accountId == null || !settings.username) return;
+  const settings = await readStoredJupiterKeepaliveSettings();
+  if (!settings.enabled || !settings.userScope || settings.accountId == null || !settings.username) return;
+  try {
+    await assertCurrentUserScope(settings.userScope);
+  } catch (error) {
+    if (error instanceof UserScopeMismatchError) await disableJupiterKeepalive();
+    return;
+  }
 
   let password = "";
   let credential: { username: string; password: string } | undefined;
@@ -168,9 +184,14 @@ async function keepJupiterAlive(): Promise<void> {
     credential = await credentialForAccount(settings.accountId, settings.username);
     password = credential.password;
     const loginData = await loginToJupiter(credential.username, password);
-    await syncJupiterSession(loginData);
+    await assertCurrentUserScope(settings.userScope);
+    await syncJupiterSession(loginData, settings.userScope);
     await saveJupiterKeepaliveResult({ ...settings, lastSuccessAt: Date.now(), lastError: undefined });
   } catch (error) {
+    if (error instanceof UserScopeMismatchError) {
+      await disableJupiterKeepalive();
+      return;
+    }
     const message = error instanceof Error ? error.message : "木星保活失败";
     await saveJupiterKeepaliveResult({ ...settings, lastError: message });
   } finally {
@@ -180,7 +201,7 @@ async function keepJupiterAlive(): Promise<void> {
 }
 
 async function loginToJupiter(email: string, password: string): Promise<JupiterLoginResponse["data"]> {
-  const response = await fetch(JUPITER_LOGIN_URL, {
+  const { response, body } = await fetchJsonWithTimeout<JupiterLoginResponse>(JUPITER_LOGIN_URL, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -195,7 +216,6 @@ async function loginToJupiter(email: string, password: string): Promise<JupiterL
       isAgree: 1,
     }),
   });
-  const body = (await response.json().catch(() => null)) as JupiterLoginResponse | null;
   if (!response.ok) throw new Error(body?.message || body?.msg || `木星登录失败（HTTP ${response.status}）`);
   if (!body?.data?.accessToken) throw new Error(body?.message || body?.msg || "木星登录未返回会话令牌");
   return body.data;
@@ -210,11 +230,11 @@ function encryptJupiterPassword(password: string): string {
   ).ciphertext.toString().toUpperCase();
 }
 
-async function syncJupiterSession(loginData: JupiterLoginResponse["data"]): Promise<void> {
+async function syncJupiterSession(loginData: JupiterLoginResponse["data"], userScope: string): Promise<void> {
   const accessToken = loginData?.accessToken;
   if (!accessToken) return;
   // Session storage is cleared with the browser session; no Jupiter token is persisted to disk by the extension.
-  await chrome.storage.session.set({ [JUPITER_KEEPALIVE_SESSION_KEY]: loginData });
+  await chrome.storage.session.set({ [JUPITER_KEEPALIVE_SESSION_KEY]: { ...loginData, userScope } });
   const tabs = await chrome.tabs.query({ url: [`${JUPITER_ORIGIN}/*`] });
   await Promise.all(tabs.filter((tab) => tab.id != null && tab.url?.startsWith(JUPITER_ORIGIN))
     .map((tab) => syncStoredJupiterSessionToTab(tab.id as number)));
@@ -222,10 +242,15 @@ async function syncJupiterSession(loginData: JupiterLoginResponse["data"]): Prom
 
 async function syncStoredJupiterSessionToTab(tabId: number): Promise<void> {
   const stored = await chrome.storage.session.get(JUPITER_KEEPALIVE_SESSION_KEY);
-  const loginData = stored[JUPITER_KEEPALIVE_SESSION_KEY] as JupiterLoginResponse["data"] | undefined;
+  const loginData = stored[JUPITER_KEEPALIVE_SESSION_KEY] as (JupiterLoginResponse["data"] & { userScope?: string }) | undefined;
   const accessToken = loginData?.accessToken;
-  if (!accessToken) return;
+  if (!accessToken || !loginData?.userScope || !isStableUserScope(loginData.userScope)) {
+    await chrome.storage.session.remove(JUPITER_KEEPALIVE_SESSION_KEY);
+    return;
+  }
   try {
+    await assertCurrentUserScope(loginData.userScope);
+    const { userScope: _userScope, ...sessionData } = loginData;
     await chrome.scripting.executeScript({
       target: { tabId },
       func: (token: string, userInfo: object) => {
@@ -234,9 +259,13 @@ async function syncStoredJupiterSessionToTab(tabId: number): Promise<void> {
         localStorage.setItem("PH_USER_INFO", JSON.stringify(userInfo));
         location.reload();
       },
-      args: [accessToken, loginData],
+      args: [accessToken, sessionData],
     });
   } catch (error: unknown) {
+    if (error instanceof UserScopeMismatchError) {
+      await disableJupiterKeepalive();
+      return;
+    }
     // A tab can close or be replaced after tabs.query/onUpdated reports it.
     if (isMissingTabError(error)) return;
     throw error;
@@ -245,74 +274,8 @@ async function syncStoredJupiterSessionToTab(tabId: number): Promise<void> {
 
 async function refreshAccountCatalog(): Promise<Awaited<ReturnType<typeof accountCatalog>>> {
   const result = await accountCatalog();
-  await chrome.storage.session.remove(CREDENTIAL_AVAILABILITY_CACHE_KEY);
+  await clearCredentialAvailabilityCache();
   return result;
-}
-
-async function credentialAvailability(
-  accountIds: Array<string | number>,
-  userScope: string,
-): Promise<CredentialAvailabilityResult[]> {
-  const uniqueAccountIds = accountIds.filter((accountId, index) =>
-    accountIds.findIndex((candidate) => String(candidate) === String(accountId)) === index
-  );
-  if (uniqueAccountIds.length > 100) throw new Error("单次凭据检查的账号数量过多");
-
-  const now = Date.now();
-  const stored = await chrome.storage.session.get(CREDENTIAL_AVAILABILITY_CACHE_KEY);
-  const cache = normalizeCredentialAvailabilityCache(stored[CREDENTIAL_AVAILABILITY_CACHE_KEY], now);
-  let cacheChanged = false;
-
-  const results = await mapWithConcurrency(
-    uniqueAccountIds,
-    CREDENTIAL_AVAILABILITY_CONCURRENCY,
-    async (accountId): Promise<CredentialAvailabilityResult> => {
-      const key = credentialAvailabilityCacheKey(userScope, accountId);
-      const cached = cache[key];
-      if (cached) return { accountId, status: cached.status };
-      try {
-        const status = await credentialAvailableForAccount(accountId) ? "available" : "empty";
-        cache[key] = { status, expiresAt: now + CREDENTIAL_AVAILABILITY_TTL_MS };
-        cacheChanged = true;
-        return { accountId, status };
-      } catch (error) {
-        return {
-          accountId,
-          status: "error",
-          error: error instanceof Error ? error.message : "凭据状态检查失败",
-        };
-      }
-    },
-  );
-
-  if (cacheChanged) {
-    await chrome.storage.session.set({ [CREDENTIAL_AVAILABILITY_CACHE_KEY]: cache });
-  }
-  return results;
-}
-
-function normalizeCredentialAvailabilityCache(
-  value: unknown,
-  now: number,
-): Record<string, CredentialAvailabilityCacheEntry> {
-  if (!value || typeof value !== "object") return {};
-  const cache: Record<string, CredentialAvailabilityCacheEntry> = {};
-  for (const [key, candidate] of Object.entries(value)) {
-    if (!candidate || typeof candidate !== "object") continue;
-    const entry = candidate as Partial<CredentialAvailabilityCacheEntry>;
-    if (
-      (entry.status === "available" || entry.status === "empty") &&
-      typeof entry.expiresAt === "number" &&
-      entry.expiresAt > now
-    ) {
-      cache[key] = { status: entry.status, expiresAt: entry.expiresAt };
-    }
-  }
-  return cache;
-}
-
-function credentialAvailabilityCacheKey(userScope: string, accountId: string | number): string {
-  return JSON.stringify([userScope.trim() || "default", String(accountId)]);
 }
 
 function isMissingTabError(error: unknown): boolean {
@@ -320,24 +283,26 @@ function isMissingTabError(error: unknown): boolean {
   return /no tab with id/i.test(message);
 }
 
-async function saveJupiterKeepaliveResult(settings: JupiterKeepaliveSettings): Promise<void> {
-  await chrome.storage.local.set({ [JUPITER_KEEPALIVE_STORAGE_KEY]: settings });
+async function withUserScope<T>(userScope: string | undefined, operation: () => Promise<T>): Promise<T> {
+  const scope = requireStableUserScope(userScope);
+  await assertCurrentUserScope(scope);
+  const result = await operation();
+  await assertCurrentUserScope(scope);
+  return result;
 }
 
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await worker(items[index]);
-    }
-  });
-  await Promise.all(runners);
-  return results;
+async function assertCurrentUserScope(expectedScope: string): Promise<void> {
+  const actualScope = userScopeFor(await currentUser());
+  if (!actualScope) throw new UserScopeMismatchError("UniPass 会话缺少稳定用户标识");
+  if (actualScope !== expectedScope.trim()) throw new UserScopeMismatchError("UniPass 用户已切换，请重新打开弹窗");
+}
+
+async function disableJupiterKeepalive(): Promise<void> {
+  await chrome.alarms.clear(JUPITER_KEEPALIVE_ALARM);
+  await chrome.storage.local.set({ [JUPITER_KEEPALIVE_STORAGE_KEY]: { enabled: false } });
+  await chrome.storage.session.remove(JUPITER_KEEPALIVE_SESSION_KEY);
+}
+
+async function saveJupiterKeepaliveResult(settings: JupiterKeepaliveSettings): Promise<void> {
+  await chrome.storage.local.set({ [JUPITER_KEEPALIVE_STORAGE_KEY]: settings });
 }

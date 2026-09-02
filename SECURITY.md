@@ -9,9 +9,13 @@
 - 明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物。
 - Popup 列表渲染只接收凭据可用性状态；只有用户点击“查看”或“填入”后才能接收一个选中账号的密码。
 - 填充只允许 HTTPS 且与应用 URL 的 origin/path 匹配；执行前重新检查标签页仍活动且未导航到其他应用。
+- 木星是 manifest 明确允许的单页应用；其登录前后路由可变，但仅限 `https://jupiter.tec-do.com` 同一 origin 内匹配，其他应用仍按 origin/path 严格校验。
 - Content Script 只按用户操作临时注入，只写标准可见输入框，不自动提交表单。
 - Jupiter token 只保存在 `chrome.storage.session` 和目标站点自身 session/local storage；关闭托管时清除扩展会话副本。
 - API、解密或目录同步失败必须显式失败；未知错误不得被缓存成“空密码”，部分目录不得覆盖上次完整目录。
+- UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
+- 用户作用域优先使用服务端稳定 ID（`id`、`userId` 或 `user_id`）；缺失时只可回退服务端登录名 `username`，再回退邮箱 `email`。显示名、昵称和默认值绝不作为身份键。三者均缺失时不执行 UniPass 目录、应用或凭据请求，Jupiter 保活不可开启；已启用保活在检测到用户切换后会停止并清除扩展会话 token。
+- UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。
 
 ## 权限与主机
 
@@ -21,9 +25,9 @@
 - `clipboardWrite`：用户点击复制。
 - `storage`：非明文设置、TTL 状态和会话数据。
 - `alarms`、`tabs`：用户主动开启的 Jupiter 保活与标签页同步。
-- UniPass、Chrome 更新服务、Jupiter 是当前仅允许的外部主机。
+- UniPass 与 Jupiter 是当前仅允许的扩展运行时外部主机；Chrome 官方更新接口只由本地 Node 审计脚本访问，不属于扩展运行时权限。
 - 私人本地构建的 manifest `key` 固定为商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID；该值不是私钥，不授予商店发布或 CRX 签名权限。因同一 ID 可能与商店版争用 Profile 状态，必须在独立 Profile 完成人工安装验收。
-- 所有 UniPass 请求的 `X-Browser-Plugin-Version` 固定取自 `chrome.runtime.getManifest().version`；Popup 不得覆盖该值。验证时必须在线核验商店当前版号，本地构建仅在补丁号恰高 `1` 时可通过。
+- 所有 UniPass 请求的 `X-Browser-Plugin-Version` 固定为当前构建嵌入的 `STORE_PLUGIN_VERSION`（商店基线），绝不使用本地 `chrome.runtime.getManifest().version`。本地替身构建必须比商店基线高一个补丁号；开发/验证时在线核验并随商店版更新这对值，扩展运行时不查询商店。Popup 只读展示且不得覆盖任一值。
 
 新增权限或域名前必须说明最小必要范围、数据内容、触发条件、失败/关闭路径，并更新本文件、README 和红绿灯报告。
 

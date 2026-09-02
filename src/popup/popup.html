@@ -28,11 +28,6 @@
           <button id="pluginVersionSettingsButton" class="icon-button" type="button" title="构建版本信息" aria-label="构建版本信息" aria-controls="versionSettingsDialog" aria-expanded="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /><path d="m19.4 15 .1.1-1.5 2.6-.2-.1a2.2 2.2 0 0 0-2.2 0l-.2.1-1.5-2.6.1-.1a2.2 2.2 0 0 0 0-2.5l-.1-.1 1.5-2.6.2.1a2.2 2.2 0 0 0 2.2 0l.2-.1 1.5 2.6-.1.1a2.2 2.2 0 0 0 0 2.5Z" /></svg>
           </button>
-          <button id="openPortal" class="icon-button" type="button" title="打开 UniPass 门户" aria-label="打开 UniPass 门户">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M14 5h5v5M19 5l-8 8M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-            </svg>
-          </button>
         </div>
       </header>
 
@@ -125,12 +120,12 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
-          <form id="versionForm" class="settings-form">
+          <div class="settings-form">
             <a class="plugin-store-link" href="https://chromewebstore.google.com/detail/unipass/gjphikebcceegfolnbfncepfmjnhdkam" target="_blank" rel="noopener noreferrer">商店插件版本<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></a>
-            <input id="pluginVersionOverride" type="text" readonly aria-label="构建 manifest 版号" />
-            <p class="settings-help">此处不能修改网络提交版号；网络请求始终使用构建物 manifest 的 version。</p>
-            <div class="version-status"><span>当前使用</span><strong id="effectivePluginVersion">检查中</strong><small id="pluginVersionSource"></small></div>
-          </form>
+            <p class="settings-help">本地替身版本比商店版高一个补丁号，以避免浏览器用商店版覆盖；网络请求始终声明商店基线版号。</p>
+            <div class="version-status"><span>本地构建</span><strong id="localBuildPluginVersion">检查中</strong><small>浏览器扩展管理页显示的版本</small></div>
+            <div class="version-status"><span>网络提交</span><strong id="networkPluginVersion">检查中</strong><small>所有 UniPass 请求的 <code>X-Browser-Plugin-Version</code></small></div>
+          </div>
         </section>
       </div>
 

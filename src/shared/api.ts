@@ -1,5 +1,7 @@
 import CryptoJS from "crypto-js";
 import { normalizeTargetUrl } from "./url";
+import { fetchJsonWithTimeout } from "./fetch";
+import { STORE_PLUGIN_VERSION } from "./plugin-version";
 import type {
   AccountCatalogEntry,
   AccountCatalogFailure,
@@ -50,12 +52,10 @@ export async function currentUser(): Promise<CurrentUser> {
 }
 
 export async function pluginVersionSettings(): Promise<PluginVersionSettings> {
-  return { override: "", effective: chrome.runtime.getManifest().version, source: "build" };
-}
-
-export async function setPluginVersionOverride(version: string): Promise<PluginVersionSettings> {
-  if (version.trim()) throw new Error("网络提交版号固定为构建 manifest 版号，不能在弹窗中修改");
-  return pluginVersionSettings();
+  return {
+    localBuildVersion: chrome.runtime.getManifest().version,
+    networkVersion: STORE_PLUGIN_VERSION,
+  };
 }
 
 export async function accountsForUrl(url: string): Promise<AccountListResult> {
@@ -158,12 +158,11 @@ async function request<T>(path: string): Promise<T> {
     Accept: "application/json",
     "X-Browser-Plugin-Version": await resolvePluginVersion(),
   };
-  const response = await fetch(`${API_ROOT}${path}`, {
+  const { response, body } = await fetchJsonWithTimeout<ApiEnvelope<T>>(`${API_ROOT}${path}`, {
     method: "GET",
     credentials: "include",
     headers,
   });
-  const body = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (response.status === 401) throw new Error("UniPass 登录已失效，请重新登录");
   if (!response.ok) throw new Error(body?.message || `UniPass 请求失败（HTTP ${response.status}）`);
   if (!body || body.success === false) throw new Error(body?.message || "UniPass 请求失败");
@@ -171,7 +170,7 @@ async function request<T>(path: string): Promise<T> {
 }
 
 async function resolvePluginVersion(): Promise<string> {
-  return chrome.runtime.getManifest().version;
+  return STORE_PLUGIN_VERSION;
 }
 
 

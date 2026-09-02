@@ -25,21 +25,24 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
 | `src/shared/api.ts` | UniPass API 包装、响应校验和密码算法 | UI 状态或 DOM 操作 |
 
+`src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
+
 ## 关键数据流
 
-- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与只读构建版号）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。
+- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与只读版本信息）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 只返回本地构建版号与网络商店基线；前者来自 manifest，后者是构建时同步的 `STORE_PLUGIN_VERSION`，Popup 不提供修改消息或写入路径，也不在运行时查询商店。
 
 ### 当前页面账号
 
-1. Popup 读取活动 HTTPS 标签页。
-2. Popup 从本地目录缓存匹配应用 origin/path；过期时请求 Service Worker 完整同步。
-3. Service Worker 只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
-4. Popup 仅针对匹配账号请求凭据可用性；后台返回三态，不返回密码。
-5. 用户点击“查看”或“填入”后，后台才返回选中账号的凭据。
+1. Service Worker 从 `/session/current_user` 获取当前 UniPass 会话；账户页昵称 `nickName` 按用户请求仅传入 Popup 内存，用于用户名悬停提示，绝不持久化或参与身份作用域。Popup 的用户作用域优先服务端稳定 ID，缺失时使用服务端登录名，再回退邮箱；昵称和姓名不参与作用域。三者均缺失时不执行需要用户身份的目录、应用或凭据请求。
+2. Popup 读取活动 HTTPS 标签页；木星单页应用仅在其已授权的同一 origin 内允许路由变化，其他应用仍要求 origin/path 匹配。
+3. Popup 从本地目录缓存匹配应用 origin/path；过期时请求 Service Worker 完整同步。
+4. Service Worker 校验用户作用域后只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
+5. Popup 仅针对匹配账号请求凭据可用性；后台返回三态，不返回密码。
+6. 用户点击“查看”或“填入”后，后台再次校验用户作用域才返回选中账号的凭据。
 
 ### Jupiter 保活
 
-用户主动启用后，Service Worker 定时重新获取对应 UniPass 凭据、登录 Jupiter，并把会话数据放在 `chrome.storage.session`。同步到匹配标签页后由页面使用；关闭保活会清除 alarm 和会话缓存。
+用户主动启用后，Service Worker 要求稳定用户作用域，定时重新获取对应 UniPass 凭据、登录 Jupiter，并把带用户作用域的会话数据放在 `chrome.storage.session`。每次 alarm 和标签页同步前都会核验当前 UniPass 用户；检测到切换时停止 alarm 并清除会话缓存。关闭保活也会清除 alarm 和会话缓存。外部请求超时为 12 秒。
 
 ## 存储边界
 

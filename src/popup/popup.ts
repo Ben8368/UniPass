@@ -1,4 +1,4 @@
-import type { CurrentUser } from "../shared/types";
+import type { PopupSessionUser } from "../shared/types";
 import { send } from "./bridge";
 import { CatalogController } from "./catalog";
 import { CredentialController } from "./credentials";
@@ -12,7 +12,8 @@ const sessionBadge = get<HTMLButtonElement>("sessionBadge");
 const status = get("status");
 const apps = get("apps");
 const settings = new SettingsController(setStatus);
-const credentials = new CredentialController(setStatus);
+let userScope: string | null = null;
+const credentials = new CredentialController(setStatus, () => userScope);
 const catalog = new CatalogController(setStatus, (id, username) => credentials.reveal(id, username), (tabId, id, username, appUrl) => credentials.fill(tabId, id, username, appUrl));
 
 void initialize();
@@ -23,27 +24,36 @@ async function initialize(): Promise<void> {
   catalog.bind();
   bindControls();
   try {
-    const user = await send<CurrentUser>({ type: "session" });
-    identity.textContent = user.fullName || user.nickName || user.name || user.username || user.email || "已登录";
-    catalog.initializeFor(user);
+    const user = await send<PopupSessionUser>({ type: "session" });
+    identity.textContent = user.fullName || user.name || user.username || user.email || "已登录";
+    const nickName = user.nickName?.trim() ?? "";
+    if (nickName) identity.title = nickName;
+    else identity.removeAttribute("title");
+    userScope = catalog.initializeFor(user);
+    if (!userScope) setStatus("UniPass 会话缺少稳定用户标识，请联系管理员", true);
     sessionBadge.classList.remove("pending", "offline");
     sessionBadge.classList.add("online");
-    sessionBadge.disabled = true;
-    sessionBadge.title = "UniPass 登录状态";
+    sessionBadge.disabled = false;
+    if (nickName) sessionBadge.title = nickName;
+    else sessionBadge.removeAttribute("title");
+    sessionBadge.setAttribute("aria-label", nickName ? `昵称：${nickName}；点击打开 UniPass 应用页` : "点击打开 UniPass 应用页");
   } catch (error) {
     identity.textContent = "点击登录";
     sessionBadge.classList.remove("pending", "online");
     sessionBadge.classList.add("offline");
     sessionBadge.disabled = false;
     sessionBadge.title = "登录 UniPass";
+    sessionBadge.setAttribute("aria-label", "登录 UniPass");
     setStatus(errorText(error), true);
   }
   await catalog.loadCurrentPage();
 }
 
 function bindControls(): void {
-  get<HTMLButtonElement>("openPortal").addEventListener("click", () => window.open(PORTAL_URL, "_blank"));
-  sessionBadge.addEventListener("click", () => { if (!sessionBadge.disabled) window.open(LOGIN_URL, "_blank"); });
+  sessionBadge.addEventListener("click", () => window.open(
+    sessionBadge.classList.contains("online") ? PORTAL_URL : LOGIN_URL,
+    "_blank",
+  ));
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current")));
 }
 

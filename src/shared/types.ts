@@ -22,38 +22,43 @@ export interface Credential {
 }
 
 export interface CurrentUser {
+  id?: string | number;
+  userId?: string | number;
+  user_id?: string | number;
   fullName?: string;
   nickName?: string;
+  nickname?: string;
   name?: string;
   username?: string;
   email?: string;
 }
 
+export type PopupSessionUser = Omit<CurrentUser, "nickname">;
+
 export type BackgroundRequest =
   | { type: "session" }
   | { type: "getPluginVersionSettings" }
-  | { type: "setPluginVersionOverride"; version: string }
-  | { type: "accountCatalog" }
-  | { type: "listApps"; keyword: string }
-  | { type: "accountsForApp"; appId: string | number }
-  | { type: "appUrl"; appId: string | number }
+  | { type: "accountCatalog"; userScope: string }
+  | { type: "listApps"; keyword: string; userScope: string }
+  | { type: "accountsForApp"; appId: string | number; userScope: string }
+  | { type: "appUrl"; appId: string | number; userScope: string }
   | { type: "credentialAvailability"; accountIds: Array<string | number>; userScope: string }
-  | { type: "credential"; accountId: string | number; fallbackUsername: string }
-  | { type: "getJupiterKeepalive" }
-  | { type: "setJupiterKeepalive"; enabled: boolean; appId?: string | number; accountId?: string | number; username?: string };
+  | { type: "credential"; accountId: string | number; fallbackUsername: string; userScope: string }
+  | { type: "getJupiterKeepalive"; userScope: string }
+  | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
 export interface PluginVersionSettings {
-  override: string;
-  effective: string;
-  source: "build";
+  localBuildVersion: string;
+  networkVersion: string;
 }
 
 export interface JupiterKeepaliveSettings {
   enabled: boolean;
+  userScope?: string;
   appId?: string | number;
   accountId?: string | number;
   username?: string;

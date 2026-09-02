@@ -25,6 +25,7 @@ globalThis.chrome = { runtime: { getManifest: () => ({ version: "5.3.1" }) }, st
 
 let updateRequests = 0;
 let portalRequests = 0;
+const submittedPluginVersions = [];
 let appListMode = "missing";
 const passwordKey = CryptoJS.enc.Base64.parse("VlXCSJg7qO66MNrMMJir3g==");
 const encryptedPassword = CryptoJS.AES.encrypt("secret", passwordKey, {
@@ -32,7 +33,7 @@ const encryptedPassword = CryptoJS.AES.encrypt("secret", passwordKey, {
   padding: CryptoJS.pad.Pkcs7,
 }).toString();
 
-globalThis.fetch = async (input) => {
+globalThis.fetch = async (input, init) => {
   const url = String(input);
   if (url.startsWith("https://clients2.google.com/")) {
     updateRequests += 1;
@@ -45,9 +46,10 @@ globalThis.fetch = async (input) => {
   }
 
   portalRequests += 1;
+  submittedPluginVersions.push(init?.headers?.["X-Browser-Plugin-Version"]);
   let result;
   if (url.endsWith("/login/isLogin")) result = true;
-  else if (url.endsWith("/session/current_user")) result = { username: "tester" };
+  else if (url.endsWith("/session/current_user")) result = { id: "user-1", username: "tester", nickName: "private nickname" };
   else if (url.includes("/app/list?")) {
     result = appListMode === "too-many-pages"
       ? { list: Array.from({ length: 100 }, (_, index) => ({ id: index + 1 })), pages: 21 }
@@ -75,13 +77,15 @@ const source = buildResult.outputFiles[0].text;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 const api = await import(moduleUrl);
 
-test("plugin version resolution is reused across sequential portal requests", async () => {
-  await api.currentUser();
+test("portal requests declare the store baseline rather than the locally loaded replacement version", async () => {
+  const user = await api.currentUser();
+  assert.equal(user.nickName, "private nickname");
   await api.currentUser();
   const settings = await api.pluginVersionSettings();
-  assert.deepEqual(settings, { override: "", effective: "5.3.1", source: "build" });
+  assert.deepEqual(settings, { localBuildVersion: "5.3.1", networkVersion: "5.3.0" });
   assert.equal(updateRequests, 0);
   assert.equal(portalRequests, 4);
+  assert.deepEqual(submittedPluginVersions, ["5.3.0", "5.3.0", "5.3.0", "5.3.0"]);
 });
 
 test("credential availability distinguishes empty and usable passwords without returning either password", async () => {

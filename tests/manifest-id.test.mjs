@@ -16,4 +16,8 @@ test("local manifest keeps the store extension ID and a release version", async 
 
   assert.equal(extensionIdFromPublicKey(manifest.key), TARGET_EXTENSION_ID);
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/, "manifest 版本必须为三段整数；与商店的动态关系由 audit:static 核验");
+  assert.deepEqual(manifest.host_permissions, [
+    "https://portal.unipass.top/*",
+    "https://jupiter.tec-do.com/*",
+  ]);
 });

@@ -25,6 +25,11 @@ test("root applications can match routes on the same HTTPS origin", () => {
   assert.equal(appUrlMatches("https://example.com/", "https://other.example.com/login"), false);
 });
 
+test("Jupiter SPA routes match within its explicitly trusted HTTPS origin", () => {
+  assert.equal(appUrlMatches("https://jupiter.tec-do.com/login", "https://jupiter.tec-do.com/workplace"), true);
+  assert.equal(appUrlMatches("https://jupiter.tec-do.com/login", "https://other.example.com/workplace"), false);
+});
+
 test("path-scoped applications do not match sibling applications", () => {
   assert.equal(appUrlMatches("https://example.com/app-a", "https://example.com/app-a/login"), true);
   assert.equal(appUrlMatches("https://example.com/app-a", "https://example.com/app-b/login"), false);

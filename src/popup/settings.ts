@@ -10,9 +10,8 @@ export class SettingsController {
   private readonly dialog = get("versionSettingsDialog");
   private readonly settingsButton = get<HTMLButtonElement>("pluginVersionSettingsButton");
   private readonly closeButton = get<HTMLButtonElement>("closeVersionSettings");
-  private readonly override = get<HTMLInputElement>("pluginVersionOverride");
-  private readonly effectiveVersion = get("effectivePluginVersion");
-  private readonly source = get("pluginVersionSource");
+  private readonly localBuildVersion = get("localBuildPluginVersion");
+  private readonly networkVersion = get("networkPluginVersion");
   private readonly systemTheme = window.matchMedia("(prefers-color-scheme: light)");
 
   constructor(private readonly reportStatus: (text: string, isError?: boolean) => void) {}
@@ -64,15 +63,14 @@ export class SettingsController {
   private async open(): Promise<void> {
     this.dialog.classList.remove("hidden");
     this.settingsButton.setAttribute("aria-expanded", "true");
-    this.override.value = "";
-    this.effectiveVersion.textContent = "检查中";
-    this.source.textContent = "";
-    this.override.focus();
+    this.localBuildVersion.textContent = "检查中";
+    this.networkVersion.textContent = "检查中";
+    this.closeButton.focus();
     try {
       this.apply(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));
     } catch (error) {
-      this.effectiveVersion.textContent = "无法读取";
-      this.source.textContent = "请重新打开后再试";
+      this.localBuildVersion.textContent = "无法读取";
+      this.networkVersion.textContent = "无法读取";
       this.reportStatus(errorText(error), true);
     }
   }
@@ -84,9 +82,8 @@ export class SettingsController {
   }
 
   private apply(settings: PluginVersionSettings): void {
-    this.override.value = settings.override;
-    this.effectiveVersion.textContent = settings.effective;
-    this.source.textContent = "构建 manifest 版号（网络提交固定使用）";
+    this.localBuildVersion.textContent = settings.localBuildVersion;
+    this.networkVersion.textContent = settings.networkVersion;
   }
 
 }

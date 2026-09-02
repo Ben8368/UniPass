@@ -11,15 +11,25 @@ const STORE_EXTENSION_ID = "gjphikebcceegfolnbfncepfmjnhdkam";
 const STORE_UPDATE_URL = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0.0.0&acceptformat=crx3&x=id%3D${STORE_EXTENSION_ID}%26installsource%3Dondemand%26uc`;
 const idFromKey = (key) => [...createHash("sha256").update(Buffer.from(key ?? "", "base64")).digest("hex").slice(0, 32)].map((nibble) => String.fromCharCode("a".charCodeAt(0) + Number.parseInt(nibble, 16))).join("");
 const versionParts = String(manifest.version).split(".").map(Number);
+const pluginVersion = await readFile(resolve(root, "src/shared/plugin-version.ts"), "utf8");
+const storeBaselineMatch = pluginVersion.match(/STORE_PLUGIN_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
 if (packageJson.version !== manifest.version) errors.push("package.json 与 manifest 版本必须一致");
 if (idFromKey(manifest.key) !== STORE_EXTENSION_ID) errors.push(`manifest key 必须派生为商店 ID ${STORE_EXTENSION_ID}`);
 if (versionParts.length !== 3 || versionParts.some((part) => !Number.isInteger(part) || part < 0)) errors.push("manifest 版本必须为三段非负整数");
+if (!storeBaselineMatch) {
+  errors.push("必须在 src/shared/plugin-version.ts 声明三段式 STORE_PLUGIN_VERSION");
+} else if (!isNextPatchVersion(versionParts, storeBaselineMatch.slice(1, 4).map(Number))) {
+  errors.push(`本地 manifest 版本必须恰为网络商店基线 ${storeBaselineMatch.slice(1, 4).join(".")} 的下一补丁版；实际为 ${manifest.version}`);
+}
 
 try {
   const storeVersion = await fetchStoreVersion();
   console.log(`Store version: ${storeVersion.join(".")} | Local version: ${manifest.version}`);
   if (!isNextPatchVersion(versionParts, storeVersion)) {
     errors.push(`本地版本必须恰为当前商店版 ${storeVersion.join(".")} 的下一补丁版；实际为 ${manifest.version}`);
+  }
+  if (storeBaselineMatch && storeBaselineMatch.slice(1, 4).join(".") !== storeVersion.join(".")) {
+    errors.push(`网络商店基线必须等于 Chrome 官方当前商店版 ${storeVersion.join(".")}；实际为 ${storeBaselineMatch.slice(1, 4).join(".")}`);
   }
 } catch (error) {
   errors.push(`无法从 Chrome 官方更新接口查询商店版号，按替身门禁阻断：${error instanceof Error ? error.message : String(error)}`);
@@ -28,8 +38,6 @@ try {
 const allowedPermissions = new Set(["activeTab", "scripting", "clipboardWrite", "storage", "alarms", "tabs"]);
 const allowedHosts = new Set([
   "https://portal.unipass.top/*",
-  "https://clients2.google.com/*",
-  "https://clients2.googleusercontent.com/*",
   "https://jupiter.tec-do.com/*",
 ]);
 
@@ -43,8 +51,8 @@ for (const host of manifest.host_permissions ?? []) {
 if (manifest.content_scripts) errors.push("manifest 不得注册常驻 content_scripts；填充脚本必须由用户操作临时注入");
 
 const api = await readFile(resolve(root, "src/shared/api.ts"), "utf8");
-if (!api.includes("return chrome.runtime.getManifest().version;")) {
-  errors.push("UniPass 网络请求版号必须直接使用构建 manifest 的 version");
+if (!api.includes("return STORE_PLUGIN_VERSION;")) {
+  errors.push("UniPass 网络请求版号必须使用 STORE_PLUGIN_VERSION，不能使用本地 manifest 版本");
 }
 if (manifest.background?.type !== "module") errors.push("Manifest V3 Service Worker 必须保持 module 类型");
 if (!String(manifest.content_security_policy?.extension_pages ?? "").includes("script-src 'self'")) {

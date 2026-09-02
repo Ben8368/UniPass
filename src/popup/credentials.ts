@@ -16,7 +16,7 @@ export class CredentialController {
   private countdownTimer: number | undefined;
   private clearAt = 0;
 
-  constructor(private readonly reportStatus: (text: string, isError?: boolean) => void) {}
+  constructor(private readonly reportStatus: (text: string, isError?: boolean) => void, private readonly getUserScope: () => string | null) {}
 
   bind(): void {
     get<HTMLButtonElement>("copyUsername").addEventListener("click", () => void this.copy("username"));
@@ -28,7 +28,9 @@ export class CredentialController {
   async reveal(accountId: string | number, fallbackUsername: string): Promise<void> {
     try {
       this.reportStatus("正在获取凭据");
-      this.show(await send<Credential>({ type: "credential", accountId, fallbackUsername }));
+      const userScope = this.getUserScope();
+      if (!userScope) throw new Error("尚未登录 UniPass");
+      this.show(await send<Credential>({ type: "credential", accountId, fallbackUsername, userScope }));
       this.reportStatus("凭据只保留在当前弹窗内存中");
     } catch (error) {
       this.reportStatus(errorText(error), true);
@@ -42,7 +44,9 @@ export class CredentialController {
       this.reportStatus("正在填入当前页面");
       const tab = await chrome.tabs.get(tabId);
       if (!tab.active || !tab.url || !appUrlMatches(expectedAppUrl, tab.url)) throw new Error("当前标签页已切换或不属于该应用，已取消填充");
-      credential = await send<Credential>({ type: "credential", accountId, fallbackUsername });
+      const userScope = this.getUserScope();
+      if (!userScope) throw new Error("尚未登录 UniPass");
+      credential = await send<Credential>({ type: "credential", accountId, fallbackUsername, userScope });
       const injectionTab = await chrome.tabs.get(tabId);
       if (!injectionTab.active || !injectionTab.url || !appUrlMatches(expectedAppUrl, injectionTab.url)) throw new Error("获取凭据期间标签页已切换或离开该应用，已取消填充");
       const [injection] = await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content-script.js"] });
