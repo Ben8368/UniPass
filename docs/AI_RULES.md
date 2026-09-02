@@ -70,3 +70,9 @@
 - 可跨任务黄灯：`docs/TECH_DEBT.md`
 - 长期决策及其原因：`docs/ADR/*`
 - 治理规则：本文；不要在 README 或 PR 模板复制完整规则
+
+## 5. 私人本地替身门禁
+
+本项目的本地构建必须替换商店扩展，而非与其并存。`public/manifest.json` 的公开 key 必须派生为 `gjphikebcceegfolnbfncepfmjnhdkam`；`package.json`、manifest 和所有 UniPass 网络请求使用同一个构建版号。每次 `npm run audit:static` 都必须从 Chrome 官方更新接口解析该 ID 的当前商店 CRX 版号；本地版本须与其主、次版本相同，且补丁号恰高 `1`。查询超时、网络失败或重定向版号无法解析，均按失败处理，不得沿用缓存或静态基线。Popup 的版号自定义值不得改变网络请求或构建物版本。
+
+上述任一 ID、版本关系或网络版号来源不匹配，均为 🔴 阻断项；`npm run audit:static` 必须失败，修复前不得构建、验收或提交。

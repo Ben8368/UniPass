@@ -49,7 +49,7 @@ export type BackgroundResponse<T = unknown> =
 export interface PluginVersionSettings {
   override: string;
   effective: string;
-  source: "manual" | "store" | "fallback";
+  source: "build";
 }
 
 export interface JupiterKeepaliveSettings {

@@ -1,7 +1,7 @@
 # UniPass Minimal
 
 这是对原 UniPass 扩展的最小权限 TypeScript 重构。它不会修改原始 `extension-source` 目录。
-本项目仅供私人本地开发使用。构建 manifest 固定为商店插件 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID，版本为 `5.3.1`（高于当前商店版 `5.3.0`）。因此在同一 Chrome Profile 中它不能与商店版同时启用；仅通过开发者模式加载 `dist`，不用于 Chrome Web Store 或其他公开分发。公开 key 只能固定 ID，不能提供商店发布或 CRX 签名权限。
+本项目仅供私人本地开发使用。构建 manifest 固定为商店插件 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID。每次 `npm run verify` 都会从 Chrome 官方更新接口查询当前商店版号，并要求本地 `package.json`/manifest 保持同一主、次版本且补丁号恰高 `1`；因此商店升级后必须先同步本地版号再构建。它在同一 Chrome Profile 中不能与商店版同时启用；仅通过开发者模式加载 `dist`，不用于 Chrome Web Store 或其他公开分发。公开 key 只能固定 ID，不能提供商店发布或 CRX 签名权限。
 
 
 ## 下载与安装
@@ -69,7 +69,7 @@ npm run verify
 - 密码不写入 `chrome.storage`、日志或持久化文件。
 - 查看凭据 60 秒后自动从 Popup 清除，关闭 Popup 时立即清除。
 - 自动填充只处理当前页面主文档中的可见输入框，不自动提交表单。
-- 扩展通过 Google Chrome 官方更新接口查询 UniPass 的最新 CRX 版本，并缓存成功结果 6 小时；网络失败时回退到 `5.3.0` 并缓存 15 分钟，避免每个门户 API 请求都重复访问更新接口。点击 Popup 右上角齿轮可手动指定版本，清空并保存即可恢复自动获取。
+- 每次验证通过 Google Chrome 官方更新接口核验 UniPass 商店 CRX 版本；查询失败、ID 不符或本地版本不是商店当前版的下一补丁版都会阻断。运行中的 UniPass 网络请求只发送构建物 manifest 的 `version`；Popup 仅展示该只读构建版本，不能自定义网络提交版号。
 - 当前版本不监听 Cookie；若登录状态变化，重新打开 Popup 即可刷新。
 - 当前版本不自动清空系统剪贴板。最小权限下无法安全确认剪贴板是否已被用户的新内容替换，强制清空可能误删用户内容。
 - 当前页面账号通过本地账号目录匹配：首次同步、目录超过 24 小时或用户点击同步按钮时，扩展会从 UniPass 拉取已保存应用的地址和账号展示信息。同步请求只使用服务器返回的应用地址，当前标签页 URL 不会发送到 UniPass，目录中不保存密码。

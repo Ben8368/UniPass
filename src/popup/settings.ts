@@ -10,7 +10,6 @@ export class SettingsController {
   private readonly dialog = get("versionSettingsDialog");
   private readonly settingsButton = get<HTMLButtonElement>("pluginVersionSettingsButton");
   private readonly closeButton = get<HTMLButtonElement>("closeVersionSettings");
-  private readonly form = get<HTMLFormElement>("versionForm");
   private readonly override = get<HTMLInputElement>("pluginVersionOverride");
   private readonly effectiveVersion = get("effectivePluginVersion");
   private readonly source = get("pluginVersionSource");
@@ -30,7 +29,6 @@ export class SettingsController {
     this.settingsButton.addEventListener("click", () => void this.open());
     this.closeButton.addEventListener("click", () => this.close());
     this.dialog.addEventListener("click", (event) => { if (event.target === this.dialog) this.close(); });
-    this.form.addEventListener("submit", (event) => { event.preventDefault(); void this.save(); });
     window.addEventListener("keydown", (event) => { if (event.key === "Escape" && !this.dialog.classList.contains("hidden")) this.close(); });
   }
 
@@ -73,8 +71,8 @@ export class SettingsController {
     try {
       this.apply(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));
     } catch (error) {
-      this.effectiveVersion.textContent = "5.3.0";
-      this.source.textContent = "暂时无法获取，使用回退版本";
+      this.effectiveVersion.textContent = "无法读取";
+      this.source.textContent = "请重新打开后再试";
       this.reportStatus(errorText(error), true);
     }
   }
@@ -88,19 +86,7 @@ export class SettingsController {
   private apply(settings: PluginVersionSettings): void {
     this.override.value = settings.override;
     this.effectiveVersion.textContent = settings.effective;
-    this.source.textContent = settings.source === "manual" ? "手动指定" : settings.source === "store" ? "自动获取" : "网络不可用，回退版本";
+    this.source.textContent = "构建 manifest 版号（网络提交固定使用）";
   }
 
-  private async save(): Promise<void> {
-    const submit = this.form.querySelector<HTMLButtonElement>("button[type=submit]");
-    if (submit) submit.disabled = true;
-    try {
-      this.apply(await send<PluginVersionSettings>({ type: "setPluginVersionOverride", version: this.override.value }));
-      this.reportStatus("版本设置已保存");
-    } catch (error) {
-      this.reportStatus(errorText(error), true);
-    } finally {
-      if (submit) submit.disabled = false;
-    }
-  }
 }

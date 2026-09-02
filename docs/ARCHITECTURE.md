@@ -19,7 +19,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | 模块 | 职责 | 禁止事项 |
 | --- | --- | --- |
 | `src/popup/` | 会话状态、目录与账号展示、用户点击查看/复制/填入 | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码 |
-| `src/background/` | 外部请求、密码解密、插件版本缓存、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
+| `src/background/` | 外部请求、密码解密、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
 | `src/content/` | 当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
@@ -27,7 +27,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ## 关键数据流
 
-- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与版本设置）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。
+- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与只读构建版号）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。
 
 ### 当前页面账号
 
@@ -46,7 +46,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | 位置 | 允许内容 |
 | --- | --- |
 | Popup `localStorage` | 主题、按用户隔离的账号目录展示信息；不含密码 |
-| `chrome.storage.local` | 插件版本覆盖/TTL 缓存、Jupiter 保活配置与结果；不含密码/token |
+| `chrome.storage.local` | Jupiter 保活配置与结果；不含密码/token |
 | `chrome.storage.session` | 凭据可用性状态、Jupiter 会话；随浏览器会话清除 |
 | 内存/消息 | 用户选中账号的短生命周期明文密码 |
 

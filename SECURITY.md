@@ -23,6 +23,7 @@
 - `alarms`、`tabs`：用户主动开启的 Jupiter 保活与标签页同步。
 - UniPass、Chrome 更新服务、Jupiter 是当前仅允许的外部主机。
 - 私人本地构建的 manifest `key` 固定为商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID；该值不是私钥，不授予商店发布或 CRX 签名权限。因同一 ID 可能与商店版争用 Profile 状态，必须在独立 Profile 完成人工安装验收。
+- 所有 UniPass 请求的 `X-Browser-Plugin-Version` 固定取自 `chrome.runtime.getManifest().version`；Popup 不得覆盖该值。验证时必须在线核验商店当前版号，本地构建仅在补丁号恰高 `1` 时可通过。
 
 新增权限或域名前必须说明最小必要范围、数据内容、触发条件、失败/关闭路径，并更新本文件、README 和红绿灯报告。
 

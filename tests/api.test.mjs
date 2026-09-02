@@ -21,7 +21,7 @@ function storageArea() {
   };
 }
 
-globalThis.chrome = { storage: { local: storageArea() } };
+globalThis.chrome = { runtime: { getManifest: () => ({ version: "5.3.1" }) }, storage: { local: storageArea() } };
 
 let updateRequests = 0;
 let portalRequests = 0;
@@ -79,15 +79,15 @@ test("plugin version resolution is reused across sequential portal requests", as
   await api.currentUser();
   await api.currentUser();
   const settings = await api.pluginVersionSettings();
-  assert.deepEqual(settings, { override: "", effective: "5.4.1", source: "store" });
-  assert.equal(updateRequests, 1);
+  assert.deepEqual(settings, { override: "", effective: "5.3.1", source: "build" });
+  assert.equal(updateRequests, 0);
   assert.equal(portalRequests, 4);
 });
 
 test("credential availability distinguishes empty and usable passwords without returning either password", async () => {
   assert.equal(await api.credentialAvailableForAccount("empty"), false);
   assert.equal(await api.credentialAvailableForAccount("available"), true);
-  assert.equal(updateRequests, 1);
+  assert.equal(updateRequests, 0);
 });
 
 test("application list rejects a missing list instead of treating it as a complete empty catalog", async () => {
