@@ -51,8 +51,8 @@ for (const host of manifest.host_permissions ?? []) {
 if (manifest.content_scripts) errors.push("manifest 不得注册常驻 content_scripts；填充脚本必须由用户操作临时注入");
 
 const api = await readFile(resolve(root, "src/shared/api.ts"), "utf8");
-if (!api.includes("return STORE_PLUGIN_VERSION;")) {
-  errors.push("UniPass 网络请求版号必须使用 STORE_PLUGIN_VERSION，不能使用本地 manifest 版本");
+if (!api.includes("readPluginVersionOverride") || !api.includes("STORE_PLUGIN_VERSION")) {
+  errors.push("UniPass 网络请求版号必须以经校验的手动覆盖或 STORE_PLUGIN_VERSION 为来源，不能使用本地 manifest 版本");
 }
 if (manifest.background?.type !== "module") errors.push("Manifest V3 Service Worker 必须保持 module 类型");
 if (!String(manifest.content_security_policy?.extension_pages ?? "").includes("script-src 'self'")) {

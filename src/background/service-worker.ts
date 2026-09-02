@@ -7,6 +7,7 @@ import {
   currentUser,
   listApps,
   pluginVersionSettings,
+  setPluginVersionOverride,
 } from "../shared/api";
 import { isStableUserScope, popupSessionUserFor, requireStableUserScope, userScopeFor } from "../shared/user-scope";
 import { fetchJsonWithTimeout } from "../shared/fetch";
@@ -68,6 +69,8 @@ function handle(message: BackgroundRequest): Promise<unknown> {
       return currentUser().then(popupSessionUserFor);
     case "getPluginVersionSettings":
       return pluginVersionSettings();
+    case "setPluginVersionOverride":
+      return setPluginVersionOverride(message.version);
     case "accountCatalog":
       return withUserScope(message.userScope, refreshAccountCatalog);
     case "listApps":

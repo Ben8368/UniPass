@@ -23,11 +23,11 @@
 
 - `activeTab`、`scripting`：用户触发的当前页填充。
 - `clipboardWrite`：用户点击复制。
-- `storage`：非明文设置、TTL 状态和会话数据。
+- `storage`：非明文设置、TTL 状态、会话数据，以及用户手动指定的三段数字网络版号。
 - `alarms`、`tabs`：用户主动开启的 Jupiter 保活与标签页同步。
 - UniPass 与 Jupiter 是当前仅允许的扩展运行时外部主机；Chrome 官方更新接口只由本地 Node 审计脚本访问，不属于扩展运行时权限。
 - 私人本地构建的 manifest `key` 固定为商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID；该值不是私钥，不授予商店发布或 CRX 签名权限。因同一 ID 可能与商店版争用 Profile 状态，必须在独立 Profile 完成人工安装验收。
-- 所有 UniPass 请求的 `X-Browser-Plugin-Version` 固定为当前构建嵌入的 `STORE_PLUGIN_VERSION`（商店基线），绝不使用本地 `chrome.runtime.getManifest().version`。本地替身构建必须比商店基线高一个补丁号；开发/验证时在线核验并随商店版更新这对值，扩展运行时不查询商店。Popup 只读展示且不得覆盖任一值。
+- 默认 UniPass 请求的 `X-Browser-Plugin-Version` 使用当前构建嵌入的 `STORE_PLUGIN_VERSION`（商店基线），绝不使用本地 `chrome.runtime.getManifest().version`。用户可手动设置经过三段数字校验的覆盖值；它只存为非敏感配置并只影响该请求头，清空后恢复基线。该覆盖不改变本地替身版与商店基线高一个补丁号的发布约束；开发/验证仍在线核验并随商店版更新这对值，扩展运行时不查询商店。
 
 新增权限或域名前必须说明最小必要范围、数据内容、触发条件、失败/关闭路径，并更新本文件、README 和红绿灯报告。
 

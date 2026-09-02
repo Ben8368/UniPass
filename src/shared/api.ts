@@ -1,7 +1,11 @@
 import CryptoJS from "crypto-js";
 import { normalizeTargetUrl } from "./url";
 import { fetchJsonWithTimeout } from "./fetch";
-import { STORE_PLUGIN_VERSION } from "./plugin-version";
+import {
+  normalizePluginVersion,
+  PLUGIN_VERSION_OVERRIDE_STORAGE_KEY,
+  STORE_PLUGIN_VERSION,
+} from "./plugin-version";
 import type {
   AccountCatalogEntry,
   AccountCatalogFailure,
@@ -52,10 +56,24 @@ export async function currentUser(): Promise<CurrentUser> {
 }
 
 export async function pluginVersionSettings(): Promise<PluginVersionSettings> {
+  const override = await readPluginVersionOverride();
   return {
     localBuildVersion: chrome.runtime.getManifest().version,
-    networkVersion: STORE_PLUGIN_VERSION,
+    networkVersion: override ?? STORE_PLUGIN_VERSION,
+    storeBaselineVersion: STORE_PLUGIN_VERSION,
+    override: override ?? "",
+    source: override ? "manual" : "store-baseline",
   };
+}
+
+export async function setPluginVersionOverride(version: string): Promise<PluginVersionSettings> {
+  const requestedVersion = version.trim();
+  if (requestedVersion && !normalizePluginVersion(requestedVersion)) {
+    throw new Error("网络提交版本必须是三段数字版号，例如 5.4.0");
+  }
+  if (requestedVersion) await chrome.storage.local.set({ [PLUGIN_VERSION_OVERRIDE_STORAGE_KEY]: requestedVersion });
+  else await chrome.storage.local.remove(PLUGIN_VERSION_OVERRIDE_STORAGE_KEY);
+  return pluginVersionSettings();
 }
 
 export async function accountsForUrl(url: string): Promise<AccountListResult> {
@@ -170,7 +188,12 @@ async function request<T>(path: string): Promise<T> {
 }
 
 async function resolvePluginVersion(): Promise<string> {
-  return STORE_PLUGIN_VERSION;
+  return (await readPluginVersionOverride()) ?? STORE_PLUGIN_VERSION;
+}
+
+async function readPluginVersionOverride(): Promise<string | null> {
+  const stored = await chrome.storage.local.get(PLUGIN_VERSION_OVERRIDE_STORAGE_KEY);
+  return normalizePluginVersion(stored[PLUGIN_VERSION_OVERRIDE_STORAGE_KEY]);
 }
 
 

@@ -26,7 +26,7 @@
             <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 15.3A7.8 7.8 0 0 1 8.7 4.6 8.2 8.2 0 1 0 19.4 15.3Z" /></svg>
           </button>
           <button id="pluginVersionSettingsButton" class="icon-button" type="button" title="构建版本信息" aria-label="构建版本信息" aria-controls="versionSettingsDialog" aria-expanded="false">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /><path d="m19.4 15 .1.1-1.5 2.6-.2-.1a2.2 2.2 0 0 0-2.2 0l-.2.1-1.5-2.6.1-.1a2.2 2.2 0 0 0 0-2.5l-.1-.1 1.5-2.6.2.1a2.2 2.2 0 0 0 2.2 0l.2-.1 1.5 2.6-.1.1a2.2 2.2 0 0 0 0 2.5Z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.75 1.03 2.47 2.67.23.65 2.6 2.18 1.56-1.4 2.29 1.4 2.29-2.18 1.56-.65 2.6-2.67.23L12 21.25l-1.03-2.47-2.67-.23-.65-2.6-2.18-1.56 1.4-2.29-1.4-2.29 2.18-1.56.65-2.6 2.67-.23L12 2.75Z" /><circle cx="12" cy="12" r="3.1" /></svg>
           </button>
         </div>
       </header>
@@ -120,12 +120,19 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
-          <div class="settings-form">
+          <form id="versionForm" class="settings-form">
             <a class="plugin-store-link" href="https://chromewebstore.google.com/detail/unipass/gjphikebcceegfolnbfncepfmjnhdkam" target="_blank" rel="noopener noreferrer">商店插件版本<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></a>
-            <p class="settings-help">本地替身版本比商店版高一个补丁号，以避免浏览器用商店版覆盖；网络请求始终声明商店基线版号。</p>
+            <p class="settings-help">默认提交商店基线。本地开发未及时跟进商店版时，可手动指定网络提交版本；清空后恢复基线。</p>
             <div class="version-status"><span>本地构建</span><strong id="localBuildPluginVersion">检查中</strong><small>浏览器扩展管理页显示的版本</small></div>
-            <div class="version-status"><span>网络提交</span><strong id="networkPluginVersion">检查中</strong><small>所有 UniPass 请求的 <code>X-Browser-Plugin-Version</code></small></div>
-          </div>
+            <div class="version-status"><span>网络提交</span><strong id="networkPluginVersion">检查中</strong><small id="networkPluginVersionSource">所有 UniPass 请求的 <code>X-Browser-Plugin-Version</code></small></div>
+            <label class="version-override" for="pluginVersionOverride">手动网络版本
+              <input id="pluginVersionOverride" type="text" inputmode="numeric" autocomplete="off" placeholder="留空则使用商店基线" aria-describedby="networkPluginVersionSource" />
+            </label>
+            <div class="settings-actions">
+              <button class="settings-save" type="submit">保存</button>
+              <button id="restorePluginVersionBaseline" class="settings-reset" type="button">恢复商店基线</button>
+            </div>
+          </form>
         </section>
       </div>
 

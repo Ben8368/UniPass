@@ -82,10 +82,28 @@ test("portal requests declare the store baseline rather than the locally loaded 
   assert.equal(user.nickName, "private nickname");
   await api.currentUser();
   const settings = await api.pluginVersionSettings();
-  assert.deepEqual(settings, { localBuildVersion: "5.3.1", networkVersion: "5.3.0" });
+  assert.deepEqual(settings, {
+    localBuildVersion: "5.3.1",
+    networkVersion: "5.3.0",
+    storeBaselineVersion: "5.3.0",
+    override: "",
+    source: "store-baseline",
+  });
   assert.equal(updateRequests, 0);
   assert.equal(portalRequests, 4);
   assert.deepEqual(submittedPluginVersions, ["5.3.0", "5.3.0", "5.3.0", "5.3.0"]);
+});
+
+test("a validated manual network version override is persisted and can be cleared", async () => {
+  const manual = await api.setPluginVersionOverride("5.4.0");
+  assert.equal(manual.networkVersion, "5.4.0");
+  assert.equal(manual.source, "manual");
+  await api.currentUser();
+  assert.deepEqual(submittedPluginVersions.slice(-2), ["5.4.0", "5.4.0"]);
+  await assert.rejects(api.setPluginVersionOverride("not-a-version"), /三段数字版号/);
+  const restored = await api.setPluginVersionOverride("");
+  assert.equal(restored.networkVersion, "5.3.0");
+  assert.equal(restored.source, "store-baseline");
 });
 
 test("credential availability distinguishes empty and usable passwords without returning either password", async () => {

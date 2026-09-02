@@ -38,6 +38,7 @@ export type PopupSessionUser = Omit<CurrentUser, "nickname">;
 export type BackgroundRequest =
   | { type: "session" }
   | { type: "getPluginVersionSettings" }
+  | { type: "setPluginVersionOverride"; version: string }
   | { type: "accountCatalog"; userScope: string }
   | { type: "listApps"; keyword: string; userScope: string }
   | { type: "accountsForApp"; appId: string | number; userScope: string }
@@ -54,6 +55,9 @@ export type BackgroundResponse<T = unknown> =
 export interface PluginVersionSettings {
   localBuildVersion: string;
   networkVersion: string;
+  storeBaselineVersion: string;
+  override: string;
+  source: "store-baseline" | "manual";
 }
 
 export interface JupiterKeepaliveSettings {

@@ -10,8 +10,12 @@ export class SettingsController {
   private readonly dialog = get("versionSettingsDialog");
   private readonly settingsButton = get<HTMLButtonElement>("pluginVersionSettingsButton");
   private readonly closeButton = get<HTMLButtonElement>("closeVersionSettings");
+  private readonly versionForm = get<HTMLFormElement>("versionForm");
+  private readonly override = get<HTMLInputElement>("pluginVersionOverride");
+  private readonly restoreBaseline = get<HTMLButtonElement>("restorePluginVersionBaseline");
   private readonly localBuildVersion = get("localBuildPluginVersion");
   private readonly networkVersion = get("networkPluginVersion");
+  private readonly networkVersionSource = get("networkPluginVersionSource");
   private readonly systemTheme = window.matchMedia("(prefers-color-scheme: light)");
 
   constructor(private readonly reportStatus: (text: string, isError?: boolean) => void) {}
@@ -27,6 +31,8 @@ export class SettingsController {
     });
     this.settingsButton.addEventListener("click", () => void this.open());
     this.closeButton.addEventListener("click", () => this.close());
+    this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); void this.saveOverride(); });
+    this.restoreBaseline.addEventListener("click", () => { this.override.value = ""; void this.saveOverride(); });
     this.dialog.addEventListener("click", (event) => { if (event.target === this.dialog) this.close(); });
     window.addEventListener("keydown", (event) => { if (event.key === "Escape" && !this.dialog.classList.contains("hidden")) this.close(); });
   }
@@ -65,12 +71,14 @@ export class SettingsController {
     this.settingsButton.setAttribute("aria-expanded", "true");
     this.localBuildVersion.textContent = "检查中";
     this.networkVersion.textContent = "检查中";
+    this.networkVersionSource.textContent = "";
     this.closeButton.focus();
     try {
       this.apply(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));
     } catch (error) {
       this.localBuildVersion.textContent = "无法读取";
       this.networkVersion.textContent = "无法读取";
+      this.networkVersionSource.textContent = "";
       this.reportStatus(errorText(error), true);
     }
   }
@@ -82,8 +90,25 @@ export class SettingsController {
   }
 
   private apply(settings: PluginVersionSettings): void {
+    this.override.value = settings.override;
     this.localBuildVersion.textContent = settings.localBuildVersion;
     this.networkVersion.textContent = settings.networkVersion;
+    this.networkVersionSource.textContent = settings.source === "manual"
+      ? `手动指定（商店基线 ${settings.storeBaselineVersion}）`
+      : "商店基线（构建时同步）";
+  }
+
+  private async saveOverride(): Promise<void> {
+    try {
+      const settings = await send<PluginVersionSettings>({
+        type: "setPluginVersionOverride",
+        version: this.override.value,
+      });
+      this.apply(settings);
+      this.reportStatus(settings.source === "manual" ? "网络提交版本已手动指定" : "网络提交版本已恢复商店基线");
+    } catch (error) {
+      this.reportStatus(errorText(error), true);
+    }
   }
 
 }

@@ -73,7 +73,9 @@
 
 ## 5. 私人本地替身门禁
 
-本项目的本地构建必须替换商店扩展，而非与其并存。每次开始源码修改或构建前，`npm run verify` 都必须从 Chrome 官方更新接口解析商店当前 CRX 版号；查询超时、网络失败或重定向版号无法解析均按失败处理，不得沿用缓存。若商店版号变更，同一次开发变更必须先把 `src/shared/plugin-version.ts` 的 `STORE_PLUGIN_VERSION` 同步为该商店版号，再把 `package.json` 与 `public/manifest.json` 同步为它的下一补丁版。示例：商店 `5.4.0` → 网络提交 `5.4.0` → 本地构建 `5.4.1`。`public/manifest.json` 的公开 key 必须派生为 `gjphikebcceegfolnbfncepfmjnhdkam`。运行时请求只发送这个构建期基线快照，绝不能发送本地 manifest 版本，也不得在扩展运行时查询或回退商店版号。Popup 只读展示本地构建与网络提交版号，不能修改任一值。
+本项目的本地构建必须替换商店扩展，而非与其并存。每次开始源码修改或构建前，`npm run verify` 都必须从 Chrome 官方更新接口解析商店当前 CRX 版号；查询超时、网络失败或重定向版号无法解析均按失败处理，不得沿用缓存。若商店版号变更，同一次开发变更必须先把 `src/shared/plugin-version.ts` 的 `STORE_PLUGIN_VERSION` 同步为该商店版号，再把 `package.json` 与 `public/manifest.json` 同步为它的下一补丁版。示例：商店 `5.4.0` → 默认网络提交 `5.4.0` → 本地构建 `5.4.1`。`public/manifest.json` 的公开 key 必须派生为 `gjphikebcceegfolnbfncepfmjnhdkam`。默认请求使用这个构建期基线快照，绝不能发送本地 manifest 版本，也不得在扩展运行时查询商店。
+
+用户可在 Popup 手动指定三段数字网络版号，以应对本地构建尚未跟进商店而服务端拒绝旧版号的临时情形。该值保存于 `chrome.storage.local`，只影响 `X-Browser-Plugin-Version`，不改变 manifest、package、Git tag、商店基线或 `npm run verify` 的发布门禁；清空即可恢复默认基线。静态审计始终以构建期基线和官方商店版校验版本关系，手动覆盖不构成发布通过依据。
 
 当审计首次发现商店版号变更时，必须先同步网络基线，再把 `package.json` 和 manifest 同步为商店当前版的下一补丁版，完成验证并只创建一次同版号 GitHub Release。首次的判定记录是成功发布的 `v<本地构建版号>` GitHub Release；若只存在 tag 而 Release workflow 失败，应修复并完成该 Release，不得另起版号或移动 tag。商店版号未再次变更前，后续开发保持这组“网络基线/本地构建”版号，不得因同一商店基线重复创建 Release；商店再次升级后才开始新的单次跟随发布周期。
 
