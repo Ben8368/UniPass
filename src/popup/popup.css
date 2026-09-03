@@ -762,7 +762,8 @@ button:focus-visible,
 }
 :root[data-theme="light"] .plugin-store-link { color: #075f41; }
 :root[data-theme="light"] .plugin-store-link:hover { color: #054c37; }
-:root[data-theme="light"] .actions .keepalive-enabled { border-color: rgba(8, 125, 86, .38); background: #e3f5eb; color: #065f44; }
+:root[data-theme="light"] .actions button.keepalive-enabled { border-color: rgba(8, 125, 86, .38); background: #e3f5eb; color: #065f44; }
+:root[data-theme="light"] .actions button.keepalive-enabled:hover { border-color: rgba(8, 125, 86, .52); background: #d5efdf; color: #054c37; }
 :root[data-theme="light"] .session-badge strong {
   color: #075f41;
   font-weight: 700;

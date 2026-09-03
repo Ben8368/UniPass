@@ -12,7 +12,14 @@ const result = await build({
 });
 const source = result.outputFiles[0].text;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-const { appUrlMatches, isHttpsUrl, normalizeTargetUrl } = await import(moduleUrl);
+const { appUrlMatches, isHttpsUrl, isJupiterUrl, normalizeTargetUrl } = await import(moduleUrl);
+
+test("Jupiter session sync accepts only the exact HTTPS origin", () => {
+  assert.equal(isJupiterUrl("https://jupiter.tec-do.com/workplace"), true);
+  assert.equal(isJupiterUrl("https://jupiter.tec-do.com.evil.example/workplace"), false);
+  assert.equal(isJupiterUrl("http://jupiter.tec-do.com/workplace"), false);
+  assert.equal(isJupiterUrl("https://jupiter.tec-do.com.evil/workplace"), false);
+});
 
 test("only HTTPS URLs are accepted as credential targets", () => {
   assert.equal(isHttpsUrl("https://example.com/login"), true);

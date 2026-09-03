@@ -11,6 +11,7 @@ import {
 } from "../shared/api";
 import { isStableUserScope, popupSessionUserFor, requireStableUserScope, userScopeFor } from "../shared/user-scope";
 import { fetchJsonWithTimeout } from "../shared/fetch";
+import { isJupiterUrl } from "../shared/url";
 import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import type {
   BackgroundRequest,
@@ -37,14 +38,18 @@ interface JupiterLoginResponse {
 
 class UserScopeMismatchError extends Error {}
 
-void restoreJupiterKeepaliveAlarm();
+let keepaliveRun: Promise<void> | null = null;
+
+void restoreJupiterKeepaliveAlarm().catch((error: unknown) => {
+  console.warn("木星保活恢复失败", error);
+});
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === JUPITER_KEEPALIVE_ALARM) void keepJupiterAlive();
+  if (alarm.name === JUPITER_KEEPALIVE_ALARM) void runKeepJupiterAlive();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tab.url?.startsWith(JUPITER_ORIGIN)) {
+  if (changeInfo.status === "complete" && tab.url && isJupiterUrl(tab.url)) {
     void syncStoredJupiterSessionToTab(tabId).catch((error: unknown) => {
       console.warn("木星会话同步失败", error);
     });
@@ -148,7 +153,7 @@ async function setJupiterKeepalive(
   const settings: JupiterKeepaliveSettings = { enabled: true, userScope: userScope.trim(), appId, accountId: selectedAccountId, username: selectedUsername };
   await chrome.storage.local.set({ [JUPITER_KEEPALIVE_STORAGE_KEY]: settings });
   await chrome.alarms.create(JUPITER_KEEPALIVE_ALARM, { periodInMinutes: JUPITER_KEEPALIVE_PERIOD_MINUTES });
-  await keepJupiterAlive();
+  await runKeepJupiterAlive();
   return getJupiterKeepaliveSettings(userScope);
 }
 
@@ -166,9 +171,21 @@ async function restoreJupiterKeepaliveAlarm(): Promise<void> {
   try {
     await assertCurrentUserScope(settings.userScope);
     await chrome.alarms.create(JUPITER_KEEPALIVE_ALARM, { periodInMinutes: JUPITER_KEEPALIVE_PERIOD_MINUTES });
+    await runKeepJupiterAlive();
   } catch (error) {
     if (error instanceof UserScopeMismatchError) await disableJupiterKeepalive();
+    else {
+      const message = error instanceof Error ? error.message : "木星保活恢复失败";
+      await saveJupiterKeepaliveResult({ ...settings, lastError: message });
+    }
   }
+}
+
+function runKeepJupiterAlive(): Promise<void> {
+  if (!keepaliveRun) {
+    keepaliveRun = keepJupiterAlive().finally(() => { keepaliveRun = null; });
+  }
+  return keepaliveRun;
 }
 
 async function keepJupiterAlive(): Promise<void> {
@@ -239,7 +256,7 @@ async function syncJupiterSession(loginData: JupiterLoginResponse["data"], userS
   // Session storage is cleared with the browser session; no Jupiter token is persisted to disk by the extension.
   await chrome.storage.session.set({ [JUPITER_KEEPALIVE_SESSION_KEY]: { ...loginData, userScope } });
   const tabs = await chrome.tabs.query({ url: [`${JUPITER_ORIGIN}/*`] });
-  await Promise.all(tabs.filter((tab) => tab.id != null && tab.url?.startsWith(JUPITER_ORIGIN))
+  await Promise.all(tabs.filter((tab) => tab.id != null && tab.url != null && isJupiterUrl(tab.url))
     .map((tab) => syncStoredJupiterSessionToTab(tab.id as number)));
 }
 
@@ -252,11 +269,14 @@ async function syncStoredJupiterSessionToTab(tabId: number): Promise<void> {
     return;
   }
   try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url || !isJupiterUrl(tab.url)) return;
     await assertCurrentUserScope(loginData.userScope);
     const { userScope: _userScope, ...sessionData } = loginData;
     await chrome.scripting.executeScript({
       target: { tabId },
       func: (token: string, userInfo: object) => {
+        if (location.origin !== "https://jupiter.tec-do.com") return;
         if (localStorage.getItem("ACCESS_TOKEN") === token) return;
         localStorage.setItem("ACCESS_TOKEN", token);
         localStorage.setItem("PH_USER_INFO", JSON.stringify(userInfo));

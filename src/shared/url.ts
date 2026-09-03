@@ -1,4 +1,5 @@
 const SAME_ORIGIN_SPA_HOSTS = new Set(["jupiter.tec-do.com"]);
+const JUPITER_ORIGIN = "https://jupiter.tec-do.com";
 
 export function normalizeTargetUrl(value: string): string {
   const url = new URL(value);
@@ -27,6 +28,14 @@ export function appUrlMatches(appUrl: string, currentUrl: string): boolean {
 export function isHttpsUrl(value: string): boolean {
   try {
     return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function isJupiterUrl(value: string): boolean {
+  try {
+    return new URL(value).origin === JUPITER_ORIGIN;
   } catch {
     return false;
   }

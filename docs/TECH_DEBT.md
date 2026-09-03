@@ -21,6 +21,16 @@
 - **建议：** 建立手动烟测清单；确认用户切换是否应自动关闭托管或把设置绑定到 UniPass 身份，再决定是否新增身份隔离。
 - **验证：** 记录 Chrome 版本、UniPass/Jupiter 账号、账户页显示名（仅确认字段是否显示，不记录实际值）、重启/登出/切换步骤和结果；不得记录密码、token 或完整接口响应。
 
+- **代码改进：** Service Worker 启动时校验已保存的 `userScope`、恢复 alarm 并立即执行一次续期；alarm 与用户操作共享单次运行锁；用户切换会关闭 alarm 并清理扩展会话；标签页同步只允许精确 `https://jupiter.tec-do.com` origin，注入函数内再次校验。
+- **自动验证：** `tests/url.test.mjs` 覆盖严格 Jupiter origin；`npm run verify` 覆盖治理、静态审查、测试、类型检查和构建。
+- **人工烟测清单（完成代码验收后执行）：**
+  1. 独立 Chrome Profile 加载 `dist/`，登录 UniPass，确认账户页显示名，仅记录“已显示”。
+  2. 打开 Jupiter，Popup 的应用页开启“自动托管”，确认首次登录成功；仅记录按钮状态与页面是否保持登录。
+  3. 重启 Chrome，重新打开 Jupiter，等待 Service Worker 恢复，确认无需再次点击即可保持登录。
+  4. 在 UniPass 登出或切换另一用户，重新打开 Popup，确认托管关闭；检查 Jupiter 不再被扩展写入新会话。
+  5. 关闭托管，确认 alarm 停止且 Jupiter 页面不再被扩展刷新。
+  6. 全程不得记录密码、token、完整接口响应或真实账号值。
+- **当前状态：** 自动化与代码防护已完成；上述真实 Chrome/Cookie/alarm/Jupiter 登录态烟测仍待维护者执行，故该债务暂不移除。
 ## 偿还流程
 
 1. 红绿灯或用户反馈识别问题并分级。
