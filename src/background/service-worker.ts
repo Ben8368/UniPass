@@ -13,6 +13,7 @@ import { isStableUserScope, popupSessionUserFor, requireStableUserScope, userSco
 import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isJupiterUrl } from "../shared/url";
 import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
+import { clearUniPassLoginForTab, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
 import type {
   BackgroundRequest,
   BackgroundResponse,
@@ -49,11 +50,20 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && tab.url) {
+    void processUniPassLoginTab(tabId, tab.url).catch((error: unknown) => {
+      console.warn("UniPass 登录辅助失败", error);
+    });
+  }
   if (changeInfo.status === "complete" && tab.url && isJupiterUrl(tab.url)) {
     void syncStoredJupiterSessionToTab(tabId).catch((error: unknown) => {
       console.warn("木星会话同步失败", error);
     });
   }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void clearUniPassLoginForTab(tabId);
 });
 
 chrome.runtime.onMessage.addListener(
@@ -72,6 +82,8 @@ function handle(message: BackgroundRequest): Promise<unknown> {
   switch (message.type) {
     case "session":
       return currentUser().then(popupSessionUserFor);
+    case "startUniPassLogin":
+      return startUniPassLogin();
     case "getPluginVersionSettings":
       return pluginVersionSettings();
     case "setPluginVersionOverride":

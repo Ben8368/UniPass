@@ -12,13 +12,30 @@ const result = await build({
 });
 const source = result.outputFiles[0].text;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-const { appUrlMatches, isHttpsUrl, isJupiterUrl, normalizeTargetUrl } = await import(moduleUrl);
+const { appUrlMatches, isHttpsUrl, isJupiterUrl, isTrustedFeishuAuthorizationUrl, isUniPassLoginUrl, normalizeTargetUrl } = await import(moduleUrl);
+
+const trustedFeishuAuthorizationUrl = "https://accounts.feishu.cn/accounts/auth_login/oauth2/authorize?response_type=code&client_id=cli_aae6da4f6538dbed&state=random-state&redirect_uri=https%3A%2F%2Ftec-iam.tec-do.com%2Fportal%2Fapi%2Fv1%2Flogin%2Ffeishu_oauth%2Fgboh9uvzolazw62gmxojwaarust5qyvh";
 
 test("Jupiter session sync accepts only the exact HTTPS origin", () => {
   assert.equal(isJupiterUrl("https://jupiter.tec-do.com/workplace"), true);
   assert.equal(isJupiterUrl("https://jupiter.tec-do.com.evil.example/workplace"), false);
   assert.equal(isJupiterUrl("http://jupiter.tec-do.com/workplace"), false);
   assert.equal(isJupiterUrl("https://jupiter.tec-do.com.evil/workplace"), false);
+});
+
+test("login assistance accepts only the exact UniPass login page", () => {
+  assert.equal(isUniPassLoginUrl("https://portal.unipass.top/login"), true);
+  assert.equal(isUniPassLoginUrl("https://portal.unipass.top/login/"), true);
+  assert.equal(isUniPassLoginUrl("https://portal.unipass.top/login?redirect=https://evil.example"), false);
+  assert.equal(isUniPassLoginUrl("https://portal.unipass.top.evil.example/login"), false);
+});
+
+test("login assistance validates the full Feishu OAuth destination", () => {
+  assert.equal(isTrustedFeishuAuthorizationUrl(trustedFeishuAuthorizationUrl), true);
+  assert.equal(isTrustedFeishuAuthorizationUrl(trustedFeishuAuthorizationUrl.replace("cli_aae6da4f6538dbed", "other-client")), false);
+  assert.equal(isTrustedFeishuAuthorizationUrl(trustedFeishuAuthorizationUrl.replace("tec-iam.tec-do.com", "evil.example")), false);
+  assert.equal(isTrustedFeishuAuthorizationUrl(trustedFeishuAuthorizationUrl.replace("state=random-state", "state=")), false);
+  assert.equal(isTrustedFeishuAuthorizationUrl(trustedFeishuAuthorizationUrl.replace("accounts.feishu.cn", "accounts.feishu.cn.evil.example")), false);
 });
 
 test("only HTTPS URLs are accepted as credential targets", () => {

@@ -9,3 +9,4 @@ ADR 记录长期维护决策及其原因。实现细节进代码和测试，临�
 ## 当前 ADR
 
 - [0001-ai-governance-entry.md](0001-ai-governance-entry.md)：AI 单一入口、红绿灯审查与验证闭环。
+- [0002-user-triggered-unipass-login.md](0002-user-triggered-unipass-login.md)：限定域名和 OAuth 参数的用户触发一键登录。

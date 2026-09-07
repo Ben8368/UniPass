@@ -1,5 +1,10 @@
 const SAME_ORIGIN_SPA_HOSTS = new Set(["jupiter.tec-do.com"]);
 const JUPITER_ORIGIN = "https://jupiter.tec-do.com";
+const UNIPASS_LOGIN_URL = "https://portal.unipass.top/login";
+const FEISHU_AUTHORIZE_ORIGIN = "https://accounts.feishu.cn";
+const FEISHU_AUTHORIZE_PATH = "/accounts/auth_login/oauth2/authorize";
+const FEISHU_CLIENT_ID = "cli_aae6da4f6538dbed";
+const TEC_IAM_REDIRECT_URL = "https://tec-iam.tec-do.com/portal/api/v1/login/feishu_oauth/gboh9uvzolazw62gmxojwaarust5qyvh";
 
 export function normalizeTargetUrl(value: string): string {
   const url = new URL(value);
@@ -36,6 +41,31 @@ export function isHttpsUrl(value: string): boolean {
 export function isJupiterUrl(value: string): boolean {
   try {
     return new URL(value).origin === JUPITER_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+export function isUniPassLoginUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.origin === new URL(UNIPASS_LOGIN_URL).origin
+      && normalizedPath(url.pathname) === "/login"
+      && !url.search;
+  } catch {
+    return false;
+  }
+}
+
+export function isTrustedFeishuAuthorizationUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.origin === FEISHU_AUTHORIZE_ORIGIN
+      && normalizedPath(url.pathname) === FEISHU_AUTHORIZE_PATH
+      && url.searchParams.get("response_type") === "code"
+      && url.searchParams.get("client_id") === FEISHU_CLIENT_ID
+      && url.searchParams.get("redirect_uri") === TEC_IAM_REDIRECT_URL
+      && Boolean(url.searchParams.get("state"));
   } catch {
     return false;
   }

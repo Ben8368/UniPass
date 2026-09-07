@@ -12,6 +12,8 @@ Service Worker（UniPass API、凭据解密、缓存、Jupiter 保活）
 Content Script（定位输入框、写值、派发事件，不提交表单）
 ```
 
+离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
+
 构建入口由 `build.mjs` 定义，产物进入忽略提交的 `dist/`。
 
 ## 模块职责
@@ -26,6 +28,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/api.ts` | UniPass API 包装、响应校验和密码算法 | UI 状态或 DOM 操作 |
 
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
+`src/background/unipass-login.ts` 只处理用户触发的 UniPass/Tec-IAM 登录：复用或新建一个登录标签页，在两分钟窗口内依次校验并点击唯一的“钛动科技”和“授权”按钮。飞书阶段固定校验 OAuth `client_id`、`redirect_uri`、非空 `state` 和授权文案；离开已知认证 origin、完成授权、关闭标签页或超时后即清除状态。
 
 ## 关键数据流
 
@@ -44,6 +47,13 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 用户主动启用后，Service Worker 要求稳定用户作用域，定时重新获取对应 UniPass 凭据、登录 Jupiter，并把带用户作用域的会话数据放在 `chrome.storage.session`。每次 alarm 和标签页同步前都会核验当前 UniPass 用户；检测到切换时停止 alarm 并清除会话缓存。关闭保活也会清除 alarm 和会话缓存。外部请求超时为 12 秒。
 
+### UniPass 一键登录
+
+1. Popup 会话请求失败后显示“一键登录”；用户点击时发送 `startUniPassLogin`。
+2. Service Worker 复用精确 `/login` 标签页或打开新标签页，并把标签页 ID、阶段和两分钟过期时间写入 `chrome.storage.session`。
+3. 页面加载后，内联脚本在精确 UniPass 登录页点击唯一“钛动科技”按钮；同标签页跳转至飞书后，再校验固定 Tec-IAM OAuth 参数、应用名和权限文案并点击唯一“授权”按钮。
+4. 授权后仍由现有 `/session/current_user` 判定 UniPass 会话；扩展不读取 OAuth code 或 Cookie。异常页面、账号选择、扫码、验证码和 CAPTCHA 留给用户处理。
+
 ## 存储边界
 
 | 位置 | 允许内容 |
@@ -51,6 +61,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | Popup `localStorage` | 主题、按用户隔离的账号目录展示信息；不含密码 |
 | `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖；不含密码/token |
 | `chrome.storage.session` | 凭据可用性状态、Jupiter 会话；随浏览器会话清除 |
+| `chrome.storage.session` 登录项 | 当前一键登录的标签页 ID、阶段和两分钟过期时间；不含 Cookie、授权码或用户资料 |
 | 内存/消息 | 用户选中账号的短生命周期明文密码 |
 
 ## 变更规则

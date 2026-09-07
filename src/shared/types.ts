@@ -37,6 +37,7 @@ export type PopupSessionUser = Omit<CurrentUser, "nickname">;
 
 export type BackgroundRequest =
   | { type: "session" }
+  | { type: "startUniPassLogin" }
   | { type: "getPluginVersionSettings" }
   | { type: "setPluginVersionOverride"; version: string }
   | { type: "accountCatalog"; userScope: string }
@@ -58,6 +59,10 @@ export interface PluginVersionSettings {
   storeBaselineVersion: string;
   override: string;
   source: "store-baseline" | "manual";
+}
+
+export interface UniPassLoginStartResult {
+  tabId: number;
 }
 
 export interface JupiterKeepaliveSettings {

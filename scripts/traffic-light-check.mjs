@@ -38,6 +38,7 @@ try {
 const allowedPermissions = new Set(["activeTab", "scripting", "clipboardWrite", "storage", "alarms", "tabs"]);
 const allowedHosts = new Set([
   "https://portal.unipass.top/*",
+  "https://accounts.feishu.cn/*",
   "https://jupiter.tec-do.com/*",
 ]);
 
@@ -62,6 +63,12 @@ if (!String(manifest.content_security_policy?.extension_pages ?? "").includes("s
 const contentScript = await readFile(resolve(root, "src/content/content-script.ts"), "utf8");
 if (/\.(?:submit|requestSubmit)\s*\(/.test(contentScript)) {
   errors.push("Content Script 不得自动提交表单");
+}
+
+const loginAssistant = await readFile(resolve(root, "src/background/unipass-login.ts"), "utf8");
+if (!loginAssistant.includes('url.searchParams.get("client_id") === "cli_aae6da4f6538dbed"')
+  || !loginAssistant.includes('url.searchParams.get("redirect_uri") === "https://tec-iam.tec-do.com/portal/api/v1/login/feishu_oauth/gboh9uvzolazw62gmxojwaarust5qyvh"')) {
+  errors.push("飞书授权点击必须同时固定 Tec-IAM OAuth client_id 和 redirect_uri");
 }
 
 for (const file of await sourceFiles(resolve(root, "src"))) {

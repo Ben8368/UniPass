@@ -1,4 +1,4 @@
-import type { PopupSessionUser } from "../shared/types";
+import type { PopupSessionUser, UniPassLoginStartResult } from "../shared/types";
 import { send } from "./bridge";
 import { CatalogController } from "./catalog";
 import { CredentialController } from "./credentials";
@@ -6,7 +6,6 @@ import { errorText, get } from "./dom";
 import { SettingsController } from "./settings";
 
 const PORTAL_URL = "https://portal.unipass.top/application";
-const LOGIN_URL = "https://portal.unipass.top/login";
 const identity = get("identity");
 const sessionBadge = get<HTMLButtonElement>("sessionBadge");
 const status = get("status");
@@ -38,22 +37,28 @@ async function initialize(): Promise<void> {
     else sessionBadge.removeAttribute("title");
     sessionBadge.setAttribute("aria-label", nickName ? `昵称：${nickName}；点击打开 UniPass 应用页` : "点击打开 UniPass 应用页");
   } catch (error) {
-    identity.textContent = "点击登录";
+    identity.textContent = "一键登录";
     sessionBadge.classList.remove("pending", "online");
     sessionBadge.classList.add("offline");
     sessionBadge.disabled = false;
-    sessionBadge.title = "登录 UniPass";
-    sessionBadge.setAttribute("aria-label", "登录 UniPass");
+    sessionBadge.title = "一键登录 UniPass，并授权 Tec-IAM 获取飞书身份标识";
+    sessionBadge.setAttribute("aria-label", "一键登录 UniPass，并授权 Tec-IAM 获取飞书身份标识");
     setStatus(errorText(error), true);
   }
   await catalog.loadCurrentPage();
 }
 
 function bindControls(): void {
-  sessionBadge.addEventListener("click", () => window.open(
-    sessionBadge.classList.contains("online") ? PORTAL_URL : LOGIN_URL,
-    "_blank",
-  ));
+  sessionBadge.addEventListener("click", () => {
+    if (sessionBadge.classList.contains("online")) {
+      window.open(PORTAL_URL, "_blank");
+      return;
+    }
+    setStatus("正在打开 UniPass 并确认飞书授权");
+    void send<UniPassLoginStartResult>({ type: "startUniPassLogin" }).catch((error: unknown) => {
+      setStatus(errorText(error), true);
+    });
+  });
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current")));
 }
 

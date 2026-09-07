@@ -27,6 +27,7 @@
   ],
   "host_permissions": [
     "https://portal.unipass.top/*",
+    "https://accounts.feishu.cn/*",
     "https://jupiter.tec-do.com/*"
   ],
   "content_security_policy": {
