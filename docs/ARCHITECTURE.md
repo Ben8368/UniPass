@@ -7,7 +7,7 @@ UniPass Minimal 是 Chrome Manifest V3 扩展，由三个运行上下文和共�
 ```text
 Popup（展示与用户操作）
   → chrome.runtime message
-Service Worker（UniPass API、凭据解密、缓存、Jupiter 保活）
+Service Worker（UniPass API、登录辅助、凭据解密、缓存、Jupiter 保活）
   → 用户点击填入后临时注入
 Content Script（定位输入框、写值、派发事件，不提交表单）
 ```
@@ -21,7 +21,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | 模块 | 职责 | 禁止事项 |
 | --- | --- | --- |
 | `src/popup/` | 会话状态、目录与账号展示、用户点击查看/复制/填入 | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码 |
-| `src/background/` | 外部请求、密码解密、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
+| `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
 | `src/content/` | 当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |

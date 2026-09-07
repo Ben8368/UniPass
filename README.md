@@ -13,15 +13,16 @@
 3. 点击**加载已解压的扩展程序**，选择解压后的目录（其中应直接包含 `manifest.json`）。
 
 同一 Release 中的 `.sha256` 文件可用于校验 ZIP 下载完整性。仅在 [替身门禁](docs/AI_RULES.md#5-私人本地替身门禁) 要求的首次跟随发布时推送符合版本号的 Git 标签（例如 `v0.1.0`）；GitHub Actions 会自动构建扩展、生成 ZIP 和校验文件，并创建 GitHub Release。
+商店基线未变化时，后续 `main` 改动不会重复创建同版本 Release；因此 Release 是该商店基线的首次跟随快照，不代表当前 `main`。需要当前源码时应本地构建，或使用对应 CI run 的未压缩构建产物。
 
 ## 权限边界
 
 - `activeTab`：仅在用户点击扩展后读取当前标签页地址，并授权本次填充。
 - `scripting`：在用户点击“填入”后注入固定填充脚本；用户点击“一键登录”后，只在固定 UniPass/Tec-IAM 登录流程中点击两个精确匹配的按钮。
 - `clipboardWrite`：仅响应用户点击，将用户选择的账号或密码写入系统剪贴板。
-- `storage`：保存短期凭据可用性状态，以及用户主动开启的 Jupiter 保活配置和结果；密码不会写入持久化存储。
+- `storage`：保存短期凭据可用性状态、用户主动开启的 Jupiter 保活配置和结果，以及一键登录的临时标签页状态；密码不会写入持久化存储。
 - `alarms`：仅用于用户主动开启后的木星会话定时保活。
-- `tabs`：识别当前页面，并把新获取的木星会话同步到已打开的木星标签页。
+- `tabs`：识别当前页面、管理用户触发的一键登录标签页，并把新获取的木星会话同步到已打开的木星标签页。
 - `https://portal.unipass.top/*`：调用 UniPass API，并使用浏览器已有的 UniPass 登录会话。
 - `https://accounts.feishu.cn/*`：仅在用户点击“一键登录”后，对固定 Tec-IAM OAuth 客户端和回调地址点击“授权”；不读取飞书账号数据或授权码。
 - `https://jupiter.tec-do.com/*`：仅在用户主动开启木星保活后登录并同步会话。
@@ -61,7 +62,7 @@ npm run verify
 
 4. 在 [GitHub Actions](https://github.com/Ben8368/UniPass/actions) 等待 **Release extension** 成功；ZIP 会出现在相应的 [GitHub Release](https://github.com/Ben8368/UniPass/releases) 页面。
 
-`main` 的每次推送和 Pull Request 还会运行 CI：依赖安装、TypeScript 类型检查、构建，并保留一个可下载的未压缩构建产物。
+`main` 的每次推送和 Pull Request 还会运行 CI：依赖安装、治理与动态版本审计、测试、TypeScript 类型检查和构建，并保留一个可下载的未压缩构建产物。
 
 ## 安全与行为
 

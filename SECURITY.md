@@ -25,7 +25,8 @@
 - `activeTab`、`scripting`：用户触发的当前页填充，以及用户明确点击“一键登录”后的两个受限登录按钮。
 - `clipboardWrite`：用户点击复制。
 - `storage`：非明文设置、TTL 状态、会话数据，以及用户手动指定的三段数字网络版号。
-- `alarms`、`tabs`：用户主动开启的 Jupiter 保活与标签页同步。
+- `alarms`：用户主动开启的 Jupiter 定时保活。
+- `tabs`：识别当前页面、管理用户触发的一键登录标签页，以及同步已打开的 Jupiter 标签页。
 - `https://accounts.feishu.cn/*` 仅用于用户触发的一键登录，在校验固定 Tec-IAM OAuth 客户端、回调地址和授权范围后点击唯一授权按钮；扩展不向飞书发起后台请求。
 - UniPass、上述飞书授权页与 Jupiter 是当前仅允许的扩展运行时外部主机；Chrome 官方更新接口只由本地 Node 审计脚本访问，不属于扩展运行时权限。
 - 私人本地构建的 manifest `key` 固定为商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID；该值不是私钥，不授予商店发布或 CRX 签名权限。因同一 ID 可能与商店版争用 Profile 状态，必须在独立 Profile 完成人工安装验收。
@@ -38,7 +39,7 @@
 - 浏览器扩展无法阻止目标 HTTPS 页面自身脚本读取已填入的输入框；因此必须依赖应用 URL 匹配和用户明确操作。
 - 系统剪贴板不会自动清空，避免覆盖用户后来复制的内容。
 - 跨域 iframe、关闭的 Shadow DOM、Canvas 和非标准登录控件不在通用填充承诺内。
-- 真实 UniPass/Jupiter 行为依赖外部服务和登录状态，自动化测试不能替代手动集成验收。
+- 真实 UniPass/飞书 OAuth/Jupiter 行为依赖外部服务和登录状态，自动化测试不能替代按场景执行的手动集成验收。
 - 飞书若显示账号选择、扫码、验证码、CAPTCHA、权限变化或其他非预期页面，一键登录会停止，由用户手动处理。
 
 ## 安全变更检查
