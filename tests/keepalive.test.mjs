@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-const source = await readFile(new URL("../src/background/service-worker.ts", import.meta.url), "utf8");
+const source = await readFile(new URL("../src/background/jupiter-keepalive.ts", import.meta.url), "utf8");
 
 test("Jupiter keepalive renews through a background login POST", () => {
   assert.match(source, /method: "POST"/);

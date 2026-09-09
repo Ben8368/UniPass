@@ -29,6 +29,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
 | `src/shared/api.ts` | UniPass API 包装、响应校验和密码算法 | UI 状态或 DOM 操作 |
 
+`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。三个模块通过显式导出连接，不改变 Popup 与 Service Worker 的消息契约。
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
 `src/background/unipass-login.ts` 只处理用户触发的 UniPass/Tec-IAM 登录：复用或新建一个登录标签页，在两分钟窗口内依次校验并点击唯一的“钛动科技”和“授权”按钮。飞书阶段固定校验 OAuth `client_id`、`redirect_uri`、非空 `state` 和授权文案；离开已知认证 origin、完成授权、关闭标签页或超时后即清除状态。
 
