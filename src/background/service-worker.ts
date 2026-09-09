@@ -14,7 +14,7 @@ import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isJupiterUrl } from "../shared/url";
 import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import { clearUniPassLoginForTab, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
-import { fillFromOverlay, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
+import { configureActionPopup, fillFromOverlay, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
 import type {
   BackgroundRequest,
   BackgroundResponse,
@@ -45,12 +45,14 @@ let keepaliveRun: Promise<void> | null = null;
 void restoreJupiterKeepaliveAlarm().catch((error: unknown) => {
   console.warn("木星保活恢复失败", error);
 });
+void configureOpenTabActionPopups();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === JUPITER_KEEPALIVE_ALARM) void runKeepJupiterAlive();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url || changeInfo.status === "loading") void configureActionPopup(tabId, tab.url);
   if ((changeInfo.status === "loading" || changeInfo.status === "complete") && tab.url) {
     void processUniPassLoginTab(tabId, tab.url).catch((error: unknown) => {
       console.warn("UniPass 登录辅助失败", error);
@@ -61,6 +63,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       console.warn("木星会话同步失败", error);
     });
   }
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void chrome.tabs.get(tabId)
+    .then((tab) => configureActionPopup(tabId, tab.url));
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void configureOpenTabActionPopups();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  void configureOpenTabActionPopups();
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -348,6 +363,12 @@ async function withUserScope<T>(userScope: string | undefined, operation: () => 
   const result = await operation();
   await assertCurrentUserScope(scope);
   return result;
+}
+
+async function configureOpenTabActionPopups(): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.filter((tab) => tab.id != null)
+    .map((tab) => configureActionPopup(tab.id as number, tab.url)));
 }
 
 async function assertCurrentUserScope(expectedScope: string): Promise<void> {

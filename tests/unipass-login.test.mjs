@@ -43,16 +43,20 @@ const login = await import(moduleUrl);
 
 const trustedAuthorizationUrl = "https://accounts.feishu.cn/accounts/auth_login/oauth2/authorize?response_type=code&client_id=cli_aae6da4f6538dbed&state=random-state&redirect_uri=https%3A%2F%2Ftec-iam.tec-do.com%2Fportal%2Fapi%2Fv1%2Flogin%2Ffeishu_oauth%2Fgboh9uvzolazw62gmxojwaarust5qyvh";
 
-test("user-triggered login tracks one tab and clears state after the trusted authorization click", async () => {
-  assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
-  assert.deepEqual(values.pendingUniPassLogin.phase, "portal");
+function nextTask() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
 
-  await login.processUniPassLoginTab(7, "https://portal.unipass.top/login");
+test("user-triggered login starts before the portal page completes and clears state after the trusted authorization click", async () => {
+  assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
+  await nextTask();
   assert.equal(executed.length, 1);
   assert.equal(values.pendingUniPassLogin.phase, "feishu");
+  assert.equal(executed[0].injectImmediately, true);
 
   await login.processUniPassLoginTab(7, trustedAuthorizationUrl);
   assert.equal(executed.length, 2);
+  assert.equal(executed[1].injectImmediately, true);
   assert.equal(values.pendingUniPassLogin, undefined);
 });
 
@@ -135,6 +139,7 @@ test("login helper starts while trusted pages are loading", async () => {
 
 test("login tracking stops when the tab leaves the fixed authentication origins", async () => {
   assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
+  await nextTask();
   await login.processUniPassLoginTab(7, "https://evil.example/login");
   assert.equal(values.pendingUniPassLogin, undefined);
 });

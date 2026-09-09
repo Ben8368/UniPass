@@ -42,11 +42,10 @@ export async function startUniPassLogin(): Promise<UniPassLoginStartResult> {
   await chrome.storage.session.set({
     [PENDING_LOGIN_KEY]: { tabId: tab.id, expiresAt: Date.now() + LOGIN_WINDOW_MS, phase: "portal" } satisfies PendingLogin,
   });
-  if (tab.status === "complete") {
-    void processUniPassLoginTab(tab.id).catch((error: unknown) => {
-      console.warn("UniPass 登录页处理失败", error);
-    });
-  }
+  // A new tab can report "loading" before the session state above is visible. Start now so it is never held until "complete".
+  void processUniPassLoginTab(tab.id, tab.url).catch((error: unknown) => {
+    console.warn("UniPass 登录页处理失败", error);
+  });
   return { tabId: tab.id };
 }
 
@@ -66,13 +65,13 @@ export async function processUniPassLoginTab(tabId: number, reportedUrl?: string
 
     if (isUniPassLoginUrl(url)) {
       if (pending.phase !== "portal") return;
-      const [{ result: clicked } = { result: false }] = await chrome.scripting.executeScript({ target: { tabId }, func: clickTecDoLoginButton });
+      const [{ result: clicked } = { result: false }] = await chrome.scripting.executeScript({ target: { tabId }, func: clickTecDoLoginButton, injectImmediately: true });
       if (clicked) await setPendingLoginPhase(tabId, "feishu");
       return;
     }
     if (isTrustedFeishuAuthorizationUrl(url)) {
       await setPendingLoginPhase(tabId, "feishu");
-      const [{ result: clicked } = { result: false }] = await chrome.scripting.executeScript({ target: { tabId }, func: clickTrustedFeishuAuthorizeButton });
+      const [{ result: clicked } = { result: false }] = await chrome.scripting.executeScript({ target: { tabId }, func: clickTrustedFeishuAuthorizeButton, injectImmediately: true });
       if (clicked) await clearPendingLogin(tabId);
       return;
     }

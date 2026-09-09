@@ -30,6 +30,10 @@ export async function togglePageOverlay(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({ target: { tabId }, files: ["content/page-overlay.js"] });
 }
 
+export async function configureActionPopup(tabId: number, url?: string): Promise<void> {
+  await chrome.action.setPopup({ tabId, popup: url && isHttpsUrl(url) ? "" : "popup.html" });
+}
+
 export async function fillFromOverlay(
   sender: chrome.runtime.MessageSender,
   message: Extract<import("../shared/types").BackgroundRequest, { type: "fillFromOverlay" }>,

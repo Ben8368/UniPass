@@ -11,7 +11,7 @@
 - 填充只允许 HTTPS 且与应用 URL 的 origin/path 匹配；执行前重新检查标签页仍活动且未导航到其他应用。
 - 木星是 manifest 明确允许的单页应用；其登录前后路由可变，但仅限 `https://jupiter.tec-do.com` 同一 origin 内匹配，其他应用仍按 origin/path 严格校验。
 - Content Script 只按用户操作临时注入，只写标准可见输入框，不自动提交表单；扩展 Action 点击后可在当前 HTTPS 页面临时挂载 Shadow DOM 浮层，点击页面外部、按 Escape、再次点击扩展或页面离开后不保留。
-- UniPass 一键登录只在用户点击离线状态按钮后启动；后台只跟踪一个登录标签页且最多两分钟。页面内点击脚本仅接受精确的 UniPass 登录页，以及 `accounts.feishu.cn` 上固定 Tec-IAM `client_id`、固定 `redirect_uri`、非空 `state`、固定应用/权限文案和唯一可见“授权”按钮；不读取或持久化 Cookie、授权码和飞书页面数据。
+- UniPass 一键登录只在用户点击离线状态按钮后启动；后台只跟踪一个登录标签页且最多两分钟。登录状态写入后可立即尝试注入，但页面内点击脚本仅接受精确的 UniPass 登录页，以及 `accounts.feishu.cn` 上固定 Tec-IAM `client_id`、固定 `redirect_uri`、非空 `state`、固定应用/权限文案和唯一可见“授权”按钮；不读取或持久化 Cookie、授权码和飞书页面数据。
 - Jupiter token 只保存在 `chrome.storage.session` 和目标站点自身 session/local storage；保活续期只静默更新已有页面会话，不派发鉴权事件、不刷新页面；关闭托管时清除扩展会话副本。
 - API、解密或目录同步失败必须显式失败；未知错误不得被缓存成“空密码”，部分目录不得覆盖上次完整目录。
 - UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
@@ -22,7 +22,7 @@
 
 权限和 host permissions 以 `public/manifest.json` 为唯一运行事实：
 
-- `activeTab`、`scripting`：用户点击扩展 Action 后读取当前 HTTPS 页面并临时注入 Shadow DOM 浮层，浮层内用户触发的当前页填充，以及用户明确点击“一键登录”后的两个受限登录按钮。浮层不在 HTTP、浏览器内部页面或不具备当前页授权的上下文注入。
+- `activeTab`、`scripting`：用户点击扩展 Action 后读取当前 HTTPS 页面并临时注入 Shadow DOM 浮层，浮层内用户触发的当前页填充，以及用户明确点击“一键登录”后的两个受限登录按钮。HTTP、浏览器内部页或不具备当前页授权的上下文只打开扩展自身 Popup，绝不注入页面脚本。
 - `clipboardWrite`：用户点击复制。
 - `storage`：非明文设置、TTL 状态、会话数据，以及用户手动指定的三段数字网络版号。
 - `alarms`：用户主动开启的 Jupiter 定时保活。
