@@ -46,7 +46,9 @@
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }
-.theme-icon { display: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme-icon { display: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* The crescent has an asymmetric visual mass; nudge its drawing, not the button box. */
+.theme-icon-moon { transform: translate(1px, 0); }
 :root[data-theme="dark"] .theme-icon-sun,
 :root[data-theme="light"] .theme-icon-moon { display: block; }
 
