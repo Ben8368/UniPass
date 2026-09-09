@@ -154,6 +154,22 @@ svg { display: block; }
   color: #ffb4b8;
 }
 .session-badge.offline .session-dot { background: var(--danger); }
+.session-badge.logging-in {
+  border-color: rgba(65, 211, 155, .24);
+  background: rgba(65, 211, 155, .09);
+  color: #a8f5d7;
+}
+.session-badge.logging-in .session-dot {
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(65, 211, 155, .25);
+  border-top-color: var(--green);
+  background: transparent;
+  box-shadow: none;
+  animation: session-login-spin .7s linear infinite;
+}
+@keyframes session-login-spin { to { transform: rotate(360deg); } }
 .icon-button {
   display: grid;
   width: 30px;

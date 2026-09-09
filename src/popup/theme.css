@@ -105,6 +105,16 @@
   color: #9f2f3b;
 }
 :root[data-theme="light"] .session-badge.offline strong { color: #9f2f3b; }
+:root[data-theme="light"] .session-badge.logging-in {
+  border-color: rgba(11, 153, 104, .30);
+  background: #e7f7ef;
+  color: #075f41;
+}
+:root[data-theme="light"] .session-badge.logging-in strong { color: #075f41; }
+:root[data-theme="light"] .session-badge.logging-in .session-dot {
+  border-color: rgba(11, 153, 104, .22);
+  border-top-color: #087d56;
+}
 :root[data-theme="light"] .host-chip p { color: #48627a; }
 :root[data-theme="light"] .list { border-color: rgba(30, 55, 78, .18); box-shadow: 0 8px 26px rgba(30, 55, 78, .08); }
 :root[data-theme="light"] .empty { color: #536b82; }

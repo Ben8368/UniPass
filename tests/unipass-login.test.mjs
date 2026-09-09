@@ -7,6 +7,8 @@ import { build } from "esbuild";
 
 const values = {};
 const executed = [];
+const createdTabs = [];
+const updatedTabs = [];
 
 globalThis.chrome = {
   storage: {
@@ -18,8 +20,8 @@ globalThis.chrome = {
   },
   tabs: {
     async query() { return []; },
-    async create() { return { id: 7, status: "loading", url: "https://portal.unipass.top/login" }; },
-    async update(id) { return { id, status: "complete", url: "https://portal.unipass.top/login" }; },
+    async create(details) { createdTabs.push(details); return { id: 7, status: "loading", url: "https://portal.unipass.top/login", active: details.active }; },
+    async update(id, details) { updatedTabs.push({ id, details }); return { id, status: "complete", url: "https://portal.unipass.top/login", active: details.active }; },
     async get(id) { return { id, status: "complete", url: "https://portal.unipass.top/login" }; },
   },
   scripting: {
@@ -47,12 +49,14 @@ function nextTask() {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-test("user-triggered login starts before the portal page completes and clears state after the trusted authorization click", async () => {
+test("user-triggered login starts in a background tab before the portal page completes and clears state after the trusted authorization click", async () => {
   assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
+  assert.deepEqual(createdTabs, [{ url: "https://portal.unipass.top/login", active: false }]);
   await nextTask();
   assert.equal(executed.length, 1);
   assert.equal(values.pendingUniPassLogin.phase, "feishu");
   assert.equal(executed[0].injectImmediately, true);
+  assert.equal(executed[0].target.tabId, 7);
 
   await login.processUniPassLoginTab(7, trustedAuthorizationUrl);
   assert.equal(executed.length, 2);
@@ -95,41 +99,20 @@ test("injected login functions do not depend on the service worker module scope"
   assert.equal(await vm.runInNewContext("(" + authorizationFunction.toString() + ")()", authorizationContext), true);
 });
 
-test("injected login functions retry dynamic buttons at a 100ms interval", async () => {
-  let portalQueries = 0;
-  const retryIntervals = [];
-  const portalContext = {
-    location: { origin: "https://portal.unipass.top", pathname: "/login", search: "" },
-    document: {
-      querySelectorAll() {
-        portalQueries += 1;
-        return portalQueries === 1 ? [] : [{ textContent: "钛动科技", disabled: false, offsetParent: {}, click() {} }];
-      },
-    },
-    Date,
-    Promise,
-    setTimeout(resolve, interval) { retryIntervals.push(interval); resolve(); },
-  };
-  assert.equal(await vm.runInNewContext("(" + executed[0].func.toString() + ")()", portalContext), true);
-  assert.deepEqual(retryIntervals, [100]);
+test("injected login functions keep their MutationObserver logic self-contained", async () => {
+  assert.match(executed[0].func.toString(), /MutationObserver/);
+  assert.match(executed[1].func.toString(), /MutationObserver/);
+  assert.match(executed[0].func.toString(), /document\.documentElement \?\? document/);
+  assert.match(executed[1].func.toString(), /document\.documentElement \?\? document/);
+  assert.doesNotMatch(executed[0].func.toString(), /clickWhenReady/);
+  assert.doesNotMatch(executed[1].func.toString(), /clickWhenReady/);
+});
 
-  let authorizationQueries = 0;
-  const authorizationContext = {
-    location: { href: trustedAuthorizationUrl },
-    document: {
-      body: { innerText: "钛动身份认证中心（Tec-IAM） 获取用户身份标识" },
-      querySelectorAll() {
-        authorizationQueries += 1;
-        return authorizationQueries === 1 ? [] : [{ textContent: "授权", disabled: false, offsetParent: {}, click() {} }];
-      },
-    },
-    Date,
-    Promise,
-    setTimeout(resolve, interval) { retryIntervals.push(interval); resolve(); },
-    URL,
-  };
-  assert.equal(await vm.runInNewContext("(" + executed[1].func.toString() + ")()", authorizationContext), true);
-  assert.deepEqual(retryIntervals, [100, 100]);
+test("an in-progress login remains in the background when requested again", async () => {
+  assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
+  assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
+  assert.deepEqual(updatedTabs, []);
+  await login.clearUniPassLoginForTab(7);
 });
 
 test("login helper starts while trusted pages are loading", async () => {

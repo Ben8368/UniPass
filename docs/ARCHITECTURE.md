@@ -12,7 +12,7 @@ Service Worker（UniPass API、登录辅助、凭据解密、缓存、Jupiter �
 Content Script（定位输入框、写值、派发事件，不提交表单）
 ```
 
-用户点击扩展 Action 后，Service Worker 只在当前 HTTPS 标签页临时注入 `content/page-overlay.js`，并在浮层初始化时检测当前页面主题；未手动指定主题时，白色页面使用浅色、深色页面使用暗色。该脚本挂载 closed Shadow DOM 浮层，复用 Popup 的展示控制器；点击页面外部、按 Escape、再次点击 Action 或页面离开时移除浮层。对于 HTTP、浏览器内部页和其他不可注入上下文，Action 改为打开扩展自身 Popup，不会尝试注入页面脚本。浮层不读取页面内容，只通过消息向 Service Worker 请求会话、目录和用户选中的凭据操作。Manifest 仅向 HTTPS 页面公开浮层所需的三个品牌图标。
+用户点击扩展 Action 后，Service Worker 只在当前 HTTPS 标签页临时注入 `content/page-overlay.js`，并在浮层初始化时检测当前页面主题；未手动指定主题时，白色页面使用浅色、深色页面使用暗色。该脚本挂载 closed Shadow DOM 浮层，复用 Popup 的展示控制器；点击页面外部、按 Escape、再次点击 Action 或页面离开时移除浮层。浮层不读取页面内容，只通过消息向 Service Worker 请求会话、目录和用户选中的凭据操作。Manifest 仅向 HTTPS 页面公开浮层所需的三个品牌图标。
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
@@ -53,9 +53,9 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 ### UniPass 一键登录
 
 1. Popup 会话请求失败后显示“一键登录”；用户点击时发送 `startUniPassLogin`。
-2. Service Worker 复用精确 `/login` 标签页或打开新标签页，并把标签页 ID、阶段和两分钟过期时间写入 `chrome.storage.session`。
-3. 登录状态写入后即以 `injectImmediately` 在精确 UniPass 登录页检查并点击唯一“钛动科技”按钮，不等待页面 `complete`；同标签页跳转至飞书后，同样尽早校验固定 Tec-IAM OAuth 参数、应用名和权限文案并点击唯一“授权”按钮。
-4. 授权后仍由现有 `/session/current_user` 判定 UniPass 会话；扩展不读取 OAuth code 或 Cookie。异常页面、账号选择、扫码、验证码和 CAPTCHA 留给用户处理。
+2. Service Worker 复用精确 `/login` 标签页或在后台打开新标签页，并把标签页 ID、阶段和两分钟过期时间写入 `chrome.storage.session`，不改变用户当前前台标签。
+3. 登录状态写入后即以 `injectImmediately` 在精确 UniPass 登录页检查并点击唯一“钛动科技”按钮，不等待页面 `complete`；后台标签中页面渲染通过 `MutationObserver` 触发点击，不依赖会被节流的轮询。同标签页跳转至飞书后，同样尽早校验固定 Tec-IAM OAuth 参数、应用名和权限文案并点击唯一“授权”按钮。
+4. 一键登录启动后，仍打开的 Popup/页面浮层显示登录中状态，并在其内存生命周期内每秒请求 `/session/current_user`；确认会话后立即刷新身份与当前页账号目录，浮层关闭或两分钟窗口结束即停止检测。扩展不读取 OAuth code 或 Cookie。异常页面、账号选择、扫码、验证码和 CAPTCHA 留给用户处理。
 
 ## 存储边界
 

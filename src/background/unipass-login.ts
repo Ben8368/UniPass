@@ -21,7 +21,7 @@ export async function startUniPassLogin(): Promise<UniPassLoginStartResult> {
   const pending = await readPendingLogin();
   if (pending) {
     try {
-      await chrome.tabs.update(pending.tabId, { active: true });
+      await chrome.tabs.get(pending.tabId);
       void processUniPassLoginTab(pending.tabId).catch((error: unknown) => {
         console.warn("UniPass 登录页处理失败", error);
       });
@@ -35,8 +35,8 @@ export async function startUniPassLogin(): Promise<UniPassLoginStartResult> {
   const loginTabs = await chrome.tabs.query({ url: `${PORTAL_LOGIN_URL}*` });
   const existing = loginTabs.find((tab) => tab.id != null && tab.url != null && isUniPassLoginUrl(tab.url));
   const tab = existing?.id != null
-    ? await chrome.tabs.update(existing.id, { active: true })
-    : await chrome.tabs.create({ url: PORTAL_LOGIN_URL, active: true });
+    ? existing
+    : await chrome.tabs.create({ url: PORTAL_LOGIN_URL, active: false });
   if (!tab || tab.id == null) throw new Error("无法打开 UniPass 登录页");
 
   await chrome.storage.session.set({
@@ -142,17 +142,26 @@ function isMissingTabError(error: unknown): boolean {
 
 async function clickTecDoLoginButton(): Promise<boolean> {
   if (location.origin !== "https://portal.unipass.top" || location.pathname.replace(/\/+$/, "") !== "/login" || location.search) return false;
-  const deadline = Date.now() + 12_000;
-  while (Date.now() < deadline) {
+  const click = (): boolean => {
     const matches = [...document.querySelectorAll<HTMLButtonElement>("button")]
       .filter((button) => button.textContent?.trim() === "钛动科技" && !button.disabled && button.offsetParent !== null);
     if (matches.length === 1) {
       matches[0].click();
       return true;
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return false;
+    return false;
+  };
+  if (click()) return true;
+  return await new Promise((resolve) => {
+    const observer = new MutationObserver(() => { if (click()) finish(true); });
+    const timeout = setTimeout(() => finish(false), 12_000);
+    const finish = (clicked: boolean): void => {
+      observer.disconnect();
+      clearTimeout(timeout);
+      resolve(clicked);
+    };
+    observer.observe(document.documentElement ?? document, { childList: true, subtree: true, characterData: true });
+  });
 }
 
 async function clickTrustedFeishuAuthorizeButton(): Promise<boolean> {
@@ -164,8 +173,7 @@ async function clickTrustedFeishuAuthorizeButton(): Promise<boolean> {
     && url.searchParams.get("redirect_uri") === "https://tec-iam.tec-do.com/portal/api/v1/login/feishu_oauth/gboh9uvzolazw62gmxojwaarust5qyvh"
     && Boolean(url.searchParams.get("state"));
   if (!trusted) return false;
-  const deadline = Date.now() + 12_000;
-  while (Date.now() < deadline) {
+  const click = (): boolean => {
     if (document.body?.innerText.includes("钛动身份认证中心（Tec-IAM）") && document.body.innerText.includes("获取用户身份标识")) {
       const matches = [...document.querySelectorAll<HTMLButtonElement>("button")]
         .filter((button) => button.textContent?.trim() === "授权" && !button.disabled && button.offsetParent !== null);
@@ -174,7 +182,17 @@ async function clickTrustedFeishuAuthorizeButton(): Promise<boolean> {
         return true;
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return false;
+    return false;
+  };
+  if (click()) return true;
+  return await new Promise((resolve) => {
+    const observer = new MutationObserver(() => { if (click()) finish(true); });
+    const timeout = setTimeout(() => finish(false), 12_000);
+    const finish = (clicked: boolean): void => {
+      observer.disconnect();
+      clearTimeout(timeout);
+      resolve(clicked);
+    };
+    observer.observe(document.documentElement ?? document, { childList: true, subtree: true, characterData: true });
+  });
 }
