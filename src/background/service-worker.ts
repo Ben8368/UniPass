@@ -51,7 +51,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tab.url) {
+  if ((changeInfo.status === "loading" || changeInfo.status === "complete") && tab.url) {
     void processUniPassLoginTab(tabId, tab.url).catch((error: unknown) => {
       console.warn("UniPass 登录辅助失败", error);
     });

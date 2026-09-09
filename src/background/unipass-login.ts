@@ -151,7 +151,7 @@ async function clickTecDoLoginButton(): Promise<boolean> {
       matches[0].click();
       return true;
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return false;
 }
@@ -175,7 +175,7 @@ async function clickTrustedFeishuAuthorizeButton(): Promise<boolean> {
         return true;
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return false;
 }

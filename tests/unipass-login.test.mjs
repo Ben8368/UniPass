@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
@@ -88,6 +89,48 @@ test("injected login functions do not depend on the service worker module scope"
     URL,
   };
   assert.equal(await vm.runInNewContext("(" + authorizationFunction.toString() + ")()", authorizationContext), true);
+});
+
+test("injected login functions retry dynamic buttons at a 100ms interval", async () => {
+  let portalQueries = 0;
+  const retryIntervals = [];
+  const portalContext = {
+    location: { origin: "https://portal.unipass.top", pathname: "/login", search: "" },
+    document: {
+      querySelectorAll() {
+        portalQueries += 1;
+        return portalQueries === 1 ? [] : [{ textContent: "钛动科技", disabled: false, offsetParent: {}, click() {} }];
+      },
+    },
+    Date,
+    Promise,
+    setTimeout(resolve, interval) { retryIntervals.push(interval); resolve(); },
+  };
+  assert.equal(await vm.runInNewContext("(" + executed[0].func.toString() + ")()", portalContext), true);
+  assert.deepEqual(retryIntervals, [100]);
+
+  let authorizationQueries = 0;
+  const authorizationContext = {
+    location: { href: trustedAuthorizationUrl },
+    document: {
+      body: { innerText: "钛动身份认证中心（Tec-IAM） 获取用户身份标识" },
+      querySelectorAll() {
+        authorizationQueries += 1;
+        return authorizationQueries === 1 ? [] : [{ textContent: "授权", disabled: false, offsetParent: {}, click() {} }];
+      },
+    },
+    Date,
+    Promise,
+    setTimeout(resolve, interval) { retryIntervals.push(interval); resolve(); },
+    URL,
+  };
+  assert.equal(await vm.runInNewContext("(" + executed[1].func.toString() + ")()", authorizationContext), true);
+  assert.deepEqual(retryIntervals, [100, 100]);
+});
+
+test("login helper starts while trusted pages are loading", async () => {
+  const serviceWorker = await readFile(new URL("../src/background/service-worker.ts", import.meta.url), "utf8");
+  assert.match(serviceWorker, /changeInfo\.status === "loading" \|\| changeInfo\.status === "complete"/);
 });
 
 test("login tracking stops when the tab leaves the fixed authentication origins", async () => {
