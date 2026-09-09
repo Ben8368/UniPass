@@ -17,6 +17,7 @@
 - UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
 - 用户作用域优先使用服务端稳定 ID（`id`、`userId` 或 `user_id`）；缺失时只可回退服务端登录名 `username`，再回退邮箱 `email`。显示名、昵称和默认值绝不作为身份键。三者均缺失时不执行 UniPass 目录、应用或凭据请求，Jupiter 保活不可开启；已启用保活在检测到用户切换后会停止并清除扩展会话 token。
 - UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。
+- 发布构建使用标准 minification 且不生成 sourcemap；静态审计锁定构建选项，最终产物审计以精确文件白名单阻断源码/source map、`debugger`、特殊文件和常见私钥/API token 格式。当前协议必须存在于客户端的固定解密材料不会通过拆分、编码或混淆伪装，需由 TD-004 的认证服务端化逐应用退出。
 
 ## 权限与主机
 

@@ -16,7 +16,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
-构建入口由 `build.mjs` 定义，产物进入忽略提交的 `dist/`。
+构建入口由 `build.mjs` 定义，使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理，产物进入忽略提交的 `dist/`。复制静态资源后，构建会立即执行最终产物审计：只允许固定文件清单，并阻断源码/source map、调试语句、常见私钥/API token 格式、特殊文件和仍可被标准压缩显著缩小的 JavaScript；CI 与 Release 通过同一个 `npm run verify` 复用该门禁。
 
 ## 模块职责
 

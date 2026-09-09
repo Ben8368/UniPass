@@ -1,6 +1,7 @@
 import { cp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
+import { assertReleaseArtifact } from "./scripts/release-artifact-check.mjs";
 
 const root = resolve(import.meta.dirname);
 const out = resolve(root, "dist");
@@ -19,7 +20,11 @@ await build({
   outdir: out,
   platform: "browser",
   target: "chrome120",
+  minify: true,
   sourcemap: false,
+  treeShaking: true,
+  drop: ["debugger"],
+  legalComments: "eof",
   logLevel: "info",
   loader: { ".html": "text", ".css": "text" },
 });
@@ -38,4 +43,5 @@ for (const icon of ["icon16.png", "icon48.png", "icon128.png"]) {
   await cp(resolve(root, "public/icons", icon), resolve(out, "icons", icon));
 }
 
+await assertReleaseArtifact(out);
 console.log(`Built extension into ${out}`);

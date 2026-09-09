@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "audit:static": "node scripts/traffic-light-check.mjs",
+    "audit:artifact": "node scripts/release-artifact-check.mjs",
     "build": "npm run audit:static && node build.mjs",
     "docs:governance:check": "node scripts/governance-docs-check.mjs",
     "test": "node --test tests/*.test.mjs",

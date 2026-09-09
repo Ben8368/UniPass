@@ -34,16 +34,6 @@
   8. 全程不得记录密码、token、OAuth `state`/code、完整接口响应或真实账号值。
 - **当前状态：** 自动化、代码防护和一键登录 happy path 已完成；其余真实 Chrome/Cookie/飞书异常分支/alarm/Jupiter 登录态烟测仍待维护者执行，故该债务暂不移除。
 
-### TD-003: 发布产物可读性与泄漏门禁
-
-- **等级：** P1
-- **位置：** `build.mjs`、`scripts/`、`package.json`、`.github/workflows/ci.yml`、`.github/workflows/release.yml`
-- **问题：** 当前 JS 已 bundle 且关闭 sourcemap，但未启用常规 minify；HTML/CSS 原样复制，`npm run verify` 和 Release 在打包前也没有对最终 `dist/` 执行文件白名单、源码地图、源码、调试残留和意外敏感常量扫描。现有 SHA256 只证明发布后文件未变化，不检查产物内容。
-- **影响：** 发布包中的业务语义较容易阅读；后续构建变更若意外带入 source map、源码、测试 fixture 或敏感数据，当前门禁不能在发布前阻断。
-- **方向：** 在不隐藏扩展真实功能的前提下启用 Chrome Web Store 允许的常规 JS minification、tree shaking 和 production `debugger` 清理，继续保持无 sourcemap；HTML/CSS 压缩作为低优先级外观优化。新增可测试的最终产物审计脚本，由 `npm run verify` 在 build 后检查 `dist/` 文件白名单、禁止扩展名、调试残留和意外敏感模式，Release 只打包审计通过的目录。不得引入 control-flow flattening、自解密执行、反 DevTools 或其他以隐藏功能为目的的重度混淆。
-- **验收：** JS 产物完成合规压缩；`dist/` 不含 `*.map`、`.ts`、`.tsx`、测试 fixture、`debugger` 或未审计文件；审计脚本有正反例测试且能真实阻断；CI、Release 与本地 `npm run verify` 使用同一门禁；人工确认商店审查仍可从提交代码辨识完整功能。
-- **当前状态：** 仅记录方向，尚未修改构建、脚本或 CI；应在 TD-002 真实场景验收闭环后实施。客户端当前必须存在的已知解密常量不以拆分、编码或混淆伪装，待 TD-004 完成对应应用迁移后再列为产物禁项。
-
 ### TD-004: 认证服务端化与客户端长期凭据退出
 
 - **等级：** P2

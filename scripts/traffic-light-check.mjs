@@ -65,6 +65,18 @@ if (/\.(?:submit|requestSubmit)\s*\(/.test(contentScript)) {
   errors.push("Content Script 不得自动提交表单");
 }
 
+const buildScript = await readFile(resolve(root, "build.mjs"), "utf8");
+for (const [pattern, error] of [
+  [/\bminify:\s*true\b/, "发布构建必须启用标准 minify"],
+  [/\bsourcemap:\s*false\b/, "发布构建必须关闭 sourcemap"],
+  [/\btreeShaking:\s*true\b/, "发布构建必须启用 tree shaking"],
+  [/\bdrop:\s*\[\s*["']debugger["']\s*\]/, "发布构建必须移除 debugger"],
+  [/\blegalComments:\s*["']eof["']/, "发布构建必须在文件末尾保留第三方许可声明"],
+  [/\bassertReleaseArtifact\s*\(\s*out\s*\)/, "构建完成后必须审计最终 dist 产物"],
+]) {
+  if (!pattern.test(buildScript)) errors.push(error);
+}
+
 const loginAssistant = await readFile(resolve(root, "src/background/unipass-login.ts"), "utf8");
 if (!loginAssistant.includes('url.searchParams.get("client_id") === "cli_aae6da4f6538dbed"')
   || !loginAssistant.includes('url.searchParams.get("redirect_uri") === "https://tec-iam.tec-do.com/portal/api/v1/login/feishu_oauth/gboh9uvzolazw62gmxojwaarust5qyvh"')) {

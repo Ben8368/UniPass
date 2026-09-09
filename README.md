@@ -1,6 +1,6 @@
 # UniPass Minimal
 
-这是对原 UniPass 扩展的最小权限 TypeScript 重构。它不会修改原始 `extension-source` 目录。
+这是对原 UniPass 扩展的最小权限 TypeScript 重构。
 本项目仅供私人本地开发使用。构建 manifest 固定为商店插件 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID。每次 `npm run verify` 都会从 Chrome 官方更新接口查询当前商店版号，并要求本地 `package.json`/manifest 保持同一主、次版本且补丁号恰高 `1`；因此商店升级后必须先同步本地版号再构建。它在同一 Chrome Profile 中不能与商店版同时启用；仅通过开发者模式加载 `dist`，不用于 Chrome Web Store 或其他公开分发。公开 key 只能固定 ID，不能提供商店发布或 CRX 签名权限。
 
 
@@ -47,7 +47,7 @@ npm run verify
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[SECURITY.md](SECURITY.md)：扩展数据流和凭据/权限边界。
 - [CONTRIBUTING.md](CONTRIBUTING.md)：开发、验证与 PR 要求。
 
-`npm run verify` 是本地与 CI 的统一门禁，依次执行治理检查、静态红绿灯、测试、类型检查和构建。静态黄灯不会伪装成失败，但必须在人工 `🚦 Audit Report` 中确认并按需登记技术债；红灯会阻断验证。
+`npm run verify` 是本地与 CI 的统一门禁，依次执行治理检查、静态红绿灯、测试、类型检查、标准压缩构建和最终产物审计。产物审计使用精确文件白名单，并阻断源码/source map、调试语句、常见私钥/API token 格式和未审计文件。静态黄灯不会伪装成失败，但必须在人工 `🚦 Audit Report` 中确认并按需登记技术债；红灯会阻断验证。
 
 ## 发版流程
 
@@ -60,9 +60,9 @@ npm run verify
    git push origin v0.1.0
    ```
 
-4. 在 [GitHub Actions](https://github.com/Ben8368/UniPass/actions) 等待 **Release extension** 成功；ZIP 会出现在相应的 [GitHub Release](https://github.com/Ben8368/UniPass/releases) 页面。
+4. 在 [GitHub Actions](https://github.com/Ben8368/UniPass/actions) 等待 **Release extension** 成功；只有通过最终产物审计的 `dist/` 才会生成 ZIP，ZIP 会出现在相应的 [GitHub Release](https://github.com/Ben8368/UniPass/releases) 页面。
 
-`main` 的每次推送和 Pull Request 还会运行 CI：依赖安装、治理与动态版本审计、测试、TypeScript 类型检查和构建，并保留一个可下载的未压缩构建产物。
+`main` 的每次推送和 Pull Request 还会运行 CI：依赖安装、治理与动态版本审计、测试、TypeScript 类型检查、标准压缩构建和最终产物审计，并保留一个可下载的未打包 `dist/` 产物。
 
 ## 安全与行为
 

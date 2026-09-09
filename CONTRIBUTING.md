@@ -10,13 +10,14 @@ UniPass 是处理敏感凭据的 Manifest V3 扩展。人类贡献入口以本�
 - 只检查治理文档：`npm run docs:governance:check`。
 - 构建后在 `chrome://extensions` 以开发者模式加载 `dist/`。
 
-`npm run verify` 会依次执行治理检查、动态商店版号静态审计、测试、TypeScript 类型检查和扩展构建；`npm run build` 也会重复执行审计。真实 UniPass/飞书 OAuth/Jupiter、Cookie、alarm 和页面注入仍需按场景手动验收，已完成状态以 [CONTEXT.md](CONTEXT.md) 和 [docs/TECH_DEBT.md](docs/TECH_DEBT.md) 为准。
+`npm run verify` 会依次执行治理检查、动态商店版号静态审计、测试、TypeScript 类型检查、标准压缩构建和最终产物审计；`npm run build` 也会重复执行静态审计，并在复制完静态资源后立即审计 `dist/`。可用 `npm run audit:artifact` 单独复查现有产物。真实 UniPass/飞书 OAuth/Jupiter、Cookie、alarm 和页面注入仍需按场景手动验收，已完成状态以 [CONTEXT.md](CONTEXT.md) 和 [docs/TECH_DEBT.md](docs/TECH_DEBT.md) 为准。
 
 ## 改动要求
 
 - 修改凭据、会话、URL、权限、存储或 Content Script 前阅读 [SECURITY.md](SECURITY.md)。
 - 新权限和 host permission 必须说明用途、触发条件、敏感数据和关闭路径。
 - 不提交 `.env`、密码、token、真实 API 响应、用户账号目录或构建产物。
+- 新增或重命名构建产物时同步 `scripts/release-artifact-check.mjs` 的精确白名单和正反例测试；不得通过放宽扫描绕过失败。
 - 跨上下文消息变化必须同步 `src/shared/types.ts`、发送端、接收端和测试。
 - 用户可见错误、空态和加载态应可读；不能把外部服务失败静默转换成空数据。
 
