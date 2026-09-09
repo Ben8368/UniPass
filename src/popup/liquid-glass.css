@@ -1,0 +1,157 @@
+/* One backdrop samples the page; inner surfaces add tint without stacking blur. */
+:root {
+  --glass-tint: rgba(20, 29, 40, .66);
+  --glass-solid: #202d3b;
+  --glass-sheen: rgba(255, 255, 255, .12);
+  --glass-edge: rgba(255, 255, 255, .48);
+  --glass-edge-dim: rgba(255, 255, 255, .07);
+  --glass-card: rgba(15, 26, 37, .28);
+  --glass-control: rgba(255, 255, 255, .09);
+  --glass-selected: rgba(233, 255, 248, .16);
+  --glass-shadow: rgba(0, 10, 24, .24);
+  --text-2: #bbcbd6;
+  --placeholder: #a3b4c2;
+  --window: #152b3b;
+  --surface-raised: #223341;
+}
+:root[data-theme="light"] {
+  --glass-tint: rgba(241, 249, 252, .64);
+  --glass-solid: #eaf2f6;
+  --glass-sheen: rgba(255, 255, 255, .5);
+  --glass-edge: rgba(255, 255, 255, .95);
+  --glass-edge-dim: rgba(57, 85, 107, .18);
+  --glass-card: rgba(255, 255, 255, .3);
+  --glass-control: rgba(255, 255, 255, .38);
+  --glass-selected: rgba(255, 255, 255, .65);
+  --glass-shadow: rgba(30, 56, 78, .15);
+  --text-2: #425970;
+  --placeholder: #526980;
+  --window: #bcd9df;
+  --surface-raised: #eef6f9;
+}
+body {
+  background:
+    radial-gradient(ellipse at 0% 5%, rgba(145, 191, 255, .6), transparent 55%),
+    radial-gradient(ellipse at 105% 80%, rgba(64, 206, 169, .48), transparent 60%),
+    var(--window);
+}
+.app-window {
+  border: 1px solid var(--glass-edge-dim);
+  border-radius: 28px;
+  background: var(--glass-tint);
+  box-shadow: 0 24px 64px var(--glass-shadow), 0 4px 12px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-edge-dim);
+  backdrop-filter: blur(18px) saturate(165%);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+}
+.app-window::before {
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 0% 0%, var(--glass-sheen), transparent 48%),
+    linear-gradient(125deg, var(--glass-sheen), transparent 28%, transparent 72%, rgba(160, 218, 255, .08));
+}
+/* Mask only the decorative rim: never filter, distort or mask text and controls. */
+.app-window::after {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--glass-edge) 2%, var(--glass-edge-dim) 26%,
+    var(--glass-edge) 49%, var(--glass-edge-dim) 68%, var(--glass-edge) 100%);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  content: "";
+  pointer-events: none;
+}
+main { background: transparent; }
+.topbar, .tabs, .list, .credential, .statusbar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.topbar {
+  height: 64px;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.brand-copy h1 { font-size: 15px; letter-spacing: -.4px; }
+.brand-copy p { font-size: 10px; }
+.window-brand > img { width: 32px; height: 32px; }
+.window-controls { gap: 6px; }
+:root .icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--glass-edge-dim);
+  border-radius: 50%;
+  background: var(--glass-control);
+  box-shadow: inset 0 1px 0 var(--glass-sheen), 0 2px 5px var(--glass-shadow);
+}
+:root .tabs {
+  height: 46px;
+  margin: 2px 16px 4px;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid var(--glass-edge-dim);
+  border-radius: 24px;
+  background: var(--glass-card);
+  box-shadow: inset 0 1px 3px var(--glass-shadow), 0 1px 0 var(--glass-sheen);
+}
+.tab { height: 36px; border-radius: 20px; transition: background .2s ease, box-shadow .2s ease, color .2s ease; }
+:root .tab.active {
+  border-color: var(--glass-edge-dim);
+  background: linear-gradient(165deg, var(--glass-sheen), transparent 65%), var(--glass-selected);
+  color: var(--green-text);
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-sheen), 0 3px 8px var(--glass-shadow);
+}
+.tab.active::after { display: none; }
+.content-area { padding: 16px 17px; }
+:root .list, :root .credential, .settings-form {
+  border: 1px solid var(--glass-edge-dim);
+  border-radius: 18px;
+  background: linear-gradient(150deg, var(--glass-sheen), transparent 48%), var(--glass-card);
+  box-shadow: inset 0 1px 0 var(--glass-sheen), 0 6px 18px var(--glass-shadow);
+}
+.item { min-height: 64px; padding: 10px; }
+:root .item:hover { background: var(--glass-control); }
+.item-icon { border-radius: 11px; }
+:root .host-chip { border-radius: 14px; background: var(--glass-control); }
+:root .session-badge { background: var(--glass-control); box-shadow: inset 0 1px 0 var(--glass-sheen); }
+:root .session-badge.online { background: var(--green-soft); }
+:root .session-badge.offline { background: rgba(217, 77, 93, .12); }
+.search input, .field-row input, .version-override input { border-radius: 12px; }
+.search input { height: 38px; }
+.search-field svg { color: var(--text-2); }
+.search > button, .actions button, .item > button, .field-row button,
+.settings-save, .settings-reset { border-radius: 999px; box-shadow: inset 0 1px 0 var(--glass-sheen), 0 2px 4px var(--glass-shadow); }
+:root .actions button:not(.primary), :root .item > button:not(.primary), :root .field-row button {
+  background: var(--glass-control);
+  color: var(--text-1);
+}
+:root .statusbar {
+  height: 32px;
+  padding: 0 18px;
+  background: var(--glass-card);
+  border-top-color: var(--glass-edge-dim);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
+}
+.version-dialog { border-radius: 22px; }
+:root button:focus-visible, :root .tab:focus-visible {
+  outline: 2px solid var(--green-strong);
+  outline-offset: 2px;
+}
+/* Opaque fallback also covers browsers without backdrop compositing. */
+@supports not (backdrop-filter: blur(1px)) {
+  .app-window { background: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .app-window { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .app-window::before { display: none; }
+  .version-dialog { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media (forced-colors: active) {
+  .app-window, :root .list, :root .credential, :root .tabs { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
+  .app-window::before, .app-window::after { display: none; }
+  :root .tab.active { border-color: Highlight; color: Highlight; }
+}

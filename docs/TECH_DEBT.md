@@ -30,7 +30,8 @@
   4. 重启 Chrome，重新打开 Jupiter，等待 Service Worker 恢复，确认无需再次点击即可保持登录。
   5. 在 UniPass 登出或切换另一用户，重新打开 Popup，确认托管关闭；检查 Jupiter 不再被扩展写入新会话。
   6. 关闭托管，确认 alarm 停止且 Jupiter 页面不再被扩展刷新。
-  7. 全程不得记录密码、token、OAuth `state`/code、完整接口响应或真实账号值。
+  7. 在真实 Chrome 重新加载构建，检查液态玻璃深浅主题在实际网页上的透视、滚动、浮层关闭与查看/填入行为；本地模拟预览不代替扩展集成验收。
+  8. 全程不得记录密码、token、OAuth `state`/code、完整接口响应或真实账号值。
 - **当前状态：** 自动化、代码防护和一键登录 happy path 已完成；其余真实 Chrome/Cookie/飞书异常分支/alarm/Jupiter 登录态烟测仍待维护者执行，故该债务暂不移除。
 ## 偿还流程
 

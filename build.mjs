@@ -26,7 +26,7 @@ await build({
 
 for (const [source, target] of [
   ["src/popup/popup.html", "popup.html"],
-  ["src/popup/popup.css", "popup.css"],
+  ...["popup.css", "components.css", "theme.css", "liquid-glass.css"].map((file) => [`src/popup/${file}`, file]),
   ["public/manifest.json", "manifest.json"],
 ]) {
   await cp(resolve(root, source), resolve(out, target));

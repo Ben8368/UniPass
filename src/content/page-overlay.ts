@@ -1,4 +1,7 @@
 import popupCss from "../popup/popup.css";
+import componentsCss from "../popup/components.css";
+import themeCss from "../popup/theme.css";
+import glassCss from "../popup/liquid-glass.css";
 import popupHtml from "../popup/popup.html";
 import { send } from "../popup/bridge";
 import { initializePopup } from "../popup/popup";
@@ -19,7 +22,7 @@ async function mount(): Promise<void> {
   host.style.cssText = "position:fixed;top:16px;right:16px;width:420px;height:min(580px,calc(100vh - 32px));z-index:2147483647;pointer-events:none;background:transparent!important;";
   const shadow = host.attachShadow({ mode: "closed" });
   const style = document.createElement("style");
-  style.textContent = overlayStyles(popupCss);
+  style.textContent = overlayStyles([popupCss, componentsCss, themeCss, glassCss].join("\n"));
   shadow.append(style);
 
   const overlayRoot = document.createElement("div");
@@ -65,7 +68,7 @@ function overlayStyles(css: string): string {
     .replaceAll(":root", ".overlay-root")}
     :host { all: initial !important; position: fixed !important; top: 16px !important; right: 16px !important; width: 420px !important; height: min(580px, calc(100vh - 32px)) !important; display: block !important; z-index: 2147483647 !important; background: transparent !important; color: initial; font: initial; line-height: normal; pointer-events: none !important; }
     .overlay-root { width: 100%; height: 100%; color-scheme: dark; pointer-events: none; background: transparent !important; }
-    .overlay-root > .app-window { width: 100%; height: 100%; border: 1px solid rgba(255,255,255,.18); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.08); pointer-events: auto; }
+    .overlay-root > .app-window { width: 100%; height: 100%; border-radius: 28px; pointer-events: auto; }
     .overlay-root > .app-window .content-area { overscroll-behavior: contain; }
     @media (max-width: 460px) { :host { top: 8px !important; right: 8px !important; width: calc(100vw - 16px) !important; height: min(580px, calc(100vh - 16px)) !important; } }
   `;
