@@ -48,7 +48,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ### Jupiter 保活
 
-用户主动启用后，Service Worker 要求稳定用户作用域，定时重新获取对应 UniPass 凭据、登录 Jupiter，并把带用户作用域的会话数据放在 `chrome.storage.session`。每次 alarm 和标签页同步前都会核验当前 UniPass 用户；检测到切换时停止 alarm 并清除会话缓存。关闭保活也会清除 alarm 和会话缓存。外部请求超时为 12 秒。
+用户主动启用后，Service Worker 要求稳定用户作用域，每 25 分钟重新获取对应 UniPass 凭据并向 Jupiter 提交登录 `POST`，把带用户作用域的会话数据放在 `chrome.storage.session`。新 token 同步到已打开的 Jupiter 页面时只静默更新其同源会话存储，不触发 `storage` 鉴权事件，也不执行页面刷新，避免被前端误判为“退出再登录”。每次 alarm 和标签页同步前都会核验当前 UniPass 用户；检测到切换时停止 alarm 并清除会话缓存。关闭保活也会清除 alarm 和会话缓存。外部请求超时为 12 秒。
 
 ### UniPass 一键登录
 

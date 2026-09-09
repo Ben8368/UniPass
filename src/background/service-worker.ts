@@ -231,23 +231,30 @@ async function keepJupiterAlive(): Promise<void> {
   try {
     credential = await credentialForAccount(settings.accountId, settings.username);
     password = credential.password;
+    // Keepalive is a background login renewal: never log out, navigate, or reload Jupiter.
     const loginData = await loginToJupiter(credential.username, password);
     await assertCurrentUserScope(settings.userScope);
+    const latestSettings = await readStoredJupiterKeepaliveSettings();
+    if (!latestSettings.enabled || latestSettings.userScope !== settings.userScope) return;
     await syncJupiterSession(loginData, settings.userScope);
-    await saveJupiterKeepaliveResult({ ...settings, lastSuccessAt: Date.now(), lastError: undefined });
+    await saveJupiterKeepaliveResult({ ...latestSettings, lastSuccessAt: Date.now(), lastError: undefined });
   } catch (error) {
     if (error instanceof UserScopeMismatchError) {
       await disableJupiterKeepalive();
       return;
     }
     const message = error instanceof Error ? error.message : "木星保活失败";
-    await saveJupiterKeepaliveResult({ ...settings, lastError: message });
+    const latestSettings = await readStoredJupiterKeepaliveSettings();
+    if (latestSettings.enabled && latestSettings.userScope === settings.userScope) {
+      await saveJupiterKeepaliveResult({ ...latestSettings, lastError: message });
+    }
   } finally {
     password = "";
     if (credential) credential.password = "";
   }
 }
 
+/** Submit a fresh Jupiter login request without touching the open page. */
 async function loginToJupiter(email: string, password: string): Promise<JupiterLoginResponse["data"]> {
   const { response, body } = await fetchJsonWithTimeout<JupiterLoginResponse>(JUPITER_LOGIN_URL, {
     method: "POST",
@@ -308,7 +315,8 @@ async function syncStoredJupiterSessionToTab(tabId: number): Promise<void> {
         if (localStorage.getItem("ACCESS_TOKEN") === token) return;
         localStorage.setItem("ACCESS_TOKEN", token);
         localStorage.setItem("PH_USER_INFO", JSON.stringify(userInfo));
-        location.reload();
+        // Keep the current SPA running; the next request can read the renewed token without a reload.
+        // Do not dispatch a storage event because some auth guards treat it as a logout signal.
       },
       args: [accessToken, sessionData],
     });

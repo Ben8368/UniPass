@@ -128,7 +128,7 @@ export class CatalogController {
       meta.addEventListener("click", () => void this.openAppPage(app)); main.append(meta);
       const actions = document.createElement("div"); actions.className = "actions";
       const view = button("查看账号", "primary"); view.addEventListener("click", () => void this.loadAppAccounts(app)); actions.append(view);
-      if (isJupiter) { const enabled = keepalive.enabled && String(keepalive.appId) === String(app.id); const control = button(enabled ? "关闭托管" : "自动托管", enabled ? "primary keepalive-enabled" : ""); control.title = "每 25 分钟重新登录木星以保持会话"; control.addEventListener("click", () => void this.toggleKeepalive(app, enabled, control)); actions.prepend(control); }
+      if (isJupiter) { const enabled = keepalive.enabled && String(keepalive.appId) === String(app.id); const control = button(enabled ? "关闭托管" : "自动托管", enabled ? "primary keepalive-enabled" : ""); control.title = "每 25 分钟后台提交登录请求以保持会话，不刷新当前页面"; control.addEventListener("click", () => void this.toggleKeepalive(app, enabled, control)); actions.prepend(control); }
       root.append(this.appIcon(title), main, actions); this.apps.append(root);
     }
   }

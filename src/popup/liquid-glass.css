@@ -121,8 +121,8 @@ main { background: transparent; }
 /* Header controls are flat glass circles, not raised beads. */
 :root .icon-button {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: 27px;
+  height: 27px;
   overflow: hidden;
   border: 1px solid var(--glass-line-soft);
   border-radius: 50%;
