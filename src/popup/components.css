@@ -212,30 +212,35 @@
 }
 .item-meta-link {
   display: inline-flex;
+  width: fit-content;
   max-width: 100%;
+  height: 20px;
   align-items: center;
-  gap: 3px;
-  margin: 0;
-  padding: 0;
-  border: 0;
+  gap: 4px;
+  margin: 1px 0 0;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-2);
-  font-size: inherit;
-  line-height: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  transition: color .14s ease, background .14s ease, border-color .14s ease;
 }
-.item-meta-link:hover { color: var(--green); }
+.item-meta-link:hover { border-color: rgba(65, 211, 155, .18); background: var(--green-soft); color: var(--green); }
 .item-meta-link svg {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: transform .14s ease;
 }
-.item-meta-link:hover svg { transform: translateX(2px); }
+.item-meta-link:hover svg { transform: translate(1px, -1px); }
 .actions { display: flex; gap: 5px; }
 .actions button,
 .item > button { height: 28px; min-height: 28px; padding: 0 9px; }

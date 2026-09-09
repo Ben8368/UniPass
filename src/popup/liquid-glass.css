@@ -1,71 +1,108 @@
-/* One backdrop samples the page; inner surfaces add tint without stacking blur. */
+/*
+ * Liquid glass has two deliberately different depths:
+ * 1. The window is the optical layer that samples and softens the page.
+ * 2. Controls are flat frosted surfaces; only the search submit is solid.
+ */
 :root {
-  --glass-tint: rgba(20, 29, 40, .66);
-  --glass-solid: #202d3b;
-  --glass-sheen: rgba(255, 255, 255, .12);
-  --glass-edge: rgba(255, 255, 255, .48);
-  --glass-edge-dim: rgba(255, 255, 255, .07);
-  --glass-card: rgba(15, 26, 37, .28);
-  --glass-control: rgba(255, 255, 255, .09);
-  --glass-selected: rgba(233, 255, 248, .16);
-  --glass-shadow: rgba(0, 10, 24, .24);
+  --glass-window: rgba(19, 28, 37, .25);
+  --glass-window-solid: #1b2731;
+  --glass-panel: rgba(8, 16, 23, .16);
+  --glass-control: rgba(255, 255, 255, .055);
+  --glass-control-hover: rgba(255, 255, 255, .095);
+  --glass-selected: rgba(217, 255, 243, .12);
+  --glass-line: rgba(255, 255, 255, .13);
+  --glass-line-soft: rgba(255, 255, 255, .075);
+  --glass-highlight: rgba(255, 255, 255, .18);
+  --glass-shadow: rgba(0, 8, 20, .22);
+  --glass-rim: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, .52) 0%,
+    rgba(255, 255, 255, .16) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, .12) 80%,
+    rgba(255, 255, 255, .42) 100%
+  );
   --text-2: #bbcbd6;
   --placeholder: #a3b4c2;
   --window: #152b3b;
-  --surface-raised: #223341;
+  --surface-raised: rgba(24, 35, 44, .86);
 }
+
 :root[data-theme="light"] {
-  --glass-tint: rgba(241, 249, 252, .64);
-  --glass-solid: #eaf2f6;
-  --glass-sheen: rgba(255, 255, 255, .5);
-  --glass-edge: rgba(255, 255, 255, .95);
-  --glass-edge-dim: rgba(57, 85, 107, .18);
-  --glass-card: rgba(255, 255, 255, .3);
-  --glass-control: rgba(255, 255, 255, .38);
-  --glass-selected: rgba(255, 255, 255, .65);
-  --glass-shadow: rgba(30, 56, 78, .15);
+  --glass-window: rgba(246, 251, 252, .20);
+  --glass-window-solid: #e8f0f3;
+  --glass-panel: rgba(255, 255, 255, .13);
+  --glass-control: rgba(255, 255, 255, .18);
+  --glass-control-hover: rgba(255, 255, 255, .30);
+  --glass-selected: rgba(255, 255, 255, .30);
+  --glass-line: rgba(255, 255, 255, .45);
+  --glass-line-soft: rgba(39, 68, 88, .15);
+  --glass-highlight: rgba(255, 255, 255, .62);
+  --glass-shadow: rgba(25, 54, 76, .13);
+  --glass-rim: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, .92) 0%,
+    rgba(255, 255, 255, .42) 20%,
+    rgba(255, 255, 255, .08) 40%,
+    rgba(38, 67, 87, .05) 60%,
+    rgba(255, 255, 255, .35) 80%,
+    rgba(255, 255, 255, .86) 100%
+  );
   --text-2: #425970;
   --placeholder: #526980;
   --window: #bcd9df;
-  --surface-raised: #eef6f9;
+  --surface-raised: rgba(239, 247, 249, .88);
 }
+
+/* The standalone Popup needs its own scene; the page overlay samples the live page. */
 body {
   background:
-    radial-gradient(ellipse at 0% 5%, rgba(145, 191, 255, .6), transparent 55%),
-    radial-gradient(ellipse at 105% 80%, rgba(64, 206, 169, .48), transparent 60%),
+    radial-gradient(ellipse at 0% 5%, rgba(145, 191, 255, .54), transparent 56%),
+    radial-gradient(ellipse at 105% 80%, rgba(64, 206, 169, .40), transparent 62%),
     var(--window);
 }
+
+/* Main optical surface: transparent enough to preserve background colour and shape. */
 .app-window {
-  border: 1px solid var(--glass-edge-dim);
+  border: 0;
   border-radius: 28px;
-  background: var(--glass-tint);
-  box-shadow: 0 24px 64px var(--glass-shadow), 0 4px 12px var(--glass-shadow),
-    inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-edge-dim);
-  backdrop-filter: blur(18px) saturate(165%);
-  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  background: var(--glass-window);
+  background-blend-mode: luminosity;
+  box-shadow:
+    0 18px 46px var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 0 rgba(255, 255, 255, .05);
+  backdrop-filter: blur(15px) saturate(145%) contrast(102%);
+  -webkit-backdrop-filter: blur(15px) saturate(145%) contrast(102%);
 }
+
+/* A restrained reflected patch, not an opaque colour wash. */
 .app-window::before {
   border-radius: inherit;
   background:
-    radial-gradient(ellipse at 0% 0%, var(--glass-sheen), transparent 48%),
-    linear-gradient(125deg, var(--glass-sheen), transparent 28%, transparent 72%, rgba(160, 218, 255, .08));
+    radial-gradient(ellipse at 8% -4%, rgba(255, 255, 255, .16), transparent 35%),
+    linear-gradient(112deg, rgba(255, 255, 255, .045), transparent 28% 76%, rgba(154, 221, 255, .025));
 }
-/* Mask only the decorative rim: never filter, distort or mask text and controls. */
+
+/* Masked border-only stroke: the same mechanism used by the reference prompts. */
 .app-window::after {
   position: absolute;
   inset: 0;
   z-index: 20;
-  padding: 1.5px;
+  padding: 1px;
   border-radius: inherit;
-  background: linear-gradient(135deg, var(--glass-edge) 2%, var(--glass-edge-dim) 26%,
-    var(--glass-edge) 49%, var(--glass-edge-dim) 68%, var(--glass-edge) 100%);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
+  background: var(--glass-rim);
   content: "";
   pointer-events: none;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
 }
+
 main { background: transparent; }
-.topbar, .tabs, .list, .credential, .statusbar {
+.topbar, .list, .credential, .statusbar {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -80,78 +117,291 @@ main { background: transparent; }
 .brand-copy p { font-size: 10px; }
 .window-brand > img { width: 32px; height: 32px; }
 .window-controls { gap: 6px; }
+
+/* Header controls are flat glass circles, not raised beads. */
 :root .icon-button {
+  position: relative;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--glass-edge-dim);
+  overflow: hidden;
+  border: 1px solid var(--glass-line-soft);
   border-radius: 50%;
   background: var(--glass-control);
-  box-shadow: inset 0 1px 0 var(--glass-sheen), 0 2px 5px var(--glass-shadow);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
 }
+:root .icon-button:hover {
+  border-color: var(--glass-line);
+  background: var(--glass-control-hover);
+}
+
+/* Segmented navigation stays quiet so it does not compete with the window. */
 :root .tabs {
+  position: relative;
   height: 46px;
   margin: 2px 16px 4px;
   padding: 4px;
   gap: 4px;
-  border: 1px solid var(--glass-edge-dim);
+  overflow: hidden;
+  border: 0;
   border-radius: 24px;
-  background: var(--glass-card);
-  box-shadow: inset 0 1px 3px var(--glass-shadow), 0 1px 0 var(--glass-sheen);
+  background: rgba(255, 255, 255, .01);
+  background-blend-mode: luminosity;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .10);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
-.tab { height: 36px; border-radius: 20px; transition: background .2s ease, box-shadow .2s ease, color .2s ease; }
-:root .tab.active {
-  border-color: var(--glass-edge-dim);
-  background: linear-gradient(165deg, var(--glass-sheen), transparent 65%), var(--glass-selected);
-  color: var(--green-text);
-  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-sheen), 0 3px 8px var(--glass-shadow);
+:root .tabs::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 1.4px;
+  border-radius: inherit;
+  background: var(--glass-rim);
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
 }
-.tab.active::after { display: none; }
-.content-area { padding: 16px 17px; }
-:root .list, :root .credential, .settings-form {
-  border: 1px solid var(--glass-edge-dim);
+.tab {
+  z-index: 1;
+  height: 36px;
+  border: 0;
   border-radius: 18px;
-  background: linear-gradient(150deg, var(--glass-sheen), transparent 48%), var(--glass-card);
-  box-shadow: inset 0 1px 0 var(--glass-sheen), 0 6px 18px var(--glass-shadow);
+  box-shadow: none;
+  transition: background .16s ease, color .16s ease;
+}
+:root .tab.active {
+  border: 0;
+  background: rgba(255, 255, 255, .13);
+  color: var(--green-text);
+  box-shadow: none;
+}
+:root[data-theme="light"] .tab.active { background: rgba(255, 255, 255, .28); }
+.tab.active::after { display: none; }
+
+.content-area { padding: 16px 17px; }
+
+/* Lists and revealed credentials are flat translucent regions. */
+:root .list,
+:root .credential,
+.settings-form {
+  border: 1px solid var(--glass-line-soft);
+  border-radius: 18px;
+  background: var(--glass-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
 }
 .item { min-height: 64px; padding: 10px; }
-:root .item:hover { background: var(--glass-control); }
-.item-icon { border-radius: 11px; }
-:root .host-chip { border-radius: 14px; background: var(--glass-control); }
-:root .session-badge { background: var(--glass-control); box-shadow: inset 0 1px 0 var(--glass-sheen); }
-:root .session-badge.online { background: var(--green-soft); }
-:root .session-badge.offline { background: rgba(217, 77, 93, .12); }
-.search input, .field-row input, .version-override input { border-radius: 12px; }
-.search input { height: 38px; }
-.search-field svg { color: var(--text-2); }
-.search > button, .actions button, .item > button, .field-row button,
-.settings-save, .settings-reset { border-radius: 999px; box-shadow: inset 0 1px 0 var(--glass-sheen), 0 2px 4px var(--glass-shadow); }
-:root .actions button:not(.primary), :root .item > button:not(.primary), :root .field-row button {
-  background: var(--glass-control);
-  color: var(--text-1);
+:root .item:hover { background: rgba(255, 255, 255, .045); }
+.item-icon {
+  border-radius: 11px;
+  box-shadow: none;
 }
+:root .host-chip,
+:root .session-badge {
+  border-color: var(--glass-line-soft);
+  background: var(--glass-control);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+:root .session-badge.online { background: rgba(65, 211, 155, .095); }
+:root .session-badge.offline { background: rgba(217, 77, 93, .09); }
+
+/* Search follows the prompt literally: almost clear, 4px blur, one inset highlight. */
+.search {
+  position: relative;
+  display: block;
+  height: 42px;
+  margin-bottom: 14px;
+}
+.search-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 42px;
+  overflow: visible;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .055);
+  background-blend-mode: luminosity;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .15), inset 0 -1px 0 rgba(0, 10, 24, .08);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.search-field::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 1.4px;
+  border-radius: inherit;
+  background: var(--glass-rim);
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+.search-field > input,
+.search-field > svg { z-index: 1; }
+.search input {
+  position: relative;
+  height: 42px;
+  padding: 0 52px 0 40px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+.search input:focus { border: 0; background: transparent; box-shadow: none; }
+.search-field:focus-within {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .19), inset 0 -1px 0 rgba(0, 10, 24, .08), 0 0 0 2px rgba(65, 211, 155, .16);
+}
+.search-field svg {
+  z-index: 2;
+  left: 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--text-2);
+}
+
+/* One solid high-contrast control, matching the reference search/CTA treatment. */
+.search > button {
+  position: absolute;
+  z-index: 3;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  line-height: 0;
+  background: #fff;
+  color: #0c1714;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .18);
+  font-size: 0;
+  transition: background .14s ease, transform .14s ease;
+}
+.search > button svg { width: 16px; height: 16px; stroke-width: 2; }
+.search > button:hover { background: #eef3f1; }
+.search > button:active { transform: scale(.94); }
+:root[data-theme="light"] .search > button,
+:root[data-theme="light"] .search > button:hover {
+  border: 0;
+  background: #fff;
+  color: #0c1714;
+}
+
+/* Internal buttons use the Manifesto/Learn More recipe, without convex gradients. */
+:root .actions button,
+:root .item > button,
+:root .field-row button,
+:root .settings-reset,
+:root .settings-save {
+  border: 1px solid var(--glass-line-soft);
+  border-radius: 999px;
+  background: var(--glass-control);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .09);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+:root .actions button:hover,
+:root .item > button:hover,
+:root .field-row button:hover,
+:root .settings-reset:hover {
+  border-color: var(--glass-line);
+  background: var(--glass-control-hover);
+}
+
+/* Primary actions are still state-coloured, but remain flat and translucent. */
+:root .actions button.primary,
+:root .item > button.primary,
+:root .settings-save {
+  border-color: rgba(112, 239, 192, .28);
+  background: rgba(37, 190, 137, .18);
+  color: #b9f9df;
+  box-shadow: inset 0 1px 0 rgba(223, 255, 244, .16);
+}
+:root .actions button.primary:hover,
+:root .item > button.primary:hover,
+:root .settings-save:hover {
+  border-color: rgba(132, 247, 207, .42);
+  background: rgba(37, 190, 137, .26);
+  color: #e0fff3;
+  filter: none;
+}
+
+:root[data-theme="light"] .actions button.primary,
+:root[data-theme="light"] .item > button.primary,
+:root[data-theme="light"] .settings-save {
+  border-color: rgba(8, 125, 86, .30);
+  background: rgba(8, 125, 86, .14);
+  color: #075f41;
+}
+:root[data-theme="light"] .actions button.primary:hover,
+:root[data-theme="light"] .item > button.primary:hover,
+:root[data-theme="light"] .settings-save:hover {
+  border-color: rgba(8, 125, 86, .42);
+  background: rgba(8, 125, 86, .21);
+  color: #054c37;
+}
+
+:root .field-row input,
+:root .version-override input {
+  border-color: var(--glass-line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
 :root .statusbar {
   height: 32px;
   padding: 0 18px;
-  background: var(--glass-card);
-  border-top-color: var(--glass-edge-dim);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  border-top-color: var(--glass-line-soft);
+  background: rgba(8, 16, 23, .12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .055);
 }
-.version-dialog { border-radius: 22px; }
-:root button:focus-visible, :root .tab:focus-visible {
+.version-dialog {
+  border-color: var(--glass-line);
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: 0 18px 45px var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+
+:root button:focus-visible,
+:root .tab:focus-visible {
   outline: 2px solid var(--green-strong);
   outline-offset: 2px;
 }
-/* Opaque fallback also covers browsers without backdrop compositing. */
+
 @supports not (backdrop-filter: blur(1px)) {
-  .app-window { background: var(--glass-solid); }
+  .app-window { background: var(--glass-window-solid); }
 }
+
 @media (prefers-reduced-transparency: reduce) {
-  .app-window { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .app-window { background: var(--glass-window-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
   .app-window::before { display: none; }
+  .search-field,
+  :root .actions button,
+  :root .item > button,
+  :root .field-row button,
+  :root .settings-reset,
+  :root .settings-save,
   .version-dialog { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
+
 @media (forced-colors: active) {
-  .app-window, :root .list, :root .credential, :root .tabs { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
-  .app-window::before, .app-window::after { display: none; }
+  .app-window,
+  :root .list,
+  :root .credential,
+  :root .tabs { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
+  .app-window::before,
+  .app-window::after,
+  .search-field::before { display: none; }
   :root .tab.active { border-color: Highlight; color: Highlight; }
 }

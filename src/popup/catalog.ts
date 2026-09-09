@@ -124,7 +124,7 @@ export class CatalogController {
       const root = document.createElement("article"); root.className = "item";
       const main = document.createElement("div"); main.className = "item-main";
       main.append(textElement("div", "item-title", title));
-      const meta = document.createElement("button"); meta.type = "button"; meta.className = "item-meta-link"; meta.title = "打开应用页面"; meta.textContent = "打开页面";
+       const meta = document.createElement("button"); meta.type = "button"; meta.className = "item-meta-link"; meta.title = "打开应用页面"; meta.setAttribute("aria-label", `打开${title}页面`); meta.innerHTML = '打开<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8" /><path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg>';
       meta.addEventListener("click", () => void this.openAppPage(app)); main.append(meta);
       const actions = document.createElement("div"); actions.className = "actions";
       const view = button("查看账号", "primary"); view.addEventListener("click", () => void this.loadAppAccounts(app)); actions.append(view);

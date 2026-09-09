@@ -36,13 +36,33 @@ function fill(request: FillRequest): FillResult {
 function findUsernameInput(password: HTMLInputElement): HTMLInputElement | undefined {
   const preferred = visibleInputs(
     'input[autocomplete="username"], input[type="email"], input[type="tel"], input[name*="user" i], input[id*="user" i], input[name*="email" i], input[id*="email" i], input[name*="account" i], input[id*="account" i]',
-  );
-  const beforePassword = preferred.filter((input) => input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING);
-  if (beforePassword.length) return beforePassword.at(-1);
+  ).filter((input) => input !== password);
+  if (preferred.length) return bestUsernameCandidate(preferred, password);
 
-  return visibleInputs('input:not([type]), input[type="text"], input[type="email"], input[type="tel"]')
-    .filter((input) => input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING)
-    .at(-1);
+  return bestUsernameCandidate(
+    visibleInputs('input:not([type]), input[type="text"], input[type="email"], input[type="tel"]')
+      .filter((input) => input !== password),
+    password,
+  );
+}
+
+function bestUsernameCandidate(candidates: HTMLInputElement[], password: HTMLInputElement): HTMLInputElement | undefined {
+  return candidates
+    .map((input, index) => ({ input, index, score: usernameScore(input, password, index) }))
+    .sort((left, right) => right.score - left.score)[0]?.input;
+}
+
+function usernameScore(input: HTMLInputElement, password: HTMLInputElement, index: number): number {
+  const autocomplete = input.getAttribute("autocomplete")?.toLowerCase();
+  const type = input.getAttribute("type")?.toLowerCase();
+  const name = `${input.getAttribute("name") || ""} ${input.id}`.toLowerCase();
+  const isBeforePassword = Boolean(input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING);
+  let score = isBeforePassword ? 8 : 0;
+  if (autocomplete === "username") score += 100;
+  if (type === "email") score += 40;
+  if (type === "tel") score += 24;
+  if (/user|email|account|login|phone|mobile/.test(name)) score += 32;
+  return score - index;
 }
 
 function visibleInputs(selector: string): HTMLInputElement[] {
