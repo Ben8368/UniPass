@@ -6,7 +6,7 @@
  * snapshot: before each development build, verification reads the live store
  * version and rejects the build until this value matches it exactly.
  */
-export const STORE_PLUGIN_VERSION = "5.3.1";
+export const STORE_PLUGIN_VERSION = "5.3.2";
 export const PLUGIN_VERSION_OVERRIDE_STORAGE_KEY = "unipassNetworkVersionOverride";
 
 export function normalizePluginVersion(value: unknown): string | null {

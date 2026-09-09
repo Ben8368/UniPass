@@ -1,6 +1,7 @@
 import type { PluginVersionSettings } from "../shared/types";
 import { send } from "./bridge";
 import { errorText, get } from "./dom";
+import type { DomStorage } from "./dom";
 
 type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "unipass-theme";
@@ -18,14 +19,18 @@ export class SettingsController {
   private readonly networkVersionSource = get("networkPluginVersionSource");
   private readonly systemTheme = window.matchMedia("(prefers-color-scheme: light)");
 
-  constructor(private readonly reportStatus: (text: string, isError?: boolean) => void) {}
+  constructor(
+    private readonly reportStatus: (text: string, isError?: boolean) => void,
+    private readonly storage: DomStorage = window.localStorage,
+    private readonly themeTarget: HTMLElement = document.documentElement,
+  ) {}
 
   bind(): void {
     this.applyStoredTheme();
     this.themeToggle.addEventListener("click", () => this.toggleTheme());
     this.systemTheme.addEventListener("change", () => {
       if (!this.getStoredTheme()) {
-        document.documentElement.dataset.theme = this.systemTheme.matches ? "light" : "dark";
+        this.themeTarget.dataset.theme = this.systemTheme.matches ? "light" : "dark";
         this.updateThemeToggle();
       }
     });
@@ -38,24 +43,24 @@ export class SettingsController {
   }
 
   private getStoredTheme(): Theme | null {
-    const value = localStorage.getItem(THEME_STORAGE_KEY);
+    const value = this.storage.getItem(THEME_STORAGE_KEY);
     return value === "light" || value === "dark" ? value : null;
   }
 
   private applyStoredTheme(): void {
-    document.documentElement.dataset.theme = this.getStoredTheme() ?? (this.systemTheme.matches ? "light" : "dark");
+    this.themeTarget.dataset.theme = this.getStoredTheme() ?? (this.systemTheme.matches ? "light" : "dark");
     this.updateThemeToggle();
   }
 
   private toggleTheme(): void {
     const theme = this.effectiveTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    this.themeTarget.dataset.theme = theme;
+    this.storage.setItem(THEME_STORAGE_KEY, theme);
     this.updateThemeToggle();
   }
 
   private effectiveTheme(): Theme {
-    return document.documentElement.dataset.theme === "light" || (document.documentElement.dataset.theme !== "dark" && this.systemTheme.matches) ? "light" : "dark";
+    return this.themeTarget.dataset.theme === "light" || (this.themeTarget.dataset.theme !== "dark" && this.systemTheme.matches) ? "light" : "dark";
   }
 
   private updateThemeToggle(): void {

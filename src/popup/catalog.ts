@@ -1,8 +1,9 @@
-import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, UniPassAccount, UniPassApp } from "../shared/types";
+import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, PageContext, UniPassAccount, UniPassApp } from "../shared/types";
 import { appUrlMatches, isHttpsUrl } from "../shared/url";
 import { userScopeFor } from "../shared/user-scope";
 import { send } from "./bridge";
 import { accountIcon, button, empty, errorText, get, loading, textElement } from "./dom";
+import type { DomStorage } from "./dom";
 
 const PREFIX = "unipass-account-catalog-v3:";
 const LEGACY_PREFIXES = ["unipass-account-catalog-v1:", "unipass-account-catalog-v2:"];
@@ -24,6 +25,9 @@ export class CatalogController {
     private readonly reportStatus: (text: string, isError?: boolean) => void,
     private readonly reveal: (accountId: string | number, username: string) => Promise<void>,
     private readonly fill: (tabId: number | undefined, accountId: string | number, username: string, appUrl?: string) => Promise<void>,
+    private readonly getPageContext?: () => Promise<PageContext>,
+    private readonly openApp?: (appId: string | number, userScope: string) => Promise<void>,
+    private readonly storage: DomStorage = window.localStorage,
   ) {}
 
   bind(): void {
@@ -36,9 +40,9 @@ export class CatalogController {
     const stableScope = userScopeFor(user);
     this.userScope = stableScope;
     this.storageKey = stableScope ? `${PREFIX}${stableScope}` : null;
-    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
-      const key = localStorage.key(i);
-      if (key && LEGACY_PREFIXES.some((prefix) => key.startsWith(prefix))) localStorage.removeItem(key);
+    for (let i = this.storage.length - 1; i >= 0; i -= 1) {
+      const key = this.storage.key(i);
+      if (key && LEGACY_PREFIXES.some((prefix) => key.startsWith(prefix))) this.storage.removeItem(key);
     }
     return this.userScope;
   }
@@ -48,13 +52,13 @@ export class CatalogController {
   async loadCurrentPage(override?: CachedCatalog): Promise<void> {
     this.currentAccounts.innerHTML = loading("正在本地匹配账号目录");
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.id || !tab.url || !isHttpsUrl(tab.url)) throw new Error("为保护凭据安全，仅支持 HTTPS 页面填充");
+      const tab = await this.getTabContext();
+      if (!tab?.tabId || !tab.url || !isHttpsUrl(tab.url)) throw new Error("为保护凭据安全，仅支持 HTTPS 页面填充");
       this.pageHost.textContent = new URL(tab.url).hostname;
       let catalog = override ?? this.loadCached();
       if (!override && (!catalog || Date.now() - catalog.syncedAt > TTL_MS)) catalog = await this.sync();
       if (!catalog) throw new Error("账号目录不可用，请重新同步");
-      await this.renderAccounts(this.currentAccounts, this.accountsForUrl(catalog.entries, tab.url), tab.id, tab.url);
+      await this.renderAccounts(this.currentAccounts, this.accountsForUrl(catalog.entries, tab.url), tab.tabId, tab.url);
     } catch (error) {
       this.currentAccounts.innerHTML = empty(errorText(error));
     }
@@ -75,7 +79,7 @@ export class CatalogController {
   private loadCached(): CachedCatalog | null {
     if (!this.storageKey) return null;
     try {
-      const raw = localStorage.getItem(this.storageKey);
+      const raw = this.storage.getItem(this.storageKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as CachedCatalog;
       return Number.isFinite(parsed.syncedAt) && Array.isArray(parsed.entries) ? parsed : null;
@@ -90,7 +94,7 @@ export class CatalogController {
       const result = await send<AccountCatalogResult>({ type: "accountCatalog", userScope: this.requireUserScope() });
       if (result.complete) {
         const catalog = { syncedAt: Date.now(), entries: result.entries };
-        if (this.storageKey) localStorage.setItem(this.storageKey, JSON.stringify(catalog));
+        if (this.storageKey) this.storage.setItem(this.storageKey, JSON.stringify(catalog));
         this.reportStatus("账号目录已同步；当前页仅在本地匹配");
         return catalog;
       }
@@ -141,13 +145,18 @@ export class CatalogController {
   }
 
   private async openAppPage(app: UniPassApp): Promise<void> {
-    try { this.reportStatus("正在获取应用地址"); await chrome.tabs.create({ url: await send<string>({ type: "appUrl", appId: app.id, userScope: this.requireUserScope() }) }); this.reportStatus("已打开应用页面"); }
+    try {
+      this.reportStatus("正在获取应用地址");
+      if (this.openApp) await this.openApp(app.id, this.requireUserScope());
+      else await chrome.tabs.create({ url: await send<string>({ type: "appUrl", appId: app.id, userScope: this.requireUserScope() }) });
+      this.reportStatus("已打开应用页面");
+    }
     catch (error) { this.reportStatus(errorText(error), true); }
   }
 
   private async loadAppAccounts(app: UniPassApp): Promise<void> {
     this.apps.classList.add("hidden"); this.heading.classList.add("hidden"); this.back.classList.remove("hidden"); this.appAccounts.classList.remove("hidden"); this.appAccounts.innerHTML = loading("正在加载账号");
-    try { const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id, userScope: this.requireUserScope() }); const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); const id = tab?.id != null && tab.url && appUrlMatches(result.appUrl, tab.url) ? tab.id : undefined; await this.renderAccounts(this.appAccounts, result.accounts, id, result.appUrl); }
+    try { const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id, userScope: this.requireUserScope() }); const tab = await this.getTabContext(); const id = tab?.tabId != null && tab.url && appUrlMatches(result.appUrl, tab.url) ? tab.tabId : undefined; await this.renderAccounts(this.appAccounts, result.accounts, id, result.appUrl); }
     catch (error) { this.appAccounts.innerHTML = empty(errorText(error)); }
   }
 
@@ -176,6 +185,13 @@ export class CatalogController {
   private requireUserScope(): string {
     if (!this.userScope) throw new Error("尚未登录 UniPass");
     return this.userScope;
+  }
+
+  private async getTabContext(): Promise<PageContext> {
+    if (this.getPageContext) return this.getPageContext();
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id == null || !tab.url) throw new Error("无法识别当前页面");
+    return { tabId: tab.id, url: tab.url };
   }
 
   private showAppList(): void { this.apps.classList.remove("hidden"); this.heading.classList.remove("hidden"); this.back.classList.add("hidden"); this.appAccounts.classList.add("hidden"); this.appAccounts.replaceChildren(); }

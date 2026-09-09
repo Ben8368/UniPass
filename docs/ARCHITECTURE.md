@@ -5,12 +5,14 @@
 UniPass Minimal 是 Chrome Manifest V3 扩展，由三个运行上下文和共享模块组成：
 
 ```text
-Popup（展示与用户操作）
+Popup / 页面浮层（展示与用户操作）
   → chrome.runtime message
 Service Worker（UniPass API、登录辅助、凭据解密、缓存、Jupiter 保活）
   → 用户点击填入后临时注入
 Content Script（定位输入框、写值、派发事件，不提交表单）
 ```
+
+用户点击扩展 Action 后，Service Worker 只在当前 HTTPS 标签页临时注入 `content/page-overlay.js`。该脚本挂载 closed Shadow DOM 浮层，复用 Popup 的展示控制器；点击页面外部、按 Escape、再次点击 Action 或页面离开时移除浮层。浮层不读取页面内容，只通过消息向 Service Worker 请求会话、目录和用户选中的凭据操作。Manifest 仅向 HTTPS 页面公开浮层所需的三个品牌图标。
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
@@ -20,9 +22,9 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 | 模块 | 职责 | 禁止事项 |
 | --- | --- | --- |
-| `src/popup/` | 会话状态、目录与账号展示、用户点击查看/复制/填入 | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码 |
+| `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、用户点击查看/复制/填入 | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码 |
 | `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
-| `src/content/` | 当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
+| `src/content/` | 用户点击扩展后挂载页面浮层，或用户点击填入后在当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
 | `src/shared/api.ts` | UniPass API 包装、响应校验和密码算法 | UI 状态或 DOM 操作 |
@@ -33,11 +35,12 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 ## 关键数据流
 
 - Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与版本信息）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、商店基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。默认基线来自构建时同步的 `STORE_PLUGIN_VERSION`；Popup 可临时覆盖请求头但不改变构建/发布约束，运行时也不查询商店。
+- 页面浮层的 `pageContext`、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
 
 ### 当前页面账号
 
 1. Service Worker 从 `/session/current_user` 获取当前 UniPass 会话；账户页昵称 `nickName` 按用户请求仅传入 Popup 内存，用于用户名悬停提示，绝不持久化或参与身份作用域。Popup 的用户作用域优先服务端稳定 ID，缺失时使用服务端登录名，再回退邮箱；昵称和姓名不参与作用域。三者均缺失时不执行需要用户身份的目录、应用或凭据请求。
-2. Popup 读取活动 HTTPS 标签页；木星单页应用仅在其已授权的同一 origin 内允许路由变化，其他应用仍要求 origin/path 匹配。
+2. Popup/页面浮层读取或接收当前 HTTPS 标签页上下文；木星单页应用仅在其已授权的同一 origin 内允许路由变化，其他应用仍要求 origin/path 匹配。
 3. Popup 从本地目录缓存匹配应用 origin/path；过期时请求 Service Worker 完整同步。
 4. Service Worker 校验用户作用域后只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
 5. Popup 仅针对匹配账号请求凭据可用性；后台返回三态，不返回密码。

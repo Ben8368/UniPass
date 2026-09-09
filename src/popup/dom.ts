@@ -1,7 +1,25 @@
+export interface DomStorage {
+  readonly length: number;
+  key(index: number): string | null;
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+let domRoot: Document | ShadowRoot = document;
+
+export function setDomRoot(root: Document | ShadowRoot): void {
+  domRoot = root;
+}
+
 export function get<T extends HTMLElement = HTMLElement>(id: string): T {
-  const element = document.getElementById(id);
+  const element = domRoot.querySelector(`#${id}`);
   if (!element) throw new Error(`Missing element: ${id}`);
   return element as T;
+}
+
+export function queryAll<T extends Element = Element>(selector: string): T[] {
+  return Array.from(domRoot.querySelectorAll<T>(selector));
 }
 
 export function textElement(tag: string, className: string, text: string): HTMLElement {

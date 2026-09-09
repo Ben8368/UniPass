@@ -11,6 +11,7 @@ await build({
   entryPoints: {
     "background/service-worker": "src/background/service-worker.ts",
     "content/content-script": "src/content/content-script.ts",
+    "content/page-overlay": "src/content/page-overlay.ts",
     popup: "src/popup/popup.ts",
   },
   bundle: true,
@@ -20,6 +21,7 @@ await build({
   target: "chrome120",
   sourcemap: false,
   logLevel: "info",
+  loader: { ".html": "text", ".css": "text" },
 });
 
 for (const [source, target] of [

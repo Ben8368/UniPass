@@ -1,23 +1,44 @@
-import type { PopupSessionUser, UniPassLoginStartResult } from "../shared/types";
+import type { PageContext, PopupSessionUser, UniPassLoginStartResult } from "../shared/types";
 import { send } from "./bridge";
 import { CatalogController } from "./catalog";
 import { CredentialController } from "./credentials";
-import { errorText, get } from "./dom";
+import { DomStorage, errorText, get, queryAll, setDomRoot } from "./dom";
 import { SettingsController } from "./settings";
 
 const PORTAL_URL = "https://portal.unipass.top/application";
-const identity = get("identity");
-const sessionBadge = get<HTMLButtonElement>("sessionBadge");
-const status = get("status");
-const apps = get("apps");
-const settings = new SettingsController(setStatus);
-let userScope: string | null = null;
-const credentials = new CredentialController(setStatus, () => userScope);
-const catalog = new CatalogController(setStatus, (id, username) => credentials.reveal(id, username), (tabId, id, username, appUrl) => credentials.fill(tabId, id, username, appUrl));
+export interface PopupEnvironment {
+  root?: Document | ShadowRoot;
+  storage?: DomStorage;
+  pageContext?: () => Promise<PageContext>;
+  openApp?: (appId: string | number, userScope: string) => Promise<void>;
+  overlay?: boolean;
+  themeTarget?: HTMLElement;
+}
 
-void initialize();
+export function initializePopup(environment: PopupEnvironment = {}): void {
+  setDomRoot(environment.root ?? document);
+  const identity = get("identity");
+  const sessionBadge = get<HTMLButtonElement>("sessionBadge");
+  const status = get("status");
+  const apps = get("apps");
+  let userScope: string | null = null;
+  const setStatus = (text: string, isError = false): void => {
+    status.textContent = text;
+    status.classList.toggle("error", isError);
+  };
+  const settings = new SettingsController(setStatus, environment.storage, environment.themeTarget ?? (environment.root instanceof ShadowRoot ? environment.root.host as HTMLElement : document.documentElement));
+  const credentials = new CredentialController(setStatus, () => userScope, environment.overlay);
+  const catalog = new CatalogController(
+    setStatus,
+    (id, username) => credentials.reveal(id, username),
+    (tabId, id, username, appUrl) => credentials.fill(tabId, id, username, appUrl),
+    environment.pageContext,
+    environment.openApp,
+    environment.storage,
+  );
+  void initialize();
 
-async function initialize(): Promise<void> {
+  async function initialize(): Promise<void> {
   settings.bind();
   credentials.bind();
   catalog.bind();
@@ -45,10 +66,10 @@ async function initialize(): Promise<void> {
     sessionBadge.setAttribute("aria-label", "一键登录 UniPass，并授权 Tec-IAM 获取飞书身份标识");
     setStatus(errorText(error), true);
   }
-  await catalog.loadCurrentPage();
-}
+    await catalog.loadCurrentPage();
+  }
 
-function bindControls(): void {
+  function bindControls(): void {
   sessionBadge.addEventListener("click", () => {
     if (sessionBadge.classList.contains("online")) {
       window.open(PORTAL_URL, "_blank");
@@ -59,21 +80,22 @@ function bindControls(): void {
       setStatus(errorText(error), true);
     });
   });
-  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current")));
-}
+    queryAll<HTMLButtonElement>(".tab").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view === "apps" ? "apps" : "current")));
+  }
 
-function switchView(view: "current" | "apps"): void {
-  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
+  function switchView(view: "current" | "apps"): void {
+    queryAll<HTMLButtonElement>(".tab").forEach((button) => {
     const active = button.dataset.view === view;
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
-  });
+    });
   get("currentView").classList.toggle("hidden", view !== "current");
   get("appsView").classList.toggle("hidden", view !== "apps");
   if (view === "apps" && !apps.childElementCount) void catalog.loadApps();
+  }
 }
 
-function setStatus(text: string, isError = false): void {
-  status.textContent = text;
-  status.classList.toggle("error", isError);
+if (document.querySelector(".app-window")) {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => initializePopup());
+  else initializePopup();
 }

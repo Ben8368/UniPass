@@ -37,6 +37,9 @@ export type PopupSessionUser = Omit<CurrentUser, "nickname">;
 
 export type BackgroundRequest =
   | { type: "session" }
+  | { type: "pageContext" }
+  | { type: "openApp"; appId: string | number; userScope: string }
+  | { type: "fillFromOverlay"; accountId: string | number; fallbackUsername: string; expectedAppUrl: string; userScope: string }
   | { type: "startUniPassLogin" }
   | { type: "getPluginVersionSettings" }
   | { type: "setPluginVersionOverride"; version: string }
@@ -119,4 +122,9 @@ export interface FillResult {
   usernameFilled: boolean;
   passwordFilled: boolean;
   error?: string;
+}
+
+export interface PageContext {
+  tabId: number;
+  url: string;
 }

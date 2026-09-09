@@ -21,7 +21,7 @@ function storageArea() {
   };
 }
 
-globalThis.chrome = { runtime: { getManifest: () => ({ version: "5.3.1" }) }, storage: { local: storageArea() } };
+globalThis.chrome = { runtime: { getManifest: () => ({ version: "5.3.3" }) }, storage: { local: storageArea() } };
 
 let updateRequests = 0;
 let portalRequests = 0;
@@ -83,15 +83,15 @@ test("portal requests declare the store baseline rather than the locally loaded 
   await api.currentUser();
   const settings = await api.pluginVersionSettings();
   assert.deepEqual(settings, {
-    localBuildVersion: "5.3.1",
-    networkVersion: "5.3.1",
-    storeBaselineVersion: "5.3.1",
+    localBuildVersion: "5.3.3",
+    networkVersion: "5.3.2",
+    storeBaselineVersion: "5.3.2",
     override: "",
     source: "store-baseline",
   });
   assert.equal(updateRequests, 0);
   assert.equal(portalRequests, 4);
-  assert.deepEqual(submittedPluginVersions, ["5.3.1", "5.3.1", "5.3.1", "5.3.1"]);
+  assert.deepEqual(submittedPluginVersions, ["5.3.2", "5.3.2", "5.3.2", "5.3.2"]);
 });
 
 test("a validated manual network version override is persisted and can be cleared", async () => {
@@ -102,7 +102,7 @@ test("a validated manual network version override is persisted and can be cleare
   assert.deepEqual(submittedPluginVersions.slice(-2), ["5.4.0", "5.4.0"]);
   await assert.rejects(api.setPluginVersionOverride("not-a-version"), /三段数字版号/);
   const restored = await api.setPluginVersionOverride("");
-  assert.equal(restored.networkVersion, "5.3.1");
+  assert.equal(restored.networkVersion, "5.3.2");
   assert.equal(restored.source, "store-baseline");
 });
 

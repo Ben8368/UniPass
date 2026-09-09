@@ -1,0 +1,84 @@
+import popupCss from "../popup/popup.css";
+import popupHtml from "../popup/popup.html";
+import { send } from "../popup/bridge";
+import { initializePopup } from "../popup/popup";
+import type { PageContext } from "../shared/types";
+
+const OVERLAY_ID = "unipass-page-overlay";
+
+const existing = document.getElementById(OVERLAY_ID);
+if (existing) {
+  existing.remove();
+} else {
+  void mount();
+}
+
+async function mount(): Promise<void> {
+  const host = document.createElement("div");
+  host.id = OVERLAY_ID;
+  host.style.cssText = "position:fixed;top:16px;right:16px;width:420px;height:min(580px,calc(100vh - 32px));z-index:2147483647;pointer-events:none;background:transparent!important;";
+  const shadow = host.attachShadow({ mode: "closed" });
+  const style = document.createElement("style");
+  style.textContent = overlayStyles(popupCss);
+  shadow.append(style);
+
+  const overlayRoot = document.createElement("div");
+  overlayRoot.className = "overlay-root";
+  overlayRoot.style.pointerEvents = "none";
+  const parsed = new DOMParser().parseFromString(popupHtml, "text/html");
+  const appWindow = parsed.querySelector<HTMLElement>(".app-window");
+  if (!appWindow) return;
+  const brandIcon = appWindow.querySelector<HTMLImageElement>(".window-brand > img");
+  if (brandIcon) brandIcon.src = chrome.runtime.getURL("icons/icon48.png");
+  overlayRoot.append(appWindow);
+  shadow.append(overlayRoot);
+  document.documentElement.append(host);
+
+  const closeOnOutsidePointer = (event: PointerEvent): void => {
+    if (event.composedPath().includes(host)) return;
+    closeOverlay();
+  };
+  const closeOnEscape = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") closeOverlay();
+  };
+  const closeOverlay = (): void => {
+    document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+    document.removeEventListener("keydown", closeOnEscape, true);
+    host.remove();
+  };
+  document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+  document.addEventListener("keydown", closeOnEscape, true);
+
+  initializePopup({
+    root: shadow,
+    storage: createMemoryStorage(),
+    overlay: true,
+    themeTarget: overlayRoot,
+    pageContext: () => send<PageContext>({ type: "pageContext" }),
+    openApp: (appId, userScope) => send<void>({ type: "openApp", appId, userScope }),
+  });
+}
+
+function overlayStyles(css: string): string {
+  return `${css
+    .replaceAll(":root[data-theme", ".overlay-root[data-theme")
+    .replaceAll(":root", ".overlay-root")}
+    :host { all: initial !important; position: fixed !important; top: 16px !important; right: 16px !important; width: 420px !important; height: min(580px, calc(100vh - 32px)) !important; display: block !important; z-index: 2147483647 !important; background: transparent !important; color: initial; font: initial; line-height: normal; pointer-events: none !important; }
+    .overlay-root { width: 100%; height: 100%; color-scheme: dark; pointer-events: none; background: transparent !important; }
+    .overlay-root > .app-window { width: 100%; height: 100%; border: 1px solid rgba(255,255,255,.18); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.08); pointer-events: auto; }
+    .overlay-root > .app-window .content-area { overscroll-behavior: contain; }
+    @media (max-width: 460px) { :host { top: 8px !important; right: 8px !important; width: calc(100vw - 16px) !important; height: min(580px, calc(100vh - 16px)) !important; } }
+  `;
+}
+
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>();
+  return {
+    get length() { return values.size; },
+    key(index) { return Array.from(values.keys())[index] ?? null; },
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, value); },
+    removeItem(key) { values.delete(key); },
+    clear() { values.clear(); },
+  };
+}

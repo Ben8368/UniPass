@@ -14,6 +14,7 @@ import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isJupiterUrl } from "../shared/url";
 import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import { clearUniPassLoginForTab, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
+import { fillFromOverlay, openApp, pageContextFor, togglePageOverlay } from "./page-overlay";
 import type {
   BackgroundRequest,
   BackgroundResponse,
@@ -66,9 +67,16 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   void clearUniPassLoginForTab(tabId);
 });
 
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.id == null) return;
+  void togglePageOverlay(tab.id).catch((error: unknown) => {
+    console.warn("UniPass 页面浮层打开失败", error);
+  });
+});
+
 chrome.runtime.onMessage.addListener(
-  (message: BackgroundRequest, _sender, sendResponse: (response: BackgroundResponse) => void) => {
-    handle(message)
+  (message: BackgroundRequest, sender, sendResponse: (response: BackgroundResponse) => void) => {
+    handle(message, sender)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error: unknown) => {
         const text = error instanceof Error ? error.message : "未知错误";
@@ -78,10 +86,16 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-function handle(message: BackgroundRequest): Promise<unknown> {
+function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender = {}): Promise<unknown> {
   switch (message.type) {
     case "session":
       return currentUser().then(popupSessionUserFor);
+    case "pageContext":
+      return pageContextFor(sender);
+    case "openApp":
+      return withUserScope(message.userScope, () => openApp(message.appId));
+    case "fillFromOverlay":
+      return withUserScope(message.userScope, () => fillFromOverlay(sender, message));
     case "startUniPassLogin":
       return startUniPassLogin();
     case "getPluginVersionSettings":

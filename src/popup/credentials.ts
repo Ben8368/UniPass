@@ -16,7 +16,11 @@ export class CredentialController {
   private countdownTimer: number | undefined;
   private clearAt = 0;
 
-  constructor(private readonly reportStatus: (text: string, isError?: boolean) => void, private readonly getUserScope: () => string | null) {}
+  constructor(
+    private readonly reportStatus: (text: string, isError?: boolean) => void,
+    private readonly getUserScope: () => string | null,
+    private readonly fillFromOverlay = false,
+  ) {}
 
   bind(): void {
     get<HTMLButtonElement>("copyUsername").addEventListener("click", () => void this.copy("username"));
@@ -39,6 +43,18 @@ export class CredentialController {
 
   async fill(tabId: number | undefined, accountId: string | number, fallbackUsername: string, expectedAppUrl?: string): Promise<void> {
     if (tabId == null || !expectedAppUrl) return;
+    if (this.fillFromOverlay) {
+      try {
+        const userScope = this.getUserScope();
+        if (!userScope) throw new Error("尚未登录 UniPass");
+        const result = await send<FillResult>({ type: "fillFromOverlay", accountId, fallbackUsername, expectedAppUrl, userScope });
+        if (!result?.ok) throw new Error(result?.error || "填充失败");
+        this.reportStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
+      } catch (error) {
+        this.reportStatus(errorText(error), true);
+      }
+      return;
+    }
     let credential: Credential | null = null;
     try {
       this.reportStatus("正在填入当前页面");
