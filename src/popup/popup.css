@@ -273,7 +273,7 @@ main {
   display: grid;
   min-height: 42px;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: start;
+  align-items: center;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -297,7 +297,7 @@ main {
   align-self: center;
   min-width: 0;
   max-width: 205px;
-  height: 27px;
+  height: 32px;
   align-items: center;
   gap: 7px;
   padding: 0 9px;

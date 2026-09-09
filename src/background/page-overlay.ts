@@ -1,11 +1,23 @@
 import { appUrlForApp, credentialForAccount } from "../shared/api";
 import { appUrlMatches, isHttpsUrl } from "../shared/url";
-import type { FillRequest, FillResult, PageContext } from "../shared/types";
+import type { FillRequest, FillResult, PageContext, PageTheme } from "../shared/types";
+import { detectPageTheme } from "../shared/page-theme";
 
 export async function pageContextFor(sender: chrome.runtime.MessageSender): Promise<PageContext> {
   const tab = sender.tab;
   if (tab?.id == null || !tab.url) throw new Error("无法识别当前页面");
   return { tabId: tab.id, url: tab.url };
+}
+
+export async function pageThemeFor(sender: chrome.runtime.MessageSender): Promise<PageTheme> {
+  const tab = sender.tab?.id != null ? sender.tab : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+  if (!tab?.id || !tab.url || !isHttpsUrl(tab.url)) return "light";
+  try {
+    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: detectPageTheme });
+    return result?.result === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
 }
 
 export async function openApp(appId: string | number): Promise<void> {

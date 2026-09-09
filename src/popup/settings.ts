@@ -52,6 +52,12 @@ export class SettingsController {
     this.updateThemeToggle();
   }
 
+  applyAutoTheme(theme: Theme): void {
+    if (this.getStoredTheme()) return;
+    this.themeTarget.dataset.theme = theme;
+    this.updateThemeToggle();
+  }
+
   private toggleTheme(): void {
     const theme = this.effectiveTheme() === "dark" ? "light" : "dark";
     this.themeTarget.dataset.theme = theme;

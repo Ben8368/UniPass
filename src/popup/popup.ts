@@ -1,4 +1,4 @@
-import type { PageContext, PopupSessionUser, UniPassLoginStartResult } from "../shared/types";
+import type { PageContext, PageTheme, PopupSessionUser, UniPassLoginStartResult } from "../shared/types";
 import { send } from "./bridge";
 import { CatalogController } from "./catalog";
 import { CredentialController } from "./credentials";
@@ -40,6 +40,7 @@ export function initializePopup(environment: PopupEnvironment = {}): void {
 
   async function initialize(): Promise<void> {
   settings.bind();
+  await applyPageTheme();
   credentials.bind();
   catalog.bind();
   bindControls();
@@ -67,6 +68,15 @@ export function initializePopup(environment: PopupEnvironment = {}): void {
     setStatus(errorText(error), true);
   }
     await catalog.loadCurrentPage();
+  }
+
+  async function applyPageTheme(): Promise<void> {
+    try {
+      const theme = await send<PageTheme>({ type: "pageTheme" });
+      settings.applyAutoTheme(theme);
+    } catch {
+      // Browser-internal pages and pages that reject injection use the stored/system theme.
+    }
   }
 
   function bindControls(): void {

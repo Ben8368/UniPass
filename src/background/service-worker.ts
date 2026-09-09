@@ -14,7 +14,7 @@ import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isJupiterUrl } from "../shared/url";
 import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import { clearUniPassLoginForTab, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
-import { fillFromOverlay, openApp, pageContextFor, togglePageOverlay } from "./page-overlay";
+import { fillFromOverlay, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
 import type {
   BackgroundRequest,
   BackgroundResponse,
@@ -92,6 +92,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return currentUser().then(popupSessionUserFor);
     case "pageContext":
       return pageContextFor(sender);
+    case "pageTheme":
+      return pageThemeFor(sender);
     case "openApp":
       return withUserScope(message.userScope, () => openApp(message.appId));
     case "fillFromOverlay":

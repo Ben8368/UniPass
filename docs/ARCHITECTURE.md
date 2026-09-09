@@ -12,7 +12,7 @@ Service Worker（UniPass API、登录辅助、凭据解密、缓存、Jupiter �
 Content Script（定位输入框、写值、派发事件，不提交表单）
 ```
 
-用户点击扩展 Action 后，Service Worker 只在当前 HTTPS 标签页临时注入 `content/page-overlay.js`。该脚本挂载 closed Shadow DOM 浮层，复用 Popup 的展示控制器；点击页面外部、按 Escape、再次点击 Action 或页面离开时移除浮层。浮层不读取页面内容，只通过消息向 Service Worker 请求会话、目录和用户选中的凭据操作。Manifest 仅向 HTTPS 页面公开浮层所需的三个品牌图标。
+用户点击扩展 Action 后，Service Worker 只在当前 HTTPS 标签页临时注入 `content/page-overlay.js`，并在浮层初始化时检测当前页面主题；未手动指定主题时，白色页面使用浅色、深色页面使用暗色。该脚本挂载 closed Shadow DOM 浮层，复用 Popup 的展示控制器；点击页面外部、按 Escape、再次点击 Action 或页面离开时移除浮层。浮层不读取页面内容，只通过消息向 Service Worker 请求会话、目录和用户选中的凭据操作。Manifest 仅向 HTTPS 页面公开浮层所需的三个品牌图标。
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
@@ -35,7 +35,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 ## 关键数据流
 
 - Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与版本信息）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、商店基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。默认基线来自构建时同步的 `STORE_PLUGIN_VERSION`；Popup 可临时覆盖请求头但不改变构建/发布约束，运行时也不查询商店。
-- 页面浮层的 `pageContext`、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
+- 页面浮层的 `pageContext`、页面主题、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；页面主题检测仅读取当前 HTTPS 页面的渲染背景色与 `color-scheme`，不读取页面正文、Cookie、表单值或页面存储；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
 
 ### 当前页面账号
 
