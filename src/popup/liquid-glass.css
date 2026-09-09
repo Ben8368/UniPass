@@ -206,6 +206,10 @@ main { background: transparent; }
 }
 :root .session-badge.online { background: rgba(65, 211, 155, .095); }
 :root .session-badge.offline { background: rgba(217, 77, 93, .09); }
+:root[data-theme="dark"] .session-badge.online:not(:disabled):hover {
+  background: transparent;
+  filter: none;
+}
 
 /* Search follows the prompt literally: almost clear, 4px blur, one inset highlight. */
 .search {
