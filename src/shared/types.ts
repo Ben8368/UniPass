@@ -41,6 +41,7 @@ export type BackgroundRequest =
   | { type: "pageTheme" }
   | { type: "openApp"; appId: string | number; userScope: string }
   | { type: "fillFromOverlay"; accountId: string | number; fallbackUsername: string; expectedAppUrl: string; userScope: string }
+  | { type: "fillFromPopup"; tabId: number; accountId: string | number; fallbackUsername: string; expectedAppUrl: string; userScope: string }
   | { type: "startUniPassLogin" }
   | { type: "completeUniPassLogin" }
   | { type: "getPluginVersionSettings" }

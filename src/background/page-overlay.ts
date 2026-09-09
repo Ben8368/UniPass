@@ -1,6 +1,6 @@
 import { appUrlForApp, credentialForAccount } from "../shared/api";
 import { appUrlMatches, isHttpsUrl } from "../shared/url";
-import type { FillRequest, FillResult, PageContext, PageTheme } from "../shared/types";
+import type { BackgroundRequest, FillRequest, FillResult, PageContext, PageTheme } from "../shared/types";
 import { detectPageTheme } from "../shared/page-theme";
 
 export async function pageContextFor(sender: chrome.runtime.MessageSender): Promise<PageContext> {
@@ -32,10 +32,23 @@ export async function togglePageOverlay(tabId: number): Promise<void> {
 
 export async function fillFromOverlay(
   sender: chrome.runtime.MessageSender,
-  message: Extract<import("../shared/types").BackgroundRequest, { type: "fillFromOverlay" }>,
+  message: Extract<BackgroundRequest, { type: "fillFromOverlay" }>,
 ): Promise<FillResult> {
   const tabId = sender.tab?.id;
   if (tabId == null) throw new Error("无法确认当前页面");
+  return fillIntoTab(tabId, message);
+}
+
+export async function fillFromPopup(
+  message: Extract<BackgroundRequest, { type: "fillFromPopup" }>,
+): Promise<FillResult> {
+  return fillIntoTab(message.tabId, message);
+}
+
+async function fillIntoTab(
+  tabId: number,
+  message: Pick<Extract<BackgroundRequest, { type: "fillFromOverlay" }>, "accountId" | "fallbackUsername" | "expectedAppUrl">,
+): Promise<FillResult> {
   const tab = await chrome.tabs.get(tabId);
   if (!tab.active || !tab.url || !isHttpsUrl(tab.url) || !appUrlMatches(message.expectedAppUrl, tab.url)) {
     return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前标签页已切换或不属于该应用，已取消填充" };

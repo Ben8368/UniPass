@@ -24,6 +24,7 @@ interface JupiterLoginResponse {
 }
 
 let keepaliveRun: Promise<void> | null = null;
+const activeSessionSyncs = new Set<Promise<void>>();
 
 async function readStoredJupiterKeepaliveSettings(): Promise<JupiterKeepaliveSettings> {
   const stored = await chrome.storage.local.get(JUPITER_KEEPALIVE_STORAGE_KEY);
@@ -59,11 +60,8 @@ export async function setJupiterKeepalive(
   _username?: string,
 ): Promise<JupiterKeepaliveSettings> {
   if (!enabled) {
-    await chrome.alarms.clear(JUPITER_KEEPALIVE_ALARM);
-    const settings: JupiterKeepaliveSettings = { enabled: false };
-    await chrome.storage.local.set({ [JUPITER_KEEPALIVE_STORAGE_KEY]: settings });
-    await chrome.storage.session.remove(JUPITER_KEEPALIVE_SESSION_KEY);
-    return settings;
+    await disableJupiterKeepalive();
+    return { enabled: false };
   }
   if (appId == null) throw new Error("未选择木星应用");
 
@@ -223,6 +221,16 @@ async function syncJupiterSession(
 }
 
 export async function syncStoredJupiterSessionToTab(tabId: number): Promise<void> {
+  const sync = syncStoredJupiterSessionToTabInner(tabId);
+  activeSessionSyncs.add(sync);
+  void sync.then(
+    () => activeSessionSyncs.delete(sync),
+    () => activeSessionSyncs.delete(sync),
+  );
+  return sync;
+}
+
+async function syncStoredJupiterSessionToTabInner(tabId: number): Promise<void> {
   const stored = await chrome.storage.session.get(JUPITER_KEEPALIVE_SESSION_KEY);
   const loginData = stored[JUPITER_KEEPALIVE_SESSION_KEY] as
     | (JupiterLoginResponse["data"] & { userScope?: string })
@@ -236,6 +244,8 @@ export async function syncStoredJupiterSessionToTab(tabId: number): Promise<void
     const tab = await chrome.tabs.get(tabId);
     if (!tab.url || !isJupiterUrl(tab.url)) return;
     await assertCurrentUserScope(loginData.userScope);
+    const settings = await readStoredJupiterKeepaliveSettings();
+    if (!settings.enabled || settings.userScope !== loginData.userScope) return;
     const { userScope: _userScope, ...sessionData } = loginData;
     await chrome.scripting.executeScript({
       target: { tabId },
@@ -251,7 +261,7 @@ export async function syncStoredJupiterSessionToTab(tabId: number): Promise<void
     });
   } catch (error: unknown) {
     if (error instanceof UserScopeMismatchError) {
-      await disableJupiterKeepalive();
+      await disableJupiterKeepalive(false);
       return;
     }
     // A tab can close or be replaced after tabs.query/onUpdated reports it.
@@ -265,12 +275,20 @@ function isMissingTabError(error: unknown): boolean {
   return /no tab with id/i.test(message);
 }
 
-async function disableJupiterKeepalive(): Promise<void> {
+async function disableJupiterKeepalive(waitForActiveSyncs = true): Promise<void> {
   await chrome.alarms.clear(JUPITER_KEEPALIVE_ALARM);
   await chrome.storage.local.set({
     [JUPITER_KEEPALIVE_STORAGE_KEY]: { enabled: false },
   });
   await chrome.storage.session.remove(JUPITER_KEEPALIVE_SESSION_KEY);
+  if (waitForActiveSyncs) await waitForActiveSessionSyncs();
+  // A sync that started before disable may have read the token already. Remove again after
+  // it settles so no extension-owned session token remains available for later tab updates.
+  await chrome.storage.session.remove(JUPITER_KEEPALIVE_SESSION_KEY);
+}
+
+async function waitForActiveSessionSyncs(): Promise<void> {
+  await Promise.all([...activeSessionSyncs].map((sync) => sync.catch(() => undefined)));
 }
 
 async function saveJupiterKeepaliveResult(settings: JupiterKeepaliveSettings): Promise<void> {

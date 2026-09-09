@@ -26,3 +26,9 @@ test("Jupiter keepalive rechecks settings before applying a renewal", () => {
 test("keepalive does not restore an enabled state after it was disabled mid-request", () => {
   assert.match(source, /const latestSettings = await readStoredJupiterKeepaliveSettings\(\)[\s\S]*?if \(latestSettings\.enabled && latestSettings\.userScope === settings\.userScope\)/);
 });
+
+test("disabling keepalive waits for active tab syncs and syncs recheck enabled state", () => {
+  assert.match(source, /const activeSessionSyncs = new Set<Promise<void>>\(\)/);
+  assert.match(source, /if \(!settings\.enabled \|\| settings\.userScope !== loginData\.userScope\) return/);
+  assert.match(source, /if \(waitForActiveSyncs\) await waitForActiveSessionSyncs\(\)/);
+});

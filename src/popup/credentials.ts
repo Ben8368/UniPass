@@ -1,5 +1,4 @@
-import type { Credential, FillRequest, FillResult } from "../shared/types";
-import { appUrlMatches } from "../shared/url";
+import type { Credential, FillResult } from "../shared/types";
 import { send } from "./bridge";
 import { errorText, get } from "./dom";
 
@@ -55,25 +54,22 @@ export class CredentialController {
       }
       return;
     }
-    let credential: Credential | null = null;
     try {
       this.reportStatus("正在填入当前页面");
-      const tab = await chrome.tabs.get(tabId);
-      if (!tab.active || !tab.url || !appUrlMatches(expectedAppUrl, tab.url)) throw new Error("当前标签页已切换或不属于该应用，已取消填充");
       const userScope = this.getUserScope();
       if (!userScope) throw new Error("尚未登录 UniPass");
-      credential = await send<Credential>({ type: "credential", accountId, fallbackUsername, userScope });
-      const injectionTab = await chrome.tabs.get(tabId);
-      if (!injectionTab.active || !injectionTab.url || !appUrlMatches(expectedAppUrl, injectionTab.url)) throw new Error("获取凭据期间标签页已切换或离开该应用，已取消填充");
-      const [injection] = await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content-script.js"] });
-      if (!injection?.documentId) throw new Error("无法确认凭据填充页面");
-      const result = await chrome.tabs.sendMessage<FillRequest, FillResult>(tabId, { type: "fillCredentials", credential, expectedAppUrl, mode: "all" }, { documentId: injection.documentId });
+      const result = await send<FillResult>({
+        type: "fillFromPopup",
+        tabId,
+        accountId,
+        fallbackUsername,
+        expectedAppUrl,
+        userScope,
+      });
       if (!result?.ok) throw new Error(result?.error || "填充失败");
       this.reportStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
     } catch (error) {
       this.reportStatus(errorText(error), true);
-    } finally {
-      if (credential) credential.password = "";
     }
   }
 

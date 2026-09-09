@@ -20,7 +20,7 @@ import {
   syncStoredJupiterSessionToTab,
 } from "./jupiter-keepalive";
 import { clearUniPassLoginForTab, completeUniPassLogin, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
-import { fillFromOverlay, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
+import { fillFromOverlay, fillFromPopup, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
 import { withUserScope } from "./user-scope-guard";
 import type { BackgroundRequest, BackgroundResponse } from "../shared/types";
 
@@ -80,6 +80,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return withUserScope(message.userScope, () => openApp(message.appId));
     case "fillFromOverlay":
       return withUserScope(message.userScope, () => fillFromOverlay(sender, message));
+    case "fillFromPopup":
+      return withUserScope(message.userScope, () => fillFromPopup(message));
     case "startUniPassLogin":
       return startUniPassLogin();
     case "completeUniPassLogin":
