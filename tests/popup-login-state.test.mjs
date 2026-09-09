@@ -12,6 +12,7 @@ test("one-click login shows progress and refreshes the session while the UI rema
   assert.match(popupSource, /sessionBadge\.disabled = true/);
   assert.match(popupSource, /sessionBadge\.classList\.remove\("pending", "offline", "logging-in"\)/);
   assert.match(popupSource, /正在后台登录，等待 UniPass 会话确认/);
+  assert.match(popupSource, /send<void>\(\{ type: "completeUniPassLogin" \}\)/);
   assert.match(popupSource, /await catalog\.loadCurrentPage\(\)/);
   assert.match(popupSource, /if \(!sessionBadge\.isConnected\) return/);
 });

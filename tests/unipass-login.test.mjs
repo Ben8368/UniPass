@@ -9,6 +9,7 @@ const values = {};
 const executed = [];
 const createdTabs = [];
 const updatedTabs = [];
+const removedTabs = [];
 
 globalThis.chrome = {
   storage: {
@@ -23,6 +24,7 @@ globalThis.chrome = {
     async create(details) { createdTabs.push(details); return { id: 7, status: "loading", url: "https://portal.unipass.top/login", active: details.active }; },
     async update(id, details) { updatedTabs.push({ id, details }); return { id, status: "complete", url: "https://portal.unipass.top/login", active: details.active }; },
     async get(id) { return { id, status: "complete", url: "https://portal.unipass.top/login" }; },
+    async remove(tabId) { removedTabs.push(tabId); },
   },
   scripting: {
     async executeScript(details) {
@@ -61,6 +63,12 @@ test("user-triggered login starts in a background tab before the portal page com
   await login.processUniPassLoginTab(7, trustedAuthorizationUrl);
   assert.equal(executed.length, 2);
   assert.equal(executed[1].injectImmediately, true);
+  assert.equal(values.pendingUniPassLogin.phase, "complete");
+  assert.equal(values.pendingUniPassLogin.createdByExtension, true);
+  await login.processUniPassLoginTab(7, "https://portal.unipass.top/application");
+  assert.equal(values.pendingUniPassLogin.phase, "complete");
+  await login.completeUniPassLogin();
+  assert.deepEqual(removedTabs, [7]);
   assert.equal(values.pendingUniPassLogin, undefined);
 });
 
@@ -113,6 +121,11 @@ test("an in-progress login remains in the background when requested again", asyn
   assert.deepEqual(await login.startUniPassLogin(), { tabId: 7 });
   assert.deepEqual(updatedTabs, []);
   await login.clearUniPassLoginForTab(7);
+});
+
+test("a pre-existing UniPass login tab is retained after successful login", async () => {
+  assert.match(source, /const createdByExtension = existing\?\.id == null/);
+  assert.match(source, /if \(!pending\.createdByExtension\) return/);
 });
 
 test("login helper starts while trusted pages are loading", async () => {

@@ -13,7 +13,7 @@ import { isStableUserScope, popupSessionUserFor, requireStableUserScope, userSco
 import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isJupiterUrl } from "../shared/url";
 import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
-import { clearUniPassLoginForTab, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
+import { clearUniPassLoginForTab, completeUniPassLogin, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
 import { fillFromOverlay, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
 import type {
   BackgroundRequest,
@@ -100,6 +100,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return withUserScope(message.userScope, () => fillFromOverlay(sender, message));
     case "startUniPassLogin":
       return startUniPassLogin();
+    case "completeUniPassLogin":
+      return completeUniPassLogin();
     case "getPluginVersionSettings":
       return pluginVersionSettings();
     case "setPluginVersionOverride":

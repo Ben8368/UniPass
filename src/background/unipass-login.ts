@@ -11,7 +11,8 @@ const LOGIN_WINDOW_MS = 2 * 60 * 1000;
 interface PendingLogin {
   tabId: number;
   expiresAt: number;
-  phase: "portal" | "feishu";
+  phase: "portal" | "feishu" | "complete";
+  createdByExtension: boolean;
 }
 
 const processingTabs = new Set<number>();
@@ -34,13 +35,12 @@ export async function startUniPassLogin(): Promise<UniPassLoginStartResult> {
 
   const loginTabs = await chrome.tabs.query({ url: `${PORTAL_LOGIN_URL}*` });
   const existing = loginTabs.find((tab) => tab.id != null && tab.url != null && isUniPassLoginUrl(tab.url));
-  const tab = existing?.id != null
-    ? existing
-    : await chrome.tabs.create({ url: PORTAL_LOGIN_URL, active: false });
+  const createdByExtension = existing?.id == null;
+  const tab = existing ?? await chrome.tabs.create({ url: PORTAL_LOGIN_URL, active: false });
   if (!tab || tab.id == null) throw new Error("无法打开 UniPass 登录页");
 
   await chrome.storage.session.set({
-    [PENDING_LOGIN_KEY]: { tabId: tab.id, expiresAt: Date.now() + LOGIN_WINDOW_MS, phase: "portal" } satisfies PendingLogin,
+    [PENDING_LOGIN_KEY]: { tabId: tab.id, expiresAt: Date.now() + LOGIN_WINDOW_MS, phase: "portal", createdByExtension } satisfies PendingLogin,
   });
   // A new tab can report "loading" before the session state above is visible. Start now so it is never held until "complete".
   void processUniPassLoginTab(tab.id, tab.url).catch((error: unknown) => {
@@ -62,6 +62,7 @@ export async function processUniPassLoginTab(tabId: number, reportedUrl?: string
     const tab = reportedUrl ? undefined : await chrome.tabs.get(tabId);
     const url = reportedUrl ?? tab?.url;
     if (!url) return;
+    if (pending.phase === "complete") return;
 
     if (isUniPassLoginUrl(url)) {
       if (pending.phase !== "portal") return;
@@ -72,7 +73,7 @@ export async function processUniPassLoginTab(tabId: number, reportedUrl?: string
     if (isTrustedFeishuAuthorizationUrl(url)) {
       await setPendingLoginPhase(tabId, "feishu");
       const [{ result: clicked } = { result: false }] = await chrome.scripting.executeScript({ target: { tabId }, func: clickTrustedFeishuAuthorizeButton, injectImmediately: true });
-      if (clicked) await clearPendingLogin(tabId);
+      if (clicked) await setPendingLoginPhase(tabId, "complete");
       return;
     }
 
@@ -94,6 +95,18 @@ export async function processUniPassLoginTab(tabId: number, reportedUrl?: string
 
 export async function clearUniPassLoginForTab(tabId: number): Promise<void> {
   await clearPendingLogin(tabId);
+}
+
+export async function completeUniPassLogin(): Promise<void> {
+  const pending = await readPendingLogin();
+  if (!pending) return;
+  await clearPendingLogin(pending.tabId);
+  if (!pending.createdByExtension) return;
+  try {
+    await chrome.tabs.remove(pending.tabId);
+  } catch (error: unknown) {
+    if (!isMissingTabError(error)) throw error;
+  }
 }
 
 async function readPendingLogin(): Promise<PendingLogin | null> {
@@ -123,8 +136,10 @@ async function setPendingLoginPhase(tabId: number, phase: PendingLogin["phase"])
 async function readPendingLoginWithoutExpiry(): Promise<PendingLogin | null> {
   const stored = await chrome.storage.session.get(PENDING_LOGIN_KEY);
   const value = stored[PENDING_LOGIN_KEY] as Partial<PendingLogin> | undefined;
-  return value && typeof value.tabId === "number" && typeof value.expiresAt === "number" && (value.phase === "portal" || value.phase === "feishu")
-    ? { tabId: value.tabId, expiresAt: value.expiresAt, phase: value.phase }
+  return value && typeof value.tabId === "number" && typeof value.expiresAt === "number"
+    && (value.phase === "portal" || value.phase === "feishu" || value.phase === "complete")
+    && typeof value.createdByExtension === "boolean"
+    ? { tabId: value.tabId, expiresAt: value.expiresAt, phase: value.phase, createdByExtension: value.createdByExtension }
     : null;
 }
 

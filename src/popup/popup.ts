@@ -128,6 +128,7 @@ export function initializePopup(environment: PopupEnvironment = {}): void {
     try {
       const user = await send<PopupSessionUser>({ type: "session" });
       stopLoginRefresh();
+      void send<void>({ type: "completeUniPassLogin" });
       applyOnlineSession(user);
       setStatus("登录成功，账号目录已刷新");
       await catalog.loadCurrentPage();
