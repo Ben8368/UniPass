@@ -20,7 +20,9 @@ async function artifactFixture(t) {
       : extension === ".json"
         ? "{}\n"
         : extension === ".png"
-          ? Buffer.from([0x89, 0x50, 0x4e, 0x47])
+        ? Buffer.from([0x89, 0x50, 0x4e, 0x47])
+          : extension === ".wasm"
+            ? Buffer.from([0x00, 0x61, 0x73, 0x6d])
           : "body{}\n";
     await writeFile(path, content);
   }
@@ -61,4 +63,18 @@ test("rejects source directives, debugger statements, secret formats and unminif
   assert.ok(errors.some((error) => error.includes("debugger 语句")));
   assert.ok(errors.some((error) => error.includes("GitHub access token")));
   assert.ok(errors.some((error) => error.includes("仍可被标准压缩显著缩小")));
+});
+
+test("rejects credential-core identifiers and fixed protocol material in JavaScript bundles", async (t) => {
+  const root = await artifactFixture(t);
+  await writeFile(join(root, "popup.js"), [
+    'const key = "VlXCSJg7qO66MNrMMJir3g==";',
+    "CryptoJS.AES.decrypt(ciphertext, key);",
+    'const protocol = "phoenix_toptou";',
+  ].join("\n"));
+
+  const errors = await inspectReleaseArtifact(root);
+  assert.ok(errors.some((error) => error.includes("固定解密材料（Base64）")));
+  assert.ok(errors.some((error) => error.includes("CryptoJS AES 特征")));
+  assert.ok(errors.some((error) => error.includes("Jupiter 固定密码协议材料")));
 });

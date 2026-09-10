@@ -59,6 +59,22 @@ if (manifest.background?.type !== "module") errors.push("Manifest V3 Service Wor
 if (!String(manifest.content_security_policy?.extension_pages ?? "").includes("script-src 'self'")) {
   errors.push("扩展页面 CSP 必须限制 script-src 为 self");
 }
+if (!String(manifest.content_security_policy?.extension_pages ?? "").includes("'wasm-unsafe-eval'")) {
+  errors.push("本地 credential core 需要 MV3 CSP 明确允许 wasm-unsafe-eval");
+}
+
+const packageDependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+if (packageDependencies["crypto-js"] || packageDependencies["@types/crypto-js"]) {
+  errors.push("credential core 迁移后不得继续依赖 crypto-js 或其类型包");
+}
+if (/CryptoJS|VlXCSJg7qO66MNrMMJir3g==/.test(api)) {
+  errors.push("UniPass API 生产源码不得保留 CryptoJS 或完整固定解密材料");
+}
+
+const credentialCore = await readFile(resolve(root, "src/background/credential-core.ts"), "utf8");
+if (!credentialCore.includes("chrome.runtime.getURL(CORE_FILE)") || !credentialCore.includes("WebAssembly.instantiate")) {
+  errors.push("credential core 必须从扩展本地 URL 通过单一 loader 初始化");
+}
 
 const contentScript = await readFile(resolve(root, "src/content/content-script.ts"), "utf8");
 if (/\.(?:submit|requestSubmit)\s*\(/.test(contentScript)) {
@@ -73,6 +89,7 @@ for (const [pattern, error] of [
   [/\bdrop:\s*\[\s*["']debugger["']\s*\]/, "发布构建必须移除 debugger"],
   [/\blegalComments:\s*["']eof["']/, "发布构建必须在文件末尾保留第三方许可声明"],
   [/\bassertReleaseArtifact\s*\(\s*out\s*\)/, "构建完成后必须审计最终 dist 产物"],
+  [/\bbuildCredentialCore\s*\(\s*resolve\(out,\s*["']credential-core\.wasm["']\)\s*\)/, "构建必须生成并复制 credential-core.wasm"],
 ]) {
   if (!pattern.test(buildScript)) errors.push(error);
 }

@@ -1,10 +1,10 @@
-import CryptoJS from "crypto-js";
 import { accountsForApp, appUrlForApp, credentialForAccount } from "../shared/api";
 import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isStableUserScope } from "../shared/user-scope";
 import { isJupiterUrl } from "../shared/url";
 import type { JupiterKeepaliveSettings, UniPassAccount } from "../shared/types";
 import { assertCurrentUserScope, UserScopeMismatchError } from "./user-scope-guard";
+import { transformJupiterPassword } from "./credential-core";
 
 const JUPITER_ORIGIN = "https://jupiter.tec-do.com";
 const JUPITER_LOGIN_URL = `${JUPITER_ORIGIN}/phoenix/v1.0/user/login`;
@@ -133,13 +133,11 @@ async function keepJupiterAlive(): Promise<void> {
     return;
   }
 
-  let password = "";
   let credential: { username: string; password: string } | undefined;
   try {
     credential = await credentialForAccount(settings.accountId, settings.username);
-    password = credential.password;
     // Keepalive is a background login renewal: never log out, navigate, or reload Jupiter.
-    const loginData = await loginToJupiter(credential.username, password);
+    const loginData = await loginToJupiter(credential.username, credential.password);
     await assertCurrentUserScope(settings.userScope);
     const latestSettings = await readStoredJupiterKeepaliveSettings();
     if (!latestSettings.enabled || latestSettings.userScope !== settings.userScope) return;
@@ -160,13 +158,20 @@ async function keepJupiterAlive(): Promise<void> {
       await saveJupiterKeepaliveResult({ ...latestSettings, lastError: message });
     }
   } finally {
-    password = "";
     if (credential) credential.password = "";
   }
 }
 
 /** Submit a fresh Jupiter login request without touching the open page. */
 async function loginToJupiter(email: string, password: string): Promise<JupiterLoginResponse["data"]> {
+  let transformedPassword = "";
+  try {
+    transformedPassword = await transformJupiterPassword(password);
+  } catch {
+    throw new Error("木星密码处理失败");
+  } finally {
+    password = "";
+  }
   const { response, body } = await fetchJsonWithTimeout<JupiterLoginResponse>(JUPITER_LOGIN_URL, {
     method: "POST",
     credentials: "include",
@@ -177,29 +182,17 @@ async function loginToJupiter(email: string, password: string): Promise<JupiterL
     },
     body: JSON.stringify({
       email,
-      password: encryptJupiterPassword(password),
+      password: transformedPassword,
       isRemember: 1,
       isAgree: 1,
     }),
   });
+  transformedPassword = "";
   if (!response.ok) {
     throw new Error(body?.message || body?.msg || `木星登录失败（HTTP ${response.status}）`);
   }
   if (!body?.data?.accessToken) throw new Error(body?.message || body?.msg || "木星登录未返回会话令牌");
   return body.data;
-}
-
-function encryptJupiterPassword(password: string): string {
-  const md5Value = CryptoJS.MD5(password).toString();
-  return CryptoJS.DES.encrypt(
-    CryptoJS.enc.Utf8.parse(md5Value),
-    CryptoJS.enc.Utf8.parse("phoenix_toptou"),
-    {
-      iv: CryptoJS.enc.Utf8.parse(""),
-      mode: CryptoJS.mode.ECB,
-      padding: CryptoJS.pad.Pkcs7,
-    },
-  ).ciphertext.toString().toUpperCase();
 }
 
 async function syncJupiterSession(

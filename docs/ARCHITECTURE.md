@@ -16,7 +16,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
-构建入口由 `build.mjs` 定义，使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理，产物进入忽略提交的 `dist/`。复制静态资源后，构建会立即执行最终产物审计：只允许固定文件清单，并阻断源码/source map、调试语句、常见私钥/API token 格式、特殊文件和仍可被标准压缩显著缩小的 JavaScript；CI 与 Release 通过同一个 `npm run verify` 复用该门禁。
+构建入口由 `build.mjs` 定义，先以固定 Rust `1.85.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，再使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。产物进入忽略提交的 `dist/`。最终产物审计只允许固定文件清单（包括本地 WASM），并阻断源码/source map、调试语句、常见私钥/API token 格式、JS 中的旧密码学特征或固定协议材料，以及仍可被标准压缩显著缩小的 JavaScript；CI 与 Release 通过同一个 `npm run verify` 复用该门禁。
 
 ## 模块职责
 
@@ -28,6 +28,8 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
 | `src/shared/api.ts` | UniPass API 包装、响应校验和密码算法 | UI 状态或 DOM 操作 |
+| `src/background/credential-core.ts` | 单例加载扩展本地 WASM、短暂传入 UTF-8 输入并释放/清零 WASM 分配 | 网络加载代码、持久化密码或将明文转交给 Popup |
+| `credential-core/` | UniPass AES 解密及 Jupiter 密码转换；处理并清零 WASM 内部密码学临时缓冲 | 变更 UniPass/Jupiter 协议、暴露给网页或承诺可阻止运行时分析 |
 
 `src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。三个模块通过显式导出连接，不改变 Popup 与 Service Worker 的消息契约。
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
@@ -46,6 +48,12 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 4. Service Worker 校验用户作用域后只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
 5. Popup 仅针对匹配账号请求凭据可用性；后台返回三态，不返回密码。
 6. 用户点击“查看”或“填入”后，后台再次校验用户作用域才返回选中账号的凭据。
+
+### 密码学核心
+
+1. `src/shared/api.ts` 将 `/app/app_config` 的密文交给 Service Worker 内的 `credential-core.ts`；loader 用 `chrome.runtime.getURL("credential-core.wasm")` 读取随扩展安装的资源并缓存实例。实例化失败只映射为通用解密/转换错误，不包含密文、明文或材料。
+2. WASM 在内部重构 UniPass 材料，执行 AES-ECB-PKCS7 解密与 UTF-8 校验；Jupiter 路径在同一核心内执行 MD5 后的 DES-ECB-PKCS7 转换。每次调用后 JS 释放输入/输出 WASM 分配，WASM 清零其输入和临时密码学缓冲。
+3. 解密结果仍只用于既有 reveal、fill 或 Jupiter 登录操作。JS string 不能可靠清零，因此代码只限制其引用作用域；固定向量测试锁定与旧协议的输出兼容性。
 
 ### Jupiter 保活
 

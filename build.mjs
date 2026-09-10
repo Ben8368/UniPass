@@ -2,11 +2,13 @@ import { cp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 import { assertReleaseArtifact } from "./scripts/release-artifact-check.mjs";
+import { buildCredentialCore } from "./scripts/build-wasm.mjs";
 
 const root = resolve(import.meta.dirname);
 const out = resolve(root, "dist");
 
 await rm(out, { recursive: true, force: true });
+await buildCredentialCore(resolve(out, "credential-core.wasm"));
 await build({
   absWorkingDir: root,
   entryPoints: {

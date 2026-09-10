@@ -6,6 +6,7 @@ import { transform } from "esbuild";
 export const EXPECTED_ARTIFACT_FILES = Object.freeze([
   "background/service-worker.js",
   "components.css",
+  "credential-core.wasm",
   "content/content-script.js",
   "content/page-overlay.js",
   "icons/icon16.png",
@@ -31,6 +32,15 @@ const FORBIDDEN_TEXT = [
   ["Google API key", /\bAIza[0-9A-Za-z_-]{35}\b/],
   ["OpenAI API key", /\bsk-[A-Za-z0-9_-]{20,}\b/],
   ["Slack token", /\bxox[baprs]-[0-9A-Za-z-]{20,}\b/],
+];
+const FORBIDDEN_JS_TEXT = [
+  ["UniPass 固定解密材料（Base64）", /VlXCSJg7qO66MNrMMJir3g==/],
+  ["UniPass 固定解密材料（hex）", /5655c248983ba8eeba30dacc3098abde/i],
+  ["CryptoJS AES 特征", /CryptoJS\.AES/],
+  ["CryptoJS DES 特征", /CryptoJS\.DES/],
+  ["CryptoJS MD5 特征", /CryptoJS\.MD5/],
+  ["CryptoJS 运行时", /\bCryptoJS\b/],
+  ["Jupiter 固定密码协议材料", /phoenix_toptou/],
 ];
 
 export async function inspectReleaseArtifact(directory) {
@@ -68,6 +78,9 @@ export async function inspectReleaseArtifact(directory) {
       if (pattern.test(content)) errors.push(`${file} 包含${label}`);
     }
     if (extension === ".js") {
+      for (const [label, pattern] of FORBIDDEN_JS_TEXT) {
+        if (pattern.test(content)) errors.push(`${file} 包含${label}`);
+      }
       try {
         const minified = await transform(content, {
           loader: "js",

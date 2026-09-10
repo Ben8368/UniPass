@@ -1,4 +1,4 @@
-import CryptoJS from "crypto-js";
+import { decryptCredentialCiphertext } from "../background/credential-core";
 import { normalizeTargetUrl } from "./url";
 import { fetchJsonWithTimeout } from "./fetch";
 import {
@@ -22,7 +22,6 @@ const PORTAL_ORIGIN = "https://portal.unipass.top";
 const API_ROOT = `${PORTAL_ORIGIN}/api/v1`;
 const ACCOUNT_CATALOG_CONCURRENCY = 4;
 const APP_LIST_MAX_PAGES = 20;
-const PASSWORD_KEY = "VlXCSJg7qO66MNrMMJir3g==";
 
 interface ApiEnvelope<T> {
   success?: boolean;
@@ -149,7 +148,7 @@ export async function credentialAvailableForAccount(accountId: string | number):
   const config = await appConfigForAccount(accountId);
   const encryptedPassword = config?.user?.password;
   if (!encryptedPassword) return false;
-  return decryptPassword(encryptedPassword).trim().length > 0;
+  return (await decryptPassword(encryptedPassword)).trim().length > 0;
 }
 
 export async function credentialForAccount(
@@ -161,7 +160,7 @@ export async function credentialForAccount(
   if (!encryptedPassword) throw new Error("该账号没有可用密码");
   return {
     username: config?.user?.username || fallbackUsername,
-    password: decryptPassword(encryptedPassword),
+    password: await decryptPassword(encryptedPassword),
   };
 }
 
@@ -211,14 +210,12 @@ function validateAccounts(accounts: UniPassAccount[] | undefined): UniPassAccoun
   return valid;
 }
 
-function decryptPassword(ciphertext: string): string {
-  const key = CryptoJS.enc.Base64.parse(PASSWORD_KEY);
-  const plaintext = CryptoJS.AES.decrypt(ciphertext, key, {
-    mode: CryptoJS.mode.ECB,
-    padding: CryptoJS.pad.Pkcs7,
-  }).toString(CryptoJS.enc.Utf8);
-  if (!plaintext) throw new Error("密码解密失败，UniPass 算法可能已更新");
-  return plaintext;
+async function decryptPassword(ciphertext: string): Promise<string> {
+  try {
+    return await decryptCredentialCiphertext(ciphertext);
+  } catch {
+    throw new Error("密码解密失败，UniPass 算法可能已更新");
+  }
 }
 
 async function mapWithConcurrency<T, R>(

@@ -6,7 +6,7 @@
 
 ## 强制安全不变量
 
-- 明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物。
+- 真实用户的明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物；仅允许不对应任何真实账号的固定算法测试向量。
 - Popup 列表渲染只接收凭据可用性状态；只有用户点击“查看”或“填入”后才能接收一个选中账号的密码。
 - 填充只允许 HTTPS 且与应用 URL 的 origin/path 匹配；执行前重新检查标签页仍活动且未导航到其他应用。
 - 木星是 manifest 明确允许的单页应用；其登录前后路由可变，但仅限 `https://jupiter.tec-do.com` 同一 origin 内匹配，其他应用仍按 origin/path 严格校验。
@@ -17,7 +17,8 @@
 - UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
 - 用户作用域优先使用服务端稳定 ID（`id`、`userId` 或 `user_id`）；缺失时只可回退服务端登录名 `username`，再回退邮箱 `email`。显示名、昵称和默认值绝不作为身份键。三者均缺失时不执行 UniPass 目录、应用或凭据请求，Jupiter 保活不可开启；已启用保活在检测到用户切换后会停止并清除扩展会话 token。
 - UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。
-- 发布构建使用标准 minification 且不生成 sourcemap；静态审计锁定构建选项，最终产物审计以精确文件白名单阻断源码/source map、`debugger`、特殊文件和常见私钥/API token 格式。当前协议必须存在于客户端的固定解密材料不会通过拆分、编码或混淆伪装，需由 TD-004 的认证服务端化逐应用退出。
+- UniPass AES-ECB-PKCS7 解密与 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换位于随扩展本地打包的 `credential-core.wasm`。Service Worker 通过 `chrome.runtime.getURL` 只加载一次本地核心，重启后按需重建；不下载或执行远程代码。WASM 的输入、密钥材料、轮密钥、摘要和临时输出在完成后显式清零；JS 仅缩短明文字符串引用的生命周期，不能可靠清零 JS string。
+- 发布构建使用标准 minification 且不生成 sourcemap；最小 CSP 增加 `wasm-unsafe-eval` 以实例化本地 WASM。静态审计锁定构建选项，最终产物审计以精确文件白名单阻断源码/source map、`debugger`、特殊文件和常见私钥/API token 格式，并拒绝 JS bundle 中的完整 UniPass 固定材料、CryptoJS 特征及 Jupiter 固定协议文本。WASM 与材料重构只提高静态分析成本；客户端仍必须持有协议材料，不能作为对终端用户保密的安全边界，需由 TD-004 的认证服务端化逐应用退出。
 
 ## 权限与主机
 
@@ -30,7 +31,7 @@
 - `tabs`：识别当前页面、管理用户触发的一键登录标签页，以及同步已打开的 Jupiter 标签页。
 - `https://accounts.feishu.cn/*` 仅用于用户触发的一键登录，在校验固定 Tec-IAM OAuth 客户端、回调地址和授权范围后点击唯一授权按钮；扩展不向飞书发起后台请求。
 - UniPass、上述飞书授权页与 Jupiter 是当前仅允许的扩展运行时外部主机；Chrome 官方更新接口只由本地 Node 审计脚本访问，不属于扩展运行时权限。
-- 页面浮层只向 HTTPS 页面公开扩展内置的三个品牌图标资源，用于 Shadow DOM 内的 Logo 展示；不公开脚本、样式、凭据或其他运行资源。
+- 页面浮层只向 HTTPS 页面公开扩展内置的三个品牌图标资源，用于 Shadow DOM 内的 Logo 展示；不公开脚本、样式、WASM、凭据或其他运行资源。`credential-core.wasm` 仅由扩展 Service Worker 的本地 URL 加载。
 - 私人本地构建的 manifest `key` 固定为商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID；该值不是私钥，不授予商店发布或 CRX 签名权限。因同一 ID 可能与商店版争用 Profile 状态，必须在独立 Profile 完成人工安装验收。
 - 默认 UniPass 请求的 `X-Browser-Plugin-Version` 使用当前构建嵌入的 `STORE_PLUGIN_VERSION`（商店基线），绝不使用本地 `chrome.runtime.getManifest().version`。用户可手动设置经过三段数字校验的覆盖值；它只存为非敏感配置并只影响该请求头，清空后恢复基线。该覆盖不改变本地替身版与商店基线高一个补丁号的发布约束；开发/验证仍在线核验并随商店版更新这对值，扩展运行时不查询商店。
 

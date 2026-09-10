@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import CryptoJS from "crypto-js";
 import { build } from "esbuild";
 
 function storageArea() {
@@ -21,20 +21,27 @@ function storageArea() {
   };
 }
 
-globalThis.chrome = { runtime: { getManifest: () => ({ version: "5.3.3" }) }, storage: { local: storageArea() } };
+const credentialCore = await readFile(new URL("../credential-core/target/wasm32-unknown-unknown/release/credential_core.wasm", import.meta.url));
+
+globalThis.chrome = {
+  runtime: {
+    getManifest: () => ({ version: "5.3.3" }),
+    getURL: (path) => `chrome-extension://unipass/${path}`,
+  },
+  storage: { local: storageArea() },
+};
 
 let updateRequests = 0;
 let portalRequests = 0;
 const submittedPluginVersions = [];
 let appListMode = "missing";
-const passwordKey = CryptoJS.enc.Base64.parse("VlXCSJg7qO66MNrMMJir3g==");
-const encryptedPassword = CryptoJS.AES.encrypt("secret", passwordKey, {
-  mode: CryptoJS.mode.ECB,
-  padding: CryptoJS.pad.Pkcs7,
-}).toString();
+const encryptedPassword = "qXQ6Dp8ayFvr6nTNcQFSTA==";
 
 globalThis.fetch = async (input, init) => {
   const url = String(input);
+  if (url === "chrome-extension://unipass/credential-core.wasm") {
+    return new Response(credentialCore);
+  }
   if (url.startsWith("https://clients2.google.com/")) {
     updateRequests += 1;
     return {
