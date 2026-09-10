@@ -1,4 +1,4 @@
-use cipher::{BlockEncryptMut, KeyInit, block_padding::Pkcs7};
+use cipher::{BlockModeEncrypt, KeyInit, block_padding::Pkcs7};
 use des::Des;
 use ecb::Encryptor;
 use md5::{Digest, Md5};
@@ -26,7 +26,7 @@ pub(crate) fn transform(input: &[u8]) -> Option<SecretBytes> {
 
     let key = j_key();
     let encryptor = Encryptor::<Des>::new_from_slice(key.as_ref()).ok()?;
-    let encrypted = Zeroizing::new(encryptor.encrypt_padded_vec_mut::<Pkcs7>(digest_hex.as_ref()));
+    let encrypted = Zeroizing::new(encryptor.encrypt_padded_vec::<Pkcs7>(digest_hex.as_ref()));
     let mut output = Zeroizing::new(vec![0u8; encrypted.len() * 2]);
     for (index, byte) in encrypted.iter().copied().enumerate() {
         output[index * 2] = HEX_UPPER[(byte >> 4) as usize];

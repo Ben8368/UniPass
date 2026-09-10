@@ -1,6 +1,6 @@
 use aes::Aes128;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use cipher::{BlockDecryptMut, KeyInit, block_padding::Pkcs7};
+use cipher::{BlockModeDecrypt, KeyInit, block_padding::Pkcs7};
 use ecb::Decryptor;
 
 use crate::generated_material::u_key;
@@ -17,7 +17,7 @@ pub(crate) fn decrypt(input: &[u8]) -> Option<SecretBytes> {
     let decryptor = Decryptor::<Aes128>::new_from_slice(key.as_ref()).ok()?;
     let plaintext = zeroize::Zeroizing::new(
         decryptor
-            .decrypt_padded_vec_mut::<Pkcs7>(ciphertext.as_ref())
+            .decrypt_padded_vec::<Pkcs7>(ciphertext.as_ref())
             .ok()?,
     );
     if plaintext.is_empty() || std::str::from_utf8(plaintext.as_ref()).is_err() {
