@@ -6,11 +6,11 @@ UniPass 是处理敏感凭据的 Manifest V3 扩展。人类贡献入口以本�
 
 - 使用 Node.js 22 或更高版本。
 - 安装依赖：`npm install`。
-- 完整验证：`npm run verify`。
+- 完整验证：`npm run verify`；发布前追加 `npm run verify:wasm-reproducible` 与 `npm run smoke:chrome`。
 - 只检查治理文档：`npm run docs:governance:check`。
 - 构建后在 `chrome://extensions` 以开发者模式加载 `dist/`。
 
-`npm run verify` 会依次执行治理检查、动态商店版号静态审计、测试、TypeScript 类型检查、标准压缩构建和最终产物审计；`npm run build` 也会重复执行静态审计，并在复制完静态资源后立即审计 `dist/`。可用 `npm run audit:artifact` 单独复查现有产物。真实 UniPass/飞书 OAuth/Jupiter、Cookie、alarm 和页面注入仍需按场景手动验收，已完成状态以 [CONTEXT.md](CONTEXT.md) 和 [docs/TECH_DEBT.md](docs/TECH_DEBT.md) 为准。
+`npm run verify` 会依次执行治理检查、动态商店版号静态审计、完整 Rust QA、测试、TypeScript 类型检查、标准压缩构建和最终产物审计；`npm run build` 也会重复执行静态审计，并在复制完静态资源后立即审计 `dist/`。可用 `npm run audit:artifact` 单独复查现有产物。真实 UniPass/飞书 OAuth/Jupiter、Cookie、alarm 和页面注入仍需按 [Chrome 验收清单](docs/CHROME-ACCEPTANCE.md) 手动验收，已完成状态以 [CONTEXT.md](CONTEXT.md) 和 [docs/TECH_DEBT.md](docs/TECH_DEBT.md) 为准。
 
 ## 改动要求
 

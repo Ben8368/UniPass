@@ -11,12 +11,22 @@
     "docs:governance:check": "node scripts/governance-docs-check.mjs",
     "test": "npm run build:wasm && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run docs:governance:check && npm run audit:static && npm test && npm run typecheck && npm run build"
+    "rust:fmt": "node scripts/rust-qa.mjs fmt",
+    "rust:test": "node scripts/rust-qa.mjs test",
+    "rust:clippy": "node scripts/rust-qa.mjs clippy",
+    "rust:clippy:wasm": "node scripts/rust-qa.mjs clippy:wasm",
+    "rust:build": "node scripts/rust-qa.mjs build",
+    "verify:rust": "npm run rust:fmt && npm run rust:test && npm run rust:clippy && npm run rust:clippy:wasm && npm run rust:build",
+    "verify:wasm-reproducible": "node scripts/verify-wasm-reproducible.mjs",
+    "smoke:chrome": "node scripts/chrome-smoke.mjs",
+    "verify:release": "npm run verify && npm run verify:wasm-reproducible && npm run smoke:chrome",
+    "verify": "npm run docs:governance:check && npm run audit:static && npm run verify:rust && npm test && npm run typecheck && npm run build"
   },
   "dependencies": {},
   "devDependencies": {
     "@types/chrome": "^0.0.326",
     "esbuild": "^0.25.9",
+    "puppeteer-core": "^25.10.0",
     "typescript": "^5.9.2"
   }
 }

@@ -8,16 +8,25 @@ use crate::secret::SecretBytes;
 use crate::unipass;
 
 pub(crate) const MAX_ABI_ALLOCATION: usize = 64 * 1024;
+pub(crate) const MAX_LIVE_ALLOCATIONS: usize = 64;
 const MAX_OUTPUT_LENGTH: usize = 64 * 1024;
 const STATUS_ERROR: u32 = 0;
 const STATUS_FALSE: u32 = 1;
 const STATUS_TRUE: u32 = 2;
 
 #[derive(Clone, Copy)]
+#[repr(u8)]
+enum AllocationKind {
+    Input,
+    Output,
+}
+
+#[derive(Clone, Copy)]
 struct Allocation {
     pointer: usize,
     length: usize,
     capacity: usize,
+    kind: AllocationKind,
 }
 
 static ALLOCATIONS: OnceLock<Mutex<Vec<Allocation>>> = OnceLock::new();
@@ -40,6 +49,7 @@ pub extern "C" fn c_a(length: u32) -> u32 {
         pointer,
         length,
         capacity,
+        kind: AllocationKind::Input,
     }) {
         buffer.zeroize();
         return 0;
@@ -107,7 +117,7 @@ fn input_is_valid(pointer: u32, length: u32) -> bool {
     length > 0
         && length <= MAX_ABI_ALLOCATION
         && range_is_valid(pointer, length)
-        && is_registered(pointer, length)
+        && is_registered_input(pointer, length)
 }
 
 fn range_is_valid(pointer: usize, length: usize) -> bool {
@@ -136,9 +146,10 @@ fn register_allocation(allocation: Allocation) -> bool {
     let Ok(mut allocations) = allocation_store().lock() else {
         return false;
     };
-    if allocations
-        .iter()
-        .any(|entry| entry.pointer == allocation.pointer)
+    if allocations.len() >= MAX_LIVE_ALLOCATIONS
+        || allocations
+            .iter()
+            .any(|entry| entry.pointer == allocation.pointer)
     {
         return false;
     }
@@ -146,11 +157,13 @@ fn register_allocation(allocation: Allocation) -> bool {
     true
 }
 
-fn is_registered(pointer: usize, length: usize) -> bool {
+fn is_registered_input(pointer: usize, length: usize) -> bool {
     allocation_store().lock().ok().is_some_and(|allocations| {
-        allocations
-            .iter()
-            .any(|entry| entry.pointer == pointer && entry.length == length)
+        allocations.iter().any(|entry| {
+            entry.pointer == pointer
+                && entry.length == length
+                && matches!(entry.kind, AllocationKind::Input)
+        })
     })
 }
 
@@ -182,6 +195,7 @@ fn into_abi_output(secret: SecretBytes) -> u64 {
         pointer,
         length,
         capacity,
+        kind: AllocationKind::Output,
     }) {
         bytes.zeroize();
         return 0;

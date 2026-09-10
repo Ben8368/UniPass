@@ -16,27 +16,33 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Audit Cargo.lock with RustSec
-        uses: rustsec/audit-check@v2
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           working-directory: credential-core
 
   verify:
-    name: Governance, audit, test and build
+    name: Governance, Rust QA, build and Chrome smoke
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
+
+      - name: Set up Chrome for MV3 smoke test
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@39ce663831f86d2ea36cbda0a8143709cdfcc410 # v2.2.0
+        with:
+          install-dependencies: true
 
       - name: Set up Rust credential core toolchain
         run: |
@@ -46,23 +52,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rust format
-        run: cargo fmt --check --manifest-path credential-core/Cargo.toml
-
-      - name: Rust native tests
-        run: cargo test --locked --manifest-path credential-core/Cargo.toml
-
-      - name: Rust WASM clippy
-        run: cargo clippy --locked --target wasm32-unknown-unknown --manifest-path credential-core/Cargo.toml -- -D warnings
-
-      - name: Rust release build
-        run: cargo build --locked --release --target wasm32-unknown-unknown --manifest-path credential-core/Cargo.toml
-
       - name: Verify
         run: npm run verify
 
+      - name: Verify reproducible WASM release build
+        run: npm run verify:wasm-reproducible
+
+      - name: Run automated Chrome smoke
+        env:
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run --auto-servernum npm run smoke:chrome
+
       - name: Upload unpacked extension artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: unipass-extension
           path: dist/

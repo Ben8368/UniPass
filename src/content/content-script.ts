@@ -13,24 +13,29 @@ if (document.documentElement.getAttribute(marker) !== "ready") {
 }
 
 function fill(request: FillRequest): FillResult {
-  if (!appUrlMatches(request.expectedAppUrl, location.href)) {
-    return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前页面不属于所选应用，已取消填充" };
-  }
-  const password = visibleInputs('input[type="password"], input[autocomplete="current-password"]')[0];
-  if (!password) {
-    return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前页面未找到可见密码框" };
-  }
+  try {
+    if (!appUrlMatches(request.expectedAppUrl, location.href)) {
+      return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前页面不属于所选应用，已取消填充" };
+    }
+    const password = visibleInputs('input[type="password"], input[autocomplete="current-password"]')[0];
+    if (!password) {
+      return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前页面未找到可见密码框" };
+    }
 
-  const username = findUsernameInput(password);
-  let usernameFilled = false;
-  if (request.mode === "all" && username) {
-    setInputValue(username, request.credential.username);
-    usernameFilled = true;
-  }
-  setInputValue(password, request.credential.password);
-  password.focus();
+    const username = findUsernameInput(password);
+    let usernameFilled = false;
+    if (request.mode === "all" && username) {
+      setInputValue(username, request.credential.username);
+      usernameFilled = true;
+    }
+    setInputValue(password, request.credential.password);
+    password.focus();
 
-  return { ok: true, usernameFilled, passwordFilled: true };
+    return { ok: true, usernameFilled, passwordFilled: true };
+  } finally {
+    request.credential.username = "";
+    request.credential.password = "";
+  }
 }
 
 function findUsernameInput(password: HTMLInputElement): HTMLInputElement | undefined {

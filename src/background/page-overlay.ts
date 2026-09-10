@@ -69,6 +69,10 @@ async function fillIntoTab(
       mode: "all",
     }, { documentId: injection.documentId });
   } finally {
-    if (credential) credential.password = "";
+    if (credential) {
+      credential.username = "";
+      credential.password = "";
+      credential = null;
+    }
   }
 }

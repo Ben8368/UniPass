@@ -132,6 +132,11 @@ async function inspectCredentialCore(path) {
   }
   try {
     const module = new WebAssembly.Module(bytes);
+    for (const sectionName of ["name", "producers"]) {
+      if (WebAssembly.Module.customSections(module, sectionName).length) {
+        errors.push(`包含不应发布的 ${sectionName} custom section`);
+      }
+    }
     const imports = WebAssembly.Module.imports(module).map(({ module: source, name }) => `${source}.${name}`).sort();
     const exports = WebAssembly.Module.exports(module).map(({ name }) => name).sort();
     if (JSON.stringify(imports) !== JSON.stringify([...EXPECTED_WASM_IMPORTS].sort())) {

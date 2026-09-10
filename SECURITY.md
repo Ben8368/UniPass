@@ -17,7 +17,7 @@
 - UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
 - 用户作用域优先使用服务端稳定 ID（`id`、`userId` 或 `user_id`）；缺失时只可回退服务端登录名 `username`，再回退邮箱 `email`。显示名、昵称和默认值绝不作为身份键。三者均缺失时不执行 UniPass 目录、应用或凭据请求，Jupiter 保活不可开启；已启用保活在检测到用户切换后会停止并清除扩展会话 token。
 - UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。
-- UniPass AES-ECB-PKCS7 解密与 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换位于随扩展本地打包的 `credential-core.wasm`。Service Worker 通过 `chrome.runtime.getURL` 只加载一次本地核心，重启后按需重建；不下载或执行远程代码。WASM 的输入、密钥材料、轮密钥、摘要、plaintext 和临时输出在完成后显式清零；ABI 分配登记表只允许由 `c_a`/输出 ownership 创建的指针被 `c_f` 接管，非法 pointer/length 被拒绝。`c_v` 只返回状态，`c_k` 只返回 Jupiter 请求所需的 transformed password；只有 Reveal/Fill 的既有功能才把原始明文交给 JS。
+- UniPass AES-ECB-PKCS7 解密与 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换位于随扩展本地打包的 `credential-core.wasm`。Service Worker 通过 `chrome.runtime.getURL` 只加载一次本地核心，重启后按需重建；不下载或执行远程代码。WASM 的输入、密钥材料、轮密钥、摘要、plaintext 和临时输出在完成后显式清零；ABI allocation registry 区分 `Input`/`Output`、最多保留 64 个 live allocation，只有匹配登记的 pointer/length 才能释放，crypto input 只能使用 `Input`。非法 pointer/length、double free 和上限耗尽均 fail closed。`c_v` 只返回状态，`c_k` 只返回 Jupiter 请求所需的 transformed password；只有 Reveal/Fill 的既有功能才把原始明文交给 JS。
 - 发布构建使用标准 minification 且不生成 sourcemap；最小 CSP 增加 `wasm-unsafe-eval` 以实例化本地 WASM。静态审计锁定构建选项，最终产物审计以精确文件白名单阻断源码/source map、`debugger`、特殊文件和常见私钥/API token 格式，并验证 WASM magic/version、可实例化性、imports/exports 白名单、完整 raw AES key、Base64/hex key 和 Jupiter 固定协议文本不以直接材料重新出现。WASM 与材料重构只提高静态分析成本；客户端仍必须持有协议材料，不能作为对终端用户保密的安全边界，TD-004 仅在外部后端权限与接口契约可用时重新评估。
 
 ## 权限与主机
@@ -44,6 +44,7 @@
 - 跨域 iframe、关闭的 Shadow DOM、Canvas 和非标准登录控件不在通用填充承诺内。
 - 页面浮层使用 closed Shadow DOM 隔离页面样式和 DOM；其目录缓存与主题设置仅保存在浮层页面内存中，浮层移除后清除。浮层不读取页面正文、Cookie、localStorage 或表单值；打开时仅读取渲染背景色与 `color-scheme` 用于自动选择明暗主题；凭据仍只在后台消息和用户点击后的目标输入框中短暂存在。
 - 真实 UniPass/飞书 OAuth/Jupiter 行为依赖外部服务和登录状态，自动化测试不能替代按场景执行的手动集成验收。
+- 发布工程同时要求 Cargo.lock 的 RustSec gate、固定 Rust 1.98.1 的两次独立 WASM 构建一致、完整 SHA pin 的 GitHub Actions、Dependabot，以及 [Chrome 验收清单](docs/CHROME-ACCEPTANCE.md) 中的自动化 smoke；人工登录清单仍需单独执行。
 - 飞书若显示账号选择、扫码、验证码、CAPTCHA、权限变化或其他非预期页面，一键登录会停止，由用户手动处理。
 
 ## 安全变更检查

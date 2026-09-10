@@ -90,7 +90,22 @@ for (const file of linkedDocuments) {
 }
 
 const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
-for (const script of ["docs:governance:check", "audit:static", "test", "typecheck", "build", "verify"]) {
+for (const script of [
+  "docs:governance:check",
+  "audit:static",
+  "test",
+  "typecheck",
+  "build",
+  "rust:fmt",
+  "rust:test",
+  "rust:clippy",
+  "rust:clippy:wasm",
+  "rust:build",
+  "verify:rust",
+  "verify:wasm-reproducible",
+  "smoke:chrome",
+  "verify",
+]) {
   if (!packageJson.scripts?.[script]) errors.push(`package.json: 缺少脚本“${script}”`);
 }
 

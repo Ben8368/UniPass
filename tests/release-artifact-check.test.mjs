@@ -87,3 +87,16 @@ test("rejects malformed credential-core WASM artifacts", async (t) => {
   assert.ok(errors.some((error) => error.includes("格式 version 错误")));
   assert.ok(errors.some((error) => error.includes("无法实例化 WebAssembly.Module")));
 });
+
+test("rejects credential-core name and producers custom sections", async (t) => {
+  const root = await artifactFixture(t);
+  const wasmPath = join(root, "credential-core.wasm");
+  const wasm = await readFile(wasmPath);
+  const customSection = (name) => Buffer.concat([
+    Buffer.from([0x00, name.length + 2, name.length, ...Buffer.from(name), 0x00]),
+  ]);
+  await writeFile(wasmPath, Buffer.concat([wasm, customSection("name"), customSection("producers")]));
+  const errors = await inspectReleaseArtifact(root);
+  assert.ok(errors.some((error) => error.includes("不应发布的 name custom section")));
+  assert.ok(errors.some((error) => error.includes("不应发布的 producers custom section")));
+});

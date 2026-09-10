@@ -15,6 +15,7 @@ const pluginVersion = await readFile(resolve(root, "src/shared/plugin-version.ts
 const rustToolchain = await readFile(resolve(root, "rust-toolchain.toml"), "utf8");
 const rustManifest = await readFile(resolve(root, "credential-core/Cargo.toml"), "utf8");
 const rustLock = await readFile(resolve(root, "credential-core/Cargo.lock"), "utf8");
+const workflowFiles = [".github/workflows/ci.yml", ".github/workflows/release.yml"];
 const storeBaselineMatch = pluginVersion.match(/STORE_PLUGIN_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
 if (packageJson.version !== manifest.version) errors.push("package.json 与 manifest 版本必须一致");
 if (idFromKey(manifest.key) !== STORE_EXTENSION_ID) errors.push(`manifest key 必须派生为商店 ID ${STORE_EXTENSION_ID}`);
@@ -76,6 +77,22 @@ if (/CryptoJS|VlXCSJg7qO66MNrMMJir3g==/.test(api)) {
 if (!/channel\s*=\s*["']1\.98\.1["']/.test(rustToolchain)) errors.push("Rust toolchain 必须固定为 1.98.1");
 if (!/edition\s*=\s*["']2024["']/.test(rustManifest)) errors.push("credential-core 必须使用 Rust 2024 edition");
 if (/\bgit\s*=|git\+/.test(`${rustManifest}\n${rustLock}`)) errors.push("Rust 依赖不得使用 git source");
+
+for (const workflowFile of workflowFiles) {
+  const workflow = await readFile(resolve(root, workflowFile), "utf8");
+  for (const match of workflow.matchAll(/uses:\s*([^\s@]+)@([^\s#]+)/g)) {
+    if (!/^[0-9a-f]{40}$/i.test(match[2])) {
+      errors.push(`${workflowFile} 的外部 Action 必须 pin 到完整 SHA：${match[1]}@${match[2]}`);
+    }
+  }
+}
+const releaseWorkflow = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
+if (!releaseWorkflow.includes("needs: [dependency-audit, verify]")) {
+  errors.push("Release publish job 必须依赖 verify 与 RustSec dependency-audit");
+}
+if (!releaseWorkflow.includes("permissions:\n      contents: write")) {
+  errors.push("Release publish job 必须单独声明 contents: write");
+}
 
 const credentialCore = await readFile(resolve(root, "src/background/credential-core.ts"), "utf8");
 if (!credentialCore.includes("chrome.runtime.getURL(CORE_FILE)") || !credentialCore.includes("WebAssembly.instantiate")) {

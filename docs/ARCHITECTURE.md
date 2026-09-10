@@ -16,7 +16,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
-构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，再使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。产物进入忽略提交的 `dist/`。最终产物审计只允许固定文件清单（包括本地 WASM），并验证 WASM magic/version、可实例化性、imports/exports 白名单、原始 key/协议文本和 JS 中的旧密码学特征，同时阻断源码/source map、调试语句、常见私钥/API token 格式及仍可被标准压缩显著缩小的 JavaScript；CI 与 Release 通过同一个 `npm run verify` 复用该门禁。
+构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，再使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。`npm run verify` 是本地统一入口，额外的 `npm run verify:wasm-reproducible` 使用两个隔离 Cargo target 目录确认 WASM byte-for-byte 一致；`npm run smoke:chrome` 负责真实 Chrome 的 MV3/Service Worker/WASM 重启 smoke。产物进入忽略提交的 `dist/`。最终产物审计只允许固定文件清单（包括本地 WASM），并验证 WASM magic/version、可实例化性、无 `name`/`producers` custom section、imports/exports 白名单、原始 key/协议文本和 JS 中的旧密码学特征，同时阻断源码/source map、调试语句、常见私钥/API token 格式及仍可被标准压缩显著缩小的 JavaScript；CI 与 Release verify job 复用这些门禁，publish job 只处理已上传的验证产物。
 
 ## 模块职责
 
@@ -52,7 +52,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 ### 密码学核心
 
 1. `src/shared/api.ts` 将 `/app/app_config` 的密文交给 Service Worker 内的 `credential-core.ts`；loader 用 `chrome.runtime.getURL("credential-core.wasm")` 读取随扩展安装的资源并缓存实例。实例化失败只映射为通用解密/转换错误，不包含密文、明文或材料。
-2. `c_v` 在 WASM 内完成解密、UTF-8、trim/whitespace 判断，只返回 `0=error / 1=false / 2=true`；`c_k` 在 WASM 内完成 ciphertext→AES→MD5→DES→hex，JS 只接收 Jupiter 请求必须的 transformed password。Reveal/Fill 才使用 `c_u` 获取明文。每次调用后 JS 释放输入/输出 WASM 分配，WASM 清零其输入和临时密码学缓冲。
+2. `c_v` 在 WASM 内完成解密、UTF-8、trim/whitespace 判断，只返回 `0=error / 1=false / 2=true`；`c_k` 在 WASM 内完成 ciphertext→AES→MD5→DES→hex，JS 只接收 Jupiter 请求必须的 transformed password。Reveal/Fill 才使用 `c_u` 获取明文。每次调用后 JS 释放输入/输出 WASM 分配，WASM 清零其输入和临时密码学缓冲。ABI registry 将 `c_a` 登记为 `Input`、`into_abi_output` 登记为 `Output`；`c_u`/`c_v`/`c_k` 只接受 `Input`，`c_f` 才能释放两类 allocation，并以 64 个 live allocation 上限 fail closed。
 3. ABI 只暴露 `memory,c_a,c_f,c_u,c_v,c_k`，不使用 wasm-bindgen；Rust native tests 与 Node/WASM tests 共同锁定旧协议兼容性。JS string 不能可靠清零，因此代码只限制 reveal/fill 明文引用作用域。
 
 ### Jupiter 保活

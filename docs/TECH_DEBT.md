@@ -26,13 +26,10 @@
 - **当前状态：** 维护者已完成决策前人工盘点，但当前没有 UniPass 后端、目标应用后端修改权限或版本化试点接口契约。因此本债务为 External Dependency，暂不作为客户端主动开发主线；不代表当前密码型应用已经具备无密码替代能力。
 - **已完成的仓库侧准备：** 决策前的能力盘点表、试点准入标准、待决契约清单、自动化/人工验收边界和负责人操作步骤见 [TD-004 认证服务端化试点准备手册](TD-004-authentication-pilot-playbook.md)。该手册不替代后端、目标应用或维护者的协议与上线决定。
 
-### TD-005: Rust credential core hardening
 
-- **等级：** P1
-- **状态：** Active / Client-side roadmap
-- **范围：** WASM ABI bounds 与 ownership、availability stay-in-WASM、Jupiter ciphertext combined transform、zeroization、plaintext clone 消除、WASM binary import/export 与 raw-secret audit、Rust native/Node integration tests、锁定依赖和 RustSec 检查、可复现 release build、Chrome integration tests。
-- **边界：** 继续保留 Reveal、Copy、Fill、UniPass login、Jupiter login/keepalive 和现有权限/URL/user-scope 校验；不使用 wasm-bindgen，不做激进 obfuscation，不把 Chrome API、DOM 或网络逻辑迁移进 Rust。
-- **当前进展：** P0 ABI lifetime/bounds、availability、Jupiter 组合路径、Rust 模块拆分、产物格式审计和自动化测试已实现；真实 Chrome 仍需按发布清单复验。
+## 已归档
+
+- TD-005 Rust credential core hardening：已完成仓库侧 ABI、Rust QA、可复现 WASM、产物审计、Chrome smoke、Release gate 与供应链收尾；真实账号路径保留为人工验收，详见 [归档记录](archive/tech-debt/TD-005-rust-credential-core-hardening.md)。
 
 ## 偿还流程
 
