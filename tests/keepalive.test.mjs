@@ -44,5 +44,19 @@ test("Jupiter transformed credentials are cleared in the Service Worker finally 
 test("disabling keepalive waits for active tab syncs and syncs recheck enabled state", () => {
   assert.match(source, /const activeSessionSyncs = new Set<Promise<void>>\(\)/);
   assert.match(source, /if \(!settings\.enabled \|\| settings\.userScope !== loginData\.userScope\) return/);
-  assert.match(source, /if \(waitForActiveSyncs\) await waitForActiveSessionSyncs\(\)/);
+  assert.match(source, /await waitForActiveSessionSyncs\(\)/);
+});
+
+test("Jupiter login responses validate and minimize session data", () => {
+  assert.match(source, /typeof accessToken !== "string"/);
+  assert.match(source, /accessToken, userInfo/);
+  assert.match(source, /key !== "accessToken"/);
+  assert.match(source, /password\|token\|secret\|authorization\|cookie\|credential\|code/);
+  assert.doesNotMatch(source, /\{\.\.\.loginData, userScope\}/);
+});
+
+test("keepalive mutations use a generation guard to avoid stale disable cleanup", () => {
+  assert.match(source, /let keepaliveGeneration = 0/);
+  assert.match(source, /const operationGeneration = \+\+keepaliveGeneration/);
+  assert.match(source, /if \(generation !== keepaliveGeneration\) return/);
 });

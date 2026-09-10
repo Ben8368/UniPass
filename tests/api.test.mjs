@@ -35,6 +35,7 @@ let updateRequests = 0;
 let portalRequests = 0;
 const submittedPluginVersions = [];
 let appListMode = "missing";
+let accountListMode = "malformed";
 const encryptedPassword = "qXQ6Dp8ayFvr6nTNcQFSTA==";
 
 globalThis.fetch = async (input, init) => {
@@ -61,6 +62,9 @@ globalThis.fetch = async (input, init) => {
     result = appListMode === "too-many-pages"
       ? { list: Array.from({ length: 100 }, (_, index) => ({ id: index + 1 })), pages: 21 }
       : {};
+  }
+  else if (url.includes("/app/account/account/list/url?")) {
+    result = accountListMode === "malformed" ? { accounts: [null] } : { accounts: [] };
   }
   else if (url.includes("accountId=empty")) result = { user: { username: "empty", password: "" } };
   else if (url.includes("accountId=available")) result = { user: { username: "available", password: encryptedPassword } };
@@ -136,4 +140,8 @@ test("application list rejects a missing list instead of treating it as a comple
 test("application list rejects pagination beyond the safety limit instead of returning a truncated catalog", async () => {
   appListMode = "too-many-pages";
   await assert.rejects(api.listApps(""), /账号目录同步未完成/);
+});
+
+test("account lists reject malformed records instead of becoming an empty complete catalog", async () => {
+  await assert.rejects(api.accountsForUrl("https://example.com/login"), /账号列表包含无效记录|账号列表包含缺少 ID 的记录/);
 });

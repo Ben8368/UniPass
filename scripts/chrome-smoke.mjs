@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { access, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import puppeteer from "puppeteer-core";
 import { inspectHardenedMetadata } from "./release-artifact-check.mjs";
@@ -28,6 +28,7 @@ const browser = await puppeteer.launch({
   ignoreDefaultArgs: ["--disable-extensions"],
   args: [
     `--load-extension=${dist}`,
+    `--disable-extensions-except=${dist}`,
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-background-networking",
@@ -48,7 +49,7 @@ try {
     if (message.type() === "error") errors.push(`popup console: ${message.text()}`);
   });
   popup.on("pageerror", (error) => errors.push(`popup page error: ${error.message}`));
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+  await gotoExtensionPage(popup, `chrome-extension://${extensionId}/popup.html`);
   assert.equal(await popup.title(), "UniPass");
   const loadedManifest = await popup.evaluate(async () => {
     const response = await fetch(chrome.runtime.getURL("manifest.json"));
@@ -67,13 +68,18 @@ try {
       return true;
     });
 
+    // runtime.reload() may reuse the Service Worker target object. Wait for the
+    // old popup to close before opening the extension page again, then resolve
+    // the current worker by URL instead of requiring a new target identity.
+    await waitForPageClosed(popup);
+    const restartedTarget = await waitForTarget(browser, (target) =>
+      target.type() === "service_worker" && target.url().endsWith("/background/service-worker.js"), { timeout: 15_000 });
     const restartedPopup = await browser.newPage();
     restartedPopup.on("console", (message) => {
       if (message.type() === "error") errors.push(`restarted popup console: ${message.text()}`);
     });
     restartedPopup.on("pageerror", (error) => errors.push(`restarted popup page error: ${error.message}`));
-    await restartedPopup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
-    const restartedTarget = await waitForTarget(browser, (target) => target.type() === "service_worker" && target !== serviceWorkerTarget, { timeout: 15_000 });
+    await gotoExtensionPage(restartedPopup, `chrome-extension://${extensionId}/popup.html`);
     await assertWasmLoads(await waitForWorker(restartedTarget));
   }
 
@@ -118,10 +124,38 @@ async function waitForTarget(browserInstance, predicate, { timeout = 10_000 } = 
   throw new Error("等待 Chrome 扩展目标超时");
 }
 
+async function waitForPageClosed(page, { timeout = 15_000 } = {}) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+  }
+  throw new Error("等待扩展 popup 关闭超时");
+}
+
+async function gotoExtensionPage(page, url, { timeout = 15_000 } = {}) {
+  const deadline = Date.now() + timeout;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      return await page.goto(url, { waitUntil: "domcontentloaded" });
+    } catch (error) {
+      lastError = error;
+      if (!String(error?.message ?? error).includes("ERR_BLOCKED_BY_CLIENT")) throw error;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+  }
+  throw lastError ?? new Error(`扩展页面加载超时：${url}`);
+}
+
 async function findChrome() {
   const candidates = [
     process.env.CHROME_BIN,
     process.env.CHROME_PATH,
+    process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined,
+    process.platform === "darwin" ? "/Applications/Chromium.app/Contents/MacOS/Chromium" : undefined,
+    process.platform === "darwin" ? join(homedir(), "Applications/Google Chrome.app/Contents/MacOS/Google Chrome") : undefined,
+    process.platform === "darwin" ? join(homedir(), "Applications/Chromium.app/Contents/MacOS/Chromium") : undefined,
     process.platform === "win32" ? "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" : undefined,
     process.platform === "win32" ? "C:/Program Files/Google/Chrome/Application/chrome.exe" : undefined,
     process.platform === "win32" ? "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe" : undefined,

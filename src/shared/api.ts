@@ -221,18 +221,27 @@ async function readPluginVersionOverride(): Promise<string | null> {
 }
 
 
-function validateAccounts(accounts: UniPassAccount[] | undefined): UniPassAccount[] {
+function validateAccounts(accounts: unknown): UniPassAccount[] {
   if (!Array.isArray(accounts)) throw new Error("账号列表返回格式异常");
   const valid: UniPassAccount[] = [];
   for (const account of accounts) {
-    if (!account || typeof account !== "object") continue;
-    const ids = [account.id, account.accountId, account.appAccountUserId];
-    if (ids.some((id) => String(id) === "plugin-version-too-low")) {
-      throw new Error(account.remark || account.account || "客户端版本过低");
+    if (!account || typeof account !== "object" || Array.isArray(account)) {
+      throw new Error("账号列表包含无效记录");
     }
-    valid.push(account);
+    const candidate = account as UniPassAccount;
+    const ids = [candidate.id, candidate.accountId, candidate.appAccountUserId];
+    if (!ids.some(validAccountId)) throw new Error("账号列表包含缺少 ID 的记录");
+    if (ids.some((id) => String(id) === "plugin-version-too-low")) {
+      throw new Error(candidate.remark || candidate.account || "客户端版本过低");
+    }
+    valid.push(candidate);
   }
   return valid;
+}
+
+function validAccountId(value: unknown): value is string | number {
+  if (typeof value === "string") return value.trim().length > 0;
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 async function decryptPassword(ciphertext: string): Promise<string> {
