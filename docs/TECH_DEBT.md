@@ -15,15 +15,24 @@
 ### TD-004: 认证服务端化与客户端长期凭据退出
 
 - **等级：** P2
+- **状态：** Blocked / External Dependency
 - **位置：** `credential-core/`、`src/shared/api.ts`、`src/background/service-worker.ts`、UniPass 后端及各目标应用认证集成
 - **问题：** UniPass 目前向扩展返回可复用的加密密码，扩展必须在本地凭固定协议材料解密后执行用户请求。材料与 AES/DES/MD5 核心已移入本地 WASM，减少 JS 的静态特征并缩短临时缓冲生命周期；但只要密码或解密材料必须交付浏览器，它们就不能作为对终端用户保密的安全边界。JS 压缩、WASM、扩展 ID、manifest 公开 `key` 和可伪造的版本请求头均不能改变这一点。
 - **影响：** 有能力调试扩展或目标页面的用户仍可观察短生命周期明文密码；继续围绕客户端隐藏固定密钥投入，只会增加分析成本，无法杜绝凭据提取或接口仿冒。
-- **方向：** 先逐应用盘点 OIDC、SAML、SSO、token exchange 或服务端代换会话的可行性，再设计 `launch-session` 类接口：结果应短时、单次使用，并绑定 UniPass 用户、应用、账号、目标 origin 和 nonce；服务端执行权限校验、过期与重放拒绝、限流、撤销和脱敏审计。选择一个支持现代认证的应用小范围试点，保留明确回退与关闭路径，验证后逐应用迁移；仅在后端可行性和协议边界确定后新增 ADR。对于只能接收真实 username/password 的系统，明确接受“明文会在终端短暂出现”的物理边界，以最短生命周期、用户触发、精确 URL 和不持久化降低风险。
+- **方向：** 只有未来获得 UniPass 后端及目标应用修改权限、版本化接口契约和试点决策后，才重新评估 OIDC、SAML、SSO、token exchange 或服务端代换会话；届时再设计短时单次、绑定用户/应用/账号/origin/nonce、支持过期重放拒绝与撤销的协议。当前扩展开发不能依赖本债务，也不伪造长期客户端 secret。对于只能接收真实 username/password 的系统，接受“明文会在终端短暂出现”的物理边界，以最短生命周期、用户触发、精确 URL 和不持久化降低风险。
 - **协作与人工边界：** 扩展侧代码、接口契约测试、过期/重放/错误 origin 自动化和 CI 可以由开发自动完成；但至少一次人工协调不可省略：UniPass 后端负责人需确认可修改服务和鉴权依据，目标应用负责人需确认 SSO/token exchange 能力并配置客户端或回调，维护者需指定试点应用、提供脱敏测试账号并在真实环境完成最终登录/撤销验收。没有这些权限与决策时，不得在扩展中伪造长期客户端 secret 或把公开 extension ID、manifest `key`、版本请求头当作授权。
 - **执行顺序：** ① 负责人填写逐应用认证能力表；② 选定支持现代认证的试点；③ 决定协议后写 ADR 与 OpenAPI/错误码；④ 后端实现单次会话、绑定、撤销、限流和审计；⑤ 扩展在功能开关下接入并保留可关闭回退；⑥ 自动化攻击用例通过后由维护者做真实 Chrome 验收；⑦ 逐应用迁移并删除对应客户端解密材料。
 - **验收：** 已迁移应用不再向扩展返回可复用密码；错误用户、账号、origin、过期 token 和重放请求均被服务端拒绝；退出、切换用户或撤权可立即失效；日志不含密码、token 或完整响应；对应客户端产物不再包含长期凭据解密逻辑或以公开客户端标识充当授权的判断；真实 Chrome 完成登录、失效、回退和用户切换烟测。
-- **当前状态：** 维护者于 2026-09-09 确认决策前人工盘点与验收已完成。仓库未记录外部服务的试点名称、协议或敏感配置；在版本化接口契约交接并完成服务端/扩展实现前，本债务仍未偿还，也不代表当前密码型应用已经具备无密码替代能力。
+- **当前状态：** 维护者已完成决策前人工盘点，但当前没有 UniPass 后端、目标应用后端修改权限或版本化试点接口契约。因此本债务为 External Dependency，暂不作为客户端主动开发主线；不代表当前密码型应用已经具备无密码替代能力。
 - **已完成的仓库侧准备：** 决策前的能力盘点表、试点准入标准、待决契约清单、自动化/人工验收边界和负责人操作步骤见 [TD-004 认证服务端化试点准备手册](TD-004-authentication-pilot-playbook.md)。该手册不替代后端、目标应用或维护者的协议与上线决定。
+
+### TD-005: Rust credential core hardening
+
+- **等级：** P1
+- **状态：** Active / Client-side roadmap
+- **范围：** WASM ABI bounds 与 ownership、availability stay-in-WASM、Jupiter ciphertext combined transform、zeroization、plaintext clone 消除、WASM binary import/export 与 raw-secret audit、Rust native/Node integration tests、锁定依赖和 RustSec 检查、可复现 release build、Chrome integration tests。
+- **边界：** 继续保留 Reveal、Copy、Fill、UniPass login、Jupiter login/keepalive 和现有权限/URL/user-scope 校验；不使用 wasm-bindgen，不做激进 obfuscation，不把 Chrome API、DOM 或网络逻辑迁移进 Rust。
+- **当前进展：** P0 ABI lifetime/bounds、availability、Jupiter 组合路径、Rust 模块拆分、产物格式审计和自动化测试已实现；真实 Chrome 仍需按发布清单复验。
 
 ## 偿还流程
 

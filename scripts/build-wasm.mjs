@@ -41,7 +41,7 @@ async function resolveCargo() {
         const rustup = resolve(homedir(), ".cargo/bin/rustup.exe");
         try {
           const toolchains = await output(rustup, ["toolchain", "list"]);
-          const gnu = toolchains.match(/1\.85\.1-x86_64-pc-windows-gnu/);
+          const gnu = toolchains.match(/1\.98\.1-x86_64-pc-windows-gnu/);
           if (gnu) {
             return {
               command: rustup,
@@ -58,7 +58,7 @@ async function resolveCargo() {
       // Try the next local toolchain location.
     }
   }
-  throw new Error("缺少 Rust 1.85.1 与 wasm32-unknown-unknown target，无法构建 credential core");
+  throw new Error("缺少 Rust 1.98.1 与 wasm32-unknown-unknown target，无法构建 credential core");
 }
 
 function run(command, args, quiet = false, env = process.env) {

@@ -119,6 +119,15 @@ test("credential availability distinguishes empty and usable passwords without r
   assert.equal(updateRequests, 0);
 });
 
+test("Jupiter credential API returns only the transformed password", async () => {
+  const credential = await api.jupiterCredentialForAccount("available", "fallback@example.com");
+  assert.deepEqual(credential, {
+    username: "available",
+    transformedPassword: "0A98F2E95077EA703D622EF7F27392D9FC95129137121CA21F52D036DFCE81F81E18896ECEC80C84",
+  });
+  assert.equal("password" in credential, false);
+});
+
 test("application list rejects a missing list instead of treating it as a complete empty catalog", async () => {
   appListMode = "missing";
   await assert.rejects(api.listApps(""), /应用列表返回格式异常/);

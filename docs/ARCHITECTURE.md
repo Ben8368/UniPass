@@ -16,7 +16,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
-构建入口由 `build.mjs` 定义，先以固定 Rust `1.85.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，再使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。产物进入忽略提交的 `dist/`。最终产物审计只允许固定文件清单（包括本地 WASM），并阻断源码/source map、调试语句、常见私钥/API token 格式、JS 中的旧密码学特征或固定协议材料，以及仍可被标准压缩显著缩小的 JavaScript；CI 与 Release 通过同一个 `npm run verify` 复用该门禁。
+构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，再使用 esbuild 的标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。产物进入忽略提交的 `dist/`。最终产物审计只允许固定文件清单（包括本地 WASM），并验证 WASM magic/version、可实例化性、imports/exports 白名单、原始 key/协议文本和 JS 中的旧密码学特征，同时阻断源码/source map、调试语句、常见私钥/API token 格式及仍可被标准压缩显著缩小的 JavaScript；CI 与 Release 通过同一个 `npm run verify` 复用该门禁。
 
 ## 模块职责
 
@@ -28,8 +28,8 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
 | `src/shared/api.ts` | UniPass API 包装、响应校验和密码算法 | UI 状态或 DOM 操作 |
-| `src/background/credential-core.ts` | 单例加载扩展本地 WASM、短暂传入 UTF-8 输入并释放/清零 WASM 分配 | 网络加载代码、持久化密码或将明文转交给 Popup |
-| `credential-core/` | UniPass AES 解密及 Jupiter 密码转换；处理并清零 WASM 内部密码学临时缓冲 | 变更 UniPass/Jupiter 协议、暴露给网页或承诺可阻止运行时分析 |
+| `src/background/credential-core.ts` | 单例加载扩展本地 WASM；校验输入/输出内存范围并释放/清零 WASM 分配；提供 reveal/fill 解密、availability 状态和 ciphertext→Jupiter transformed password | 网络加载代码、持久化密码或让 availability/Jupiter 获取原始明文 |
+| `credential-core/` | `abi` 负责分配登记、边界、status 和 exports；`unipass` 负责 AES 解密/UTF-8；`jupiter` 负责 MD5/DES 转换；`secret` 负责 zeroizing secret ownership 与 key reconstruction | 变更 UniPass/Jupiter 协议、暴露给网页或承诺可阻止运行时分析 |
 
 `src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。三个模块通过显式导出连接，不改变 Popup 与 Service Worker 的消息契约。
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
@@ -52,12 +52,12 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 ### 密码学核心
 
 1. `src/shared/api.ts` 将 `/app/app_config` 的密文交给 Service Worker 内的 `credential-core.ts`；loader 用 `chrome.runtime.getURL("credential-core.wasm")` 读取随扩展安装的资源并缓存实例。实例化失败只映射为通用解密/转换错误，不包含密文、明文或材料。
-2. WASM 在内部重构 UniPass 材料，执行 AES-ECB-PKCS7 解密与 UTF-8 校验；Jupiter 路径在同一核心内执行 MD5 后的 DES-ECB-PKCS7 转换。每次调用后 JS 释放输入/输出 WASM 分配，WASM 清零其输入和临时密码学缓冲。
-3. 解密结果仍只用于既有 reveal、fill 或 Jupiter 登录操作。JS string 不能可靠清零，因此代码只限制其引用作用域；固定向量测试锁定与旧协议的输出兼容性。
+2. `c_v` 在 WASM 内完成解密、UTF-8、trim/whitespace 判断，只返回 `0=error / 1=false / 2=true`；`c_k` 在 WASM 内完成 ciphertext→AES→MD5→DES→hex，JS 只接收 Jupiter 请求必须的 transformed password。Reveal/Fill 才使用 `c_u` 获取明文。每次调用后 JS 释放输入/输出 WASM 分配，WASM 清零其输入和临时密码学缓冲。
+3. ABI 只暴露 `memory,c_a,c_f,c_u,c_v,c_k`，不使用 wasm-bindgen；Rust native tests 与 Node/WASM tests 共同锁定旧协议兼容性。JS string 不能可靠清零，因此代码只限制 reveal/fill 明文引用作用域。
 
 ### Jupiter 保活
 
-用户主动启用后，Service Worker 要求稳定用户作用域，每 25 分钟重新获取对应 UniPass 凭据并向 Jupiter 提交登录 `POST`，把带用户作用域的会话数据放在 `chrome.storage.session`。新 token 同步到已打开的 Jupiter 页面时只静默更新其同源会话存储，不触发 `storage` 鉴权事件，也不执行页面刷新，避免被前端误判为“退出再登录”。每次 alarm 和标签页同步前都会核验当前 UniPass 用户；检测到切换时停止 alarm 并清除会话缓存。关闭保活也会清除 alarm 和会话缓存。外部请求超时为 12 秒。
+用户主动启用后，Service Worker 要求稳定用户作用域，每 25 分钟重新获取对应 UniPass ciphertext 并向 Jupiter 提交登录 `POST`，把带用户作用域的会话数据放在 `chrome.storage.session`。新 token 同步到已打开的 Jupiter 页面时只静默更新其同源会话存储，不触发 `storage` 鉴权事件，也不执行页面刷新，避免被前端误判为“退出再登录”。每次 alarm 和标签页同步前都会核验当前 UniPass 用户；检测到切换时停止 alarm 并清除会话缓存。关闭保活也会清除 alarm 和会话缓存。保活不经过 `credentialForAccount` 或原始 password JS 变量，而是直接调用 ciphertext→transformed password 组合操作。外部请求超时为 12 秒。
 
 ### UniPass 一键登录
 

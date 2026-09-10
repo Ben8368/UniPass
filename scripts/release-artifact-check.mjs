@@ -19,6 +19,8 @@ export const EXPECTED_ARTIFACT_FILES = Object.freeze([
   "popup.js",
   "theme.css",
 ]);
+export const EXPECTED_WASM_IMPORTS = Object.freeze([]);
+export const EXPECTED_WASM_EXPORTS = Object.freeze(["memory", "c_a", "c_f", "c_u", "c_v", "c_k"]);
 
 const EXPECTED_DIRECTORIES = new Set(["background", "content", "icons"]);
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json"]);
@@ -41,6 +43,14 @@ const FORBIDDEN_JS_TEXT = [
   ["CryptoJS MD5 特征", /CryptoJS\.MD5/],
   ["CryptoJS 运行时", /\bCryptoJS\b/],
   ["Jupiter 固定密码协议材料", /phoenix_toptou/],
+];
+const FORBIDDEN_WASM_TEXT = [
+  ["UniPass 固定解密材料（Base64）", Buffer.from("VlXCSJg7qO66MNrMMJir3g==")],
+  ["UniPass 固定解密材料（hex）", Buffer.from("5655c248983ba8eeba30dacc3098abde", "utf8")],
+  ["Jupiter 固定密码协议材料", Buffer.from("phoenix_toptou")],
+];
+const FORBIDDEN_WASM_BYTES = [
+  ["UniPass 完整 raw AES key", Buffer.from("5655c248983ba8eeba30dacc3098abde", "hex")],
 ];
 
 export async function inspectReleaseArtifact(directory) {
@@ -72,6 +82,11 @@ export async function inspectReleaseArtifact(directory) {
 
   for (const file of entries.files) {
     const extension = extname(file).toLowerCase();
+    if (file === "credential-core.wasm") {
+      const wasmErrors = await inspectCredentialCore(resolve(root, ...file.split("/")));
+      errors.push(...wasmErrors.map((error) => `credential-core.wasm ${error}`));
+      continue;
+    }
     if (!TEXT_EXTENSIONS.has(extension)) continue;
     const content = await readFile(resolve(root, ...file.split("/")), "utf8");
     for (const [label, pattern] of FORBIDDEN_TEXT) {
@@ -100,6 +115,35 @@ export async function inspectReleaseArtifact(directory) {
   }
 
   return [...new Set(errors)];
+}
+
+async function inspectCredentialCore(path) {
+  const bytes = await readFile(path);
+  const errors = [];
+  const magic = Buffer.from([0x00, 0x61, 0x73, 0x6d]);
+  const version = Buffer.from([0x01, 0x00, 0x00, 0x00]);
+  if (bytes.length < 8 || !bytes.subarray(0, 4).equals(magic)) errors.push("格式 magic 错误");
+  if (bytes.length < 8 || !bytes.subarray(4, 8).equals(version)) errors.push("格式 version 错误");
+  for (const [label, forbidden] of FORBIDDEN_WASM_TEXT) {
+    if (bytes.includes(forbidden)) errors.push(`包含${label}`);
+  }
+  for (const [label, forbidden] of FORBIDDEN_WASM_BYTES) {
+    if (bytes.includes(forbidden)) errors.push(`包含${label}`);
+  }
+  try {
+    const module = new WebAssembly.Module(bytes);
+    const imports = WebAssembly.Module.imports(module).map(({ module: source, name }) => `${source}.${name}`).sort();
+    const exports = WebAssembly.Module.exports(module).map(({ name }) => name).sort();
+    if (JSON.stringify(imports) !== JSON.stringify([...EXPECTED_WASM_IMPORTS].sort())) {
+      errors.push(`imports 不符合白名单：${imports.join(", ") || "<none>"}`);
+    }
+    if (JSON.stringify(exports) !== JSON.stringify([...EXPECTED_WASM_EXPORTS].sort())) {
+      errors.push(`exports 不符合白名单：${exports.join(", ") || "<none>"}`);
+    }
+  } catch (error) {
+    errors.push(`无法实例化 WebAssembly.Module：${error instanceof Error ? error.message : String(error)}`);
+  }
+  return errors;
 }
 
 export async function assertReleaseArtifact(directory) {

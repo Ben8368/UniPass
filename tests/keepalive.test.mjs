@@ -27,6 +27,14 @@ test("keepalive does not restore an enabled state after it was disabled mid-requ
   assert.match(source, /const latestSettings = await readStoredJupiterKeepaliveSettings\(\)[\s\S]*?if \(latestSettings\.enabled && latestSettings\.userScope === settings\.userScope\)/);
 });
 
+test("Jupiter keepalive requests the combined ciphertext transform", () => {
+  assert.match(source, /jupiterCredentialForAccount/);
+  assert.doesNotMatch(source, /credentialForAccount/);
+  assert.doesNotMatch(source, /transformJupiterPassword/);
+  assert.doesNotMatch(source, /credential\.password/);
+  assert.match(source, /transformedPassword/);
+});
+
 test("disabling keepalive waits for active tab syncs and syncs recheck enabled state", () => {
   assert.match(source, /const activeSessionSyncs = new Set<Promise<void>>\(\)/);
   assert.match(source, /if \(!settings\.enabled \|\| settings\.userScope !== loginData\.userScope\) return/);

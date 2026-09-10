@@ -12,6 +12,9 @@ const STORE_UPDATE_URL = `https://clients2.google.com/service/update2/crx?respon
 const idFromKey = (key) => [...createHash("sha256").update(Buffer.from(key ?? "", "base64")).digest("hex").slice(0, 32)].map((nibble) => String.fromCharCode("a".charCodeAt(0) + Number.parseInt(nibble, 16))).join("");
 const versionParts = String(manifest.version).split(".").map(Number);
 const pluginVersion = await readFile(resolve(root, "src/shared/plugin-version.ts"), "utf8");
+const rustToolchain = await readFile(resolve(root, "rust-toolchain.toml"), "utf8");
+const rustManifest = await readFile(resolve(root, "credential-core/Cargo.toml"), "utf8");
+const rustLock = await readFile(resolve(root, "credential-core/Cargo.lock"), "utf8");
 const storeBaselineMatch = pluginVersion.match(/STORE_PLUGIN_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
 if (packageJson.version !== manifest.version) errors.push("package.json 与 manifest 版本必须一致");
 if (idFromKey(manifest.key) !== STORE_EXTENSION_ID) errors.push(`manifest key 必须派生为商店 ID ${STORE_EXTENSION_ID}`);
@@ -70,10 +73,22 @@ if (packageDependencies["crypto-js"] || packageDependencies["@types/crypto-js"])
 if (/CryptoJS|VlXCSJg7qO66MNrMMJir3g==/.test(api)) {
   errors.push("UniPass API 生产源码不得保留 CryptoJS 或完整固定解密材料");
 }
+if (!/channel\s*=\s*["']1\.98\.1["']/.test(rustToolchain)) errors.push("Rust toolchain 必须固定为 1.98.1");
+if (!/edition\s*=\s*["']2024["']/.test(rustManifest)) errors.push("credential-core 必须使用 Rust 2024 edition");
+if (/\bgit\s*=|git\+/.test(`${rustManifest}\n${rustLock}`)) errors.push("Rust 依赖不得使用 git source");
 
 const credentialCore = await readFile(resolve(root, "src/background/credential-core.ts"), "utf8");
 if (!credentialCore.includes("chrome.runtime.getURL(CORE_FILE)") || !credentialCore.includes("WebAssembly.instantiate")) {
   errors.push("credential core 必须从扩展本地 URL 通过单一 loader 初始化");
+}
+for (const exportName of ["c_v", "c_k", "credentialAvailableCiphertext", "transformJupiterCredentialCiphertext"]) {
+  if (!credentialCore.includes(exportName)) errors.push(`credential core 缺少 ${exportName} 路径`);
+}
+if (credentialCore.includes("transformJupiterPassword")) errors.push("生产 JS 不得暴露原始 Jupiter password transform API");
+
+const jupiterKeepalive = await readFile(resolve(root, "src/background/jupiter-keepalive.ts"), "utf8");
+if (!jupiterKeepalive.includes("jupiterCredentialForAccount") || /credentialForAccount|transformJupiterPassword/.test(jupiterKeepalive)) {
+  errors.push("Jupiter keepalive 必须直接使用 ciphertext combined transform，不得取得原始 password");
 }
 
 const contentScript = await readFile(resolve(root, "src/content/content-script.ts"), "utf8");

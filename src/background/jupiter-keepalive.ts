@@ -1,10 +1,9 @@
-import { accountsForApp, appUrlForApp, credentialForAccount } from "../shared/api";
+import { accountsForApp, appUrlForApp, jupiterCredentialForAccount } from "../shared/api";
 import { fetchJsonWithTimeout } from "../shared/fetch";
 import { isStableUserScope } from "../shared/user-scope";
 import { isJupiterUrl } from "../shared/url";
 import type { JupiterKeepaliveSettings, UniPassAccount } from "../shared/types";
 import { assertCurrentUserScope, UserScopeMismatchError } from "./user-scope-guard";
-import { transformJupiterPassword } from "./credential-core";
 
 const JUPITER_ORIGIN = "https://jupiter.tec-do.com";
 const JUPITER_LOGIN_URL = `${JUPITER_ORIGIN}/phoenix/v1.0/user/login`;
@@ -133,11 +132,11 @@ async function keepJupiterAlive(): Promise<void> {
     return;
   }
 
-  let credential: { username: string; password: string } | undefined;
+  let credential: { username: string; transformedPassword: string } | undefined;
   try {
-    credential = await credentialForAccount(settings.accountId, settings.username);
+    credential = await jupiterCredentialForAccount(settings.accountId, settings.username);
     // Keepalive is a background login renewal: never log out, navigate, or reload Jupiter.
-    const loginData = await loginToJupiter(credential.username, credential.password);
+    const loginData = await loginToJupiter(credential.username, credential.transformedPassword);
     await assertCurrentUserScope(settings.userScope);
     const latestSettings = await readStoredJupiterKeepaliveSettings();
     if (!latestSettings.enabled || latestSettings.userScope !== settings.userScope) return;
@@ -158,20 +157,12 @@ async function keepJupiterAlive(): Promise<void> {
       await saveJupiterKeepaliveResult({ ...latestSettings, lastError: message });
     }
   } finally {
-    if (credential) credential.password = "";
+    if (credential) credential.transformedPassword = "";
   }
 }
 
 /** Submit a fresh Jupiter login request without touching the open page. */
-async function loginToJupiter(email: string, password: string): Promise<JupiterLoginResponse["data"]> {
-  let transformedPassword = "";
-  try {
-    transformedPassword = await transformJupiterPassword(password);
-  } catch {
-    throw new Error("木星密码处理失败");
-  } finally {
-    password = "";
-  }
+async function loginToJupiter(email: string, transformedPassword: string): Promise<JupiterLoginResponse["data"]> {
   const { response, body } = await fetchJsonWithTimeout<JupiterLoginResponse>(JUPITER_LOGIN_URL, {
     method: "POST",
     credentials: "include",

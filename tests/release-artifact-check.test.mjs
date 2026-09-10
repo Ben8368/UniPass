@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import test from "node:test";
@@ -11,6 +11,7 @@ import {
 async function artifactFixture(t) {
   const root = await mkdtemp(join(tmpdir(), "unipass-artifact-"));
   t.after(() => rm(root, { recursive: true, force: true }));
+  const builtWasm = await readFile(new URL("../credential-core/target/wasm32-unknown-unknown/release/credential_core.wasm", import.meta.url));
   for (const file of EXPECTED_ARTIFACT_FILES) {
     const path = join(root, ...file.split("/"));
     await mkdir(dirname(path), { recursive: true });
@@ -20,9 +21,9 @@ async function artifactFixture(t) {
       : extension === ".json"
         ? "{}\n"
         : extension === ".png"
-        ? Buffer.from([0x89, 0x50, 0x4e, 0x47])
+          ? Buffer.from([0x89, 0x50, 0x4e, 0x47])
           : extension === ".wasm"
-            ? Buffer.from([0x00, 0x61, 0x73, 0x6d])
+            ? builtWasm
           : "body{}\n";
     await writeFile(path, content);
   }
@@ -77,4 +78,12 @@ test("rejects credential-core identifiers and fixed protocol material in JavaScr
   assert.ok(errors.some((error) => error.includes("固定解密材料（Base64）")));
   assert.ok(errors.some((error) => error.includes("CryptoJS AES 特征")));
   assert.ok(errors.some((error) => error.includes("Jupiter 固定密码协议材料")));
+});
+
+test("rejects malformed credential-core WASM artifacts", async (t) => {
+  const root = await artifactFixture(t);
+  await writeFile(join(root, "credential-core.wasm"), Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x02, 0x00, 0x00, 0x00]));
+  const errors = await inspectReleaseArtifact(root);
+  assert.ok(errors.some((error) => error.includes("格式 version 错误")));
+  assert.ok(errors.some((error) => error.includes("无法实例化 WebAssembly.Module")));
 });

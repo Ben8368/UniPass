@@ -1,4 +1,8 @@
-import { decryptCredentialCiphertext } from "../background/credential-core";
+import {
+  credentialAvailableCiphertext,
+  decryptCredentialCiphertext,
+  transformJupiterCredentialCiphertext,
+} from "../background/credential-core";
 import { normalizeTargetUrl } from "./url";
 import { fetchJsonWithTimeout } from "./fetch";
 import {
@@ -148,7 +152,11 @@ export async function credentialAvailableForAccount(accountId: string | number):
   const config = await appConfigForAccount(accountId);
   const encryptedPassword = config?.user?.password;
   if (!encryptedPassword) return false;
-  return (await decryptPassword(encryptedPassword)).trim().length > 0;
+  try {
+    return await credentialAvailableCiphertext(encryptedPassword);
+  } catch {
+    throw new Error("密码解密失败，UniPass 算法可能已更新");
+  }
 }
 
 export async function credentialForAccount(
@@ -162,6 +170,23 @@ export async function credentialForAccount(
     username: config?.user?.username || fallbackUsername,
     password: await decryptPassword(encryptedPassword),
   };
+}
+
+export async function jupiterCredentialForAccount(
+  accountId: string | number,
+  fallbackUsername: string,
+): Promise<{ username: string; transformedPassword: string }> {
+  const config = await appConfigForAccount(accountId);
+  const encryptedPassword = config?.user?.password;
+  if (!encryptedPassword) throw new Error("该账号没有可用密码");
+  try {
+    return {
+      username: config?.user?.username || fallbackUsername,
+      transformedPassword: await transformJupiterCredentialCiphertext(encryptedPassword),
+    };
+  } catch {
+    throw new Error("木星密码处理失败，UniPass 算法可能已更新");
+  }
 }
 
 async function appConfigForAccount(accountId: string | number): Promise<AppConfig> {
