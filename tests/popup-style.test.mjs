@@ -22,7 +22,11 @@ test("version settings uses theme-aware layered glass without changing the main 
   );
   assert.match(
     liquidGlassCss,
-    /\.dialog-backdrop\s*\{[^}]*background:\s*var\(--dialog-scrim\);[^}]*backdrop-filter:\s*blur\(7px\) saturate\(120%\)/s,
+    /:root\[data-theme="light"\]\s*\{[^}]*--dialog-scrim:\s*rgba\(255, 255, 255, \.32\);/s,
+  );
+  assert.match(
+    liquidGlassCss,
+    /\.dialog-backdrop\s*\{[^}]*background:\s*var\(--dialog-scrim\);[^}]*backdrop-filter:\s*blur\(10px\) saturate\(120%\)/s,
   );
   assert.match(
     liquidGlassCss,
