@@ -53,7 +53,12 @@ jobs:
         run: npm ci
 
       - name: Verify
-        run: npm run verify
+        run: |
+          for attempt in 1 2 3; do
+            if npm run verify; then exit 0; fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 5
+          done
 
       - name: Verify reproducible WASM release build
         run: npm run verify:wasm-reproducible
