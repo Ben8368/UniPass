@@ -61,6 +61,7 @@ jobs:
       - name: Run automated Chrome smoke
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROME_SMOKE_NO_SANDBOX: "true"
         run: xvfb-run --auto-servernum npm run smoke:chrome
 
       - name: Upload unpacked extension artifact

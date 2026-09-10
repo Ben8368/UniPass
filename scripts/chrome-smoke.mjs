@@ -23,6 +23,7 @@ const browser = await puppeteer.launch({
     "--disable-background-networking",
     "--disable-component-update",
     "--disable-popup-blocking",
+    ...(process.env.CHROME_SMOKE_NO_SANDBOX === "true" ? ["--no-sandbox"] : []),
   ],
 });
 
