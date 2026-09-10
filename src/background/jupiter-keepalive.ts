@@ -157,7 +157,11 @@ async function keepJupiterAlive(): Promise<void> {
       await saveJupiterKeepaliveResult({ ...latestSettings, lastError: message });
     }
   } finally {
-    if (credential) credential.transformedPassword = "";
+    if (credential) {
+      credential.username = "";
+      credential.transformedPassword = "";
+      credential = undefined;
+    }
   }
 }
 

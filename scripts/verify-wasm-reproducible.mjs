@@ -20,7 +20,7 @@ try {
   for (const label of ["a", "b"]) {
     const targetDirectory = join(targetRoot, `target-${label}`);
     await runCargo(buildArgs, {
-      env: { ...process.env, CARGO_TARGET_DIR: targetDirectory },
+      env: { ...process.env, CARGO_TARGET_DIR: targetDirectory, UNIPASS_HARDEN_SEED: "stable-v1" },
     });
     const artifact = resolve(targetDirectory, "wasm32-unknown-unknown/release/credential_core.wasm");
     const bytes = await readFile(artifact);

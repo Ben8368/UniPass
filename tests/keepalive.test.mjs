@@ -35,6 +35,12 @@ test("Jupiter keepalive requests the combined ciphertext transform", () => {
   assert.match(source, /transformedPassword/);
 });
 
+test("Jupiter transformed credentials are cleared in the Service Worker finally path", () => {
+  assert.match(source, /credential\.username\s*=\s*""/);
+  assert.match(source, /credential\.transformedPassword\s*=\s*""/);
+  assert.match(source, /credential\s*=\s*undefined/);
+});
+
 test("disabling keepalive waits for active tab syncs and syncs recheck enabled state", () => {
   assert.match(source, /const activeSessionSyncs = new Set<Promise<void>>\(\)/);
   assert.match(source, /if \(!settings\.enabled \|\| settings\.userScope !== loginData\.userScope\) return/);

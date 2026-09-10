@@ -4,11 +4,12 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 let listener;
+let listenerCount = 0;
 const attributes = new Map();
 globalThis.chrome = {
   runtime: {
     onMessage: {
-      addListener(value) { listener = value; },
+      addListener(value) { listener = value; listenerCount += 1; },
     },
   },
 };
@@ -33,6 +34,17 @@ const result = await build({
 const source = result.outputFiles[0].text;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 await import(moduleUrl);
+
+test("listener state is isolated from page DOM attributes and repeated injection", async () => {
+  attributes.set("data-unipass-minimal-listener", "ready");
+  const secondModuleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  await import(`${secondModuleUrl}#second-injection`);
+  assert.equal(listenerCount, 1);
+  attributes.delete("data-unipass-minimal-listener");
+  const thirdModuleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  await import(`${thirdModuleUrl}#third-injection`);
+  assert.equal(listenerCount, 1);
+});
 
 test("content script rejects credentials when the live document no longer matches the application", () => {
   assert.equal(typeof listener, "function");

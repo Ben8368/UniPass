@@ -1,7 +1,9 @@
 import { readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
+import { inspectWasm } from "./wasm-inspect.mjs";
 
 export const EXPECTED_ARTIFACT_FILES = Object.freeze([
   "background/service-worker.js",
@@ -21,6 +23,7 @@ export const EXPECTED_ARTIFACT_FILES = Object.freeze([
 ]);
 export const EXPECTED_WASM_IMPORTS = Object.freeze([]);
 export const EXPECTED_WASM_EXPORTS = Object.freeze(["memory", "c_a", "c_f", "c_u", "c_v", "c_k"]);
+export const HARDENED_ARTIFACT_FILES = Object.freeze(["integrity.json", "hardened-build-report.json"]);
 
 const EXPECTED_DIRECTORIES = new Set(["background", "content", "icons"]);
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json"]);
@@ -53,7 +56,7 @@ const FORBIDDEN_WASM_BYTES = [
   ["UniPass 完整 raw AES key", Buffer.from("5655c248983ba8eeba30dacc3098abde", "hex")],
 ];
 
-export async function inspectReleaseArtifact(directory) {
+export async function inspectReleaseArtifact(directory, { additionalFiles = [] } = {}) {
   const root = resolve(directory);
   const errors = [];
   let entries;
@@ -71,8 +74,8 @@ export async function inspectReleaseArtifact(directory) {
   }
 
   const actualFiles = new Set(entries.files);
-  const expectedFiles = new Set(EXPECTED_ARTIFACT_FILES);
-  for (const file of EXPECTED_ARTIFACT_FILES) {
+  const expectedFiles = new Set([...EXPECTED_ARTIFACT_FILES, ...additionalFiles]);
+  for (const file of expectedFiles) {
     if (!actualFiles.has(file)) errors.push(`缺少预期产物：${file}`);
   }
   for (const file of actualFiles) {
@@ -117,6 +120,49 @@ export async function inspectReleaseArtifact(directory) {
   return [...new Set(errors)];
 }
 
+export async function inspectHardenedArtifact(directory) {
+  const root = resolve(directory);
+  const errors = await inspectReleaseArtifact(root, { additionalFiles: HARDENED_ARTIFACT_FILES });
+  try {
+    const integrity = JSON.parse(await readFile(resolve(root, "integrity.json"), "utf8"));
+    const expected = new Set([
+      "credential-core.wasm",
+      "background/service-worker.js",
+      "content/content-script.js",
+      "popup.js",
+    ]);
+    const actual = new Set(Object.keys(integrity.files ?? {}));
+    if (JSON.stringify([...actual].sort()) !== JSON.stringify([...expected].sort())) {
+      errors.push("integrity.json 文件集合不符合白名单");
+    }
+    for (const file of expected) {
+      const expectedHash = integrity.files?.[file];
+      const bytes = await readFile(resolve(root, ...file.split("/")));
+      const actualHash = createHash("sha256").update(bytes).digest("hex");
+      if (expectedHash !== actualHash) errors.push(`integrity.json 与 ${file} 不匹配`);
+    }
+  } catch (error) {
+    errors.push(`integrity.json 无效：${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    const report = JSON.parse(await readFile(resolve(root, "hardened-build-report.json"), "utf8"));
+    if (!/^[a-f0-9]{64}$/.test(report.hardenSeedSha256 ?? "")) errors.push("hardened report 缺少 seed hash");
+    if ("seed" in report || "fragments" in report || "password" in report || "key" in report) {
+      errors.push("hardened report 不得包含 seed、fragment、password 或 key");
+    }
+  } catch (error) {
+    errors.push(`hardened-build-report.json 无效：${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    const wasm = await readFile(resolve(root, "credential-core.wasm"));
+    const inspection = inspectWasm(wasm);
+    for (const hit of inspection.forbiddenHits) errors.push(`包含禁止的 WASM 路径特征：${hit}`);
+  } catch (error) {
+    errors.push(`无法完成 hardened WASM 路径审计：${error instanceof Error ? error.message : String(error)}`);
+  }
+  return [...new Set(errors)];
+}
+
 async function inspectCredentialCore(path) {
   const bytes = await readFile(path);
   const errors = [];
@@ -157,6 +203,14 @@ export async function assertReleaseArtifact(directory) {
     throw new Error(`🚦 Release Artifact Audit: RED\n${errors.map((error) => `🔴 ${error}`).join("\n")}`);
   }
   console.log("🚦 Release Artifact Audit: GREEN");
+}
+
+export async function assertHardenedArtifact(directory) {
+  const errors = await inspectHardenedArtifact(directory);
+  if (errors.length) {
+    throw new Error(`🚦 Hardened Artifact Audit: RED\n${errors.map((error) => `🔴 ${error}`).join("\n")}`);
+  }
+  console.log("🚦 Hardened Artifact Audit: GREEN");
 }
 
 async function collectEntries(root) {

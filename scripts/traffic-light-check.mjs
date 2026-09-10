@@ -15,6 +15,7 @@ const pluginVersion = await readFile(resolve(root, "src/shared/plugin-version.ts
 const rustToolchain = await readFile(resolve(root, "rust-toolchain.toml"), "utf8");
 const rustManifest = await readFile(resolve(root, "credential-core/Cargo.toml"), "utf8");
 const rustLock = await readFile(resolve(root, "credential-core/Cargo.lock"), "utf8");
+const security = await readFile(resolve(root, "SECURITY.md"), "utf8");
 const workflowFiles = [".github/workflows/ci.yml", ".github/workflows/release.yml"];
 const storeBaselineMatch = pluginVersion.match(/STORE_PLUGIN_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
 if (packageJson.version !== manifest.version) errors.push("package.json 与 manifest 版本必须一致");
@@ -112,6 +113,18 @@ const contentScript = await readFile(resolve(root, "src/content/content-script.t
 if (/\.(?:submit|requestSubmit)\s*\(/.test(contentScript)) {
   errors.push("Content Script 不得自动提交表单");
 }
+if (contentScript.includes("data-unipass-minimal-listener") || !contentScript.includes("__unipassMinimalListenerInstalled")) {
+  errors.push("Content Script listener 状态必须使用 isolated-world 状态，不得依赖页面 DOM marker");
+}
+if (!security.includes("Jupiter transformedPassword") || !security.includes("credential-equivalent secret")) {
+  errors.push("SECURITY.md 必须将 Jupiter transformedPassword 分类为 credential-equivalent secret");
+}
+for (const workflowFile of workflowFiles) {
+  const workflow = await readFile(resolve(root, workflowFile), "utf8");
+  if (/for attempt[\s\S]*npm run verify/.test(workflow)) {
+    errors.push(`${workflowFile} 不得整体重试 npm run verify`);
+  }
+}
 
 const buildScript = await readFile(resolve(root, "build.mjs"), "utf8");
 for (const [pattern, error] of [
@@ -120,8 +133,9 @@ for (const [pattern, error] of [
   [/\btreeShaking:\s*true\b/, "发布构建必须启用 tree shaking"],
   [/\bdrop:\s*\[\s*["']debugger["']\s*\]/, "发布构建必须移除 debugger"],
   [/\blegalComments:\s*["']eof["']/, "发布构建必须在文件末尾保留第三方许可声明"],
-  [/\bassertReleaseArtifact\s*\(\s*out\s*\)/, "构建完成后必须审计最终 dist 产物"],
-  [/\bbuildCredentialCore\s*\(\s*resolve\(out,\s*["']credential-core\.wasm["']\)\s*\)/, "构建必须生成并复制 credential-core.wasm"],
+  [/\baudit\s*=\s*assertReleaseArtifact/, "普通构建必须使用 release artifact audit"],
+  [/\bawait\s+audit\(out\)/, "构建完成后必须审计最终 dist 产物"],
+  [/\bconst\s+wasmPath\s*=\s*resolve\(out,\s*["']credential-core\.wasm["']\)/, "构建必须生成并复制 credential-core.wasm"],
 ]) {
   if (!pattern.test(buildScript)) errors.push(error);
 }

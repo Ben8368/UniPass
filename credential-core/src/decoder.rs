@@ -3,14 +3,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use cipher::{BlockDecryptMut, KeyInit, block_padding::Pkcs7};
 use ecb::Decryptor;
 
-use crate::secret::{SecretBytes, reconstruct};
-
-const U_PART_A: [u8; 16] = [
-    0x3b, 0x91, 0x52, 0xe7, 0x0c, 0x4a, 0x2d, 0xb4, 0x71, 0xc8, 0x36, 0x05, 0xa9, 0x6f, 0x1c, 0xd2,
-];
-const U_PART_B: [u8; 16] = [
-    0x6d, 0xc4, 0x90, 0xaf, 0x94, 0x71, 0x85, 0x5a, 0xcb, 0xf8, 0xec, 0xc9, 0x99, 0xf7, 0xb7, 0x0c,
-];
+use crate::generated_material::u_key;
+use crate::secret::SecretBytes;
 
 pub(crate) fn decrypt(input: &[u8]) -> Option<SecretBytes> {
     let encoded = std::str::from_utf8(input).ok()?;
@@ -19,7 +13,7 @@ pub(crate) fn decrypt(input: &[u8]) -> Option<SecretBytes> {
         return None;
     }
 
-    let key = reconstruct::<16>(&U_PART_A, &U_PART_B);
+    let key = u_key();
     let decryptor = Decryptor::<Aes128>::new_from_slice(key.as_ref()).ok()?;
     let plaintext = zeroize::Zeroizing::new(
         decryptor

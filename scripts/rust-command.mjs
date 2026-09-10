@@ -4,6 +4,26 @@ import { spawn } from "node:child_process";
 
 export const root = resolve(import.meta.dirname, "..");
 
+function normalizeForRust(path) {
+  return resolve(path).replaceAll("\\", "/");
+}
+
+export function rustEnvironment(env = process.env) {
+  const remapFlags = [
+    `--remap-path-prefix=${normalizeForRust(root)}=/s`,
+    `--remap-path-prefix=${normalizeForRust(resolve(homedir(), ".cargo/registry/src"))}=/r`,
+    `--remap-path-prefix=${normalizeForRust(resolve(homedir(), ".rustup/toolchains"))}=/t`,
+    "--remap-path-prefix=/rustc=/t",
+    "--remap-path-prefix=/rust/deps=/d",
+    "-C debuginfo=0",
+  ];
+  const existing = env.RUSTFLAGS?.trim();
+  return {
+    ...env,
+    RUSTFLAGS: [existing, ...remapFlags].filter(Boolean).join(" "),
+  };
+}
+
 export async function resolveCargo() {
   const rustup = process.platform === "win32"
     ? resolve(homedir(), ".cargo/bin/rustup.exe")
@@ -37,7 +57,7 @@ export async function resolveCargo() {
 
 export async function runCargo(args, { env = process.env, quiet = false } = {}) {
   const cargo = await resolveCargo();
-  return runProcess(cargo.command, [...cargo.prefix, ...args], { env, quiet });
+  return runProcess(cargo.command, [...cargo.prefix, ...args], { env: rustEnvironment(env), quiet });
 }
 
 export async function runProcess(command, args, { env = process.env, quiet = false, input } = {}) {

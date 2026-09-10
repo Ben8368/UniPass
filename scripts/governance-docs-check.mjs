@@ -103,7 +103,11 @@ for (const script of [
   "rust:build",
   "verify:rust",
   "verify:wasm-reproducible",
+  "build:hardened",
+  "audit:hardened",
+  "verify:hardened:diversity",
   "smoke:chrome",
+  "smoke:chrome:hardened",
   "verify",
 ]) {
   if (!packageJson.scripts?.[script]) errors.push(`package.json: 缺少脚本“${script}”`);

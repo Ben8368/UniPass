@@ -36,7 +36,7 @@ npm install
 npm run verify
 ```
 
-credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown；`npm run verify` 已包含 native test、native/wasm clippy、fmt 和 WASM release build。发布或发版前另运行 `npm run verify:wasm-reproducible`，它使用两个隔离 target 目录做两次独立构建；`npm run smoke:chrome` 在本机 Chrome 中加载已构建的 `dist/` 并回归 MV3/Service Worker/WASM 重启。后两项分别是较慢的发布验证和需要 Chrome 的环境验证，不由普通 `npm test` 代替。
+credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown；`npm run verify` 已包含 native test、native/wasm clippy、fmt 和 WASM release build。发布或发版前另运行 `npm run verify:wasm-reproducible`，它使用两个隔离 target 目录做两次独立构建；`npm run smoke:chrome` 在本机 Chromium 中加载已构建的 `dist/` 并回归 MV3/Service Worker/WASM 重启。最终交付使用 `npm run build:hardened`，它直接生成可加载的 hardened `dist/`，再运行 `npm run audit:hardened`、`npm run verify:hardened:diversity` 和 `npm run smoke:chrome:hardened`。hardened seed 可由 `UNIPASS_HARDEN_SEED` 指定；不指定时随机生成，seed 本身不会进入产物。上述命令不要求最终用户安装 Rust、Node、Binaryen 或其他外部运行时。
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 

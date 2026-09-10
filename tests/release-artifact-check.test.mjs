@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import test from "node:test";
 import {
+  HARDENED_ARTIFACT_FILES,
   EXPECTED_ARTIFACT_FILES,
+  inspectHardenedArtifact,
   inspectReleaseArtifact,
 } from "../scripts/release-artifact-check.mjs";
 
@@ -27,6 +30,17 @@ async function artifactFixture(t) {
           : "body{}\n";
     await writeFile(path, content);
   }
+  return root;
+}
+
+async function hardenedArtifactFixture(t) {
+  const root = await artifactFixture(t);
+  const hashes = {};
+  for (const file of ["credential-core.wasm", "background/service-worker.js", "content/content-script.js", "popup.js"]) {
+    hashes[file] = createHash("sha256").update(await readFile(join(root, ...file.split("/")))).digest("hex");
+  }
+  await writeFile(join(root, "integrity.json"), JSON.stringify({ version: 1, files: hashes }));
+  await writeFile(join(root, "hardened-build-report.json"), JSON.stringify({ hardenSeedSha256: "a".repeat(64) }));
   return root;
 }
 
@@ -99,4 +113,21 @@ test("rejects credential-core name and producers custom sections", async (t) => 
   const errors = await inspectReleaseArtifact(root);
   assert.ok(errors.some((error) => error.includes("不应发布的 name custom section")));
   assert.ok(errors.some((error) => error.includes("不应发布的 producers custom section")));
+});
+
+test("accepts hardened integrity/report files and rejects a mismatched integrity hash", async (t) => {
+  assert.deepEqual([...HARDENED_ARTIFACT_FILES].sort(), ["hardened-build-report.json", "integrity.json"]);
+  const root = await hardenedArtifactFixture(t);
+  assert.deepEqual(await inspectHardenedArtifact(root), []);
+  await writeFile(join(root, "integrity.json"), JSON.stringify({
+    version: 1,
+    files: {
+      "credential-core.wasm": "0".repeat(64),
+      "background/service-worker.js": "0".repeat(64),
+      "content/content-script.js": "0".repeat(64),
+      "popup.js": "0".repeat(64),
+    },
+  }));
+  const errors = await inspectHardenedArtifact(root);
+  assert.ok(errors.some((error) => error.includes("integrity.json 与 credential-core.wasm 不匹配")));
 });

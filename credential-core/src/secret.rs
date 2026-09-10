@@ -40,12 +40,22 @@ impl Drop for SecretBytes {
     }
 }
 
-pub(crate) fn reconstruct<const N: usize>(left: &[u8; N], right: &[u8; N]) -> Zeroizing<[u8; N]> {
+pub(crate) fn reconstruct<const N: usize, const F: usize>(
+    fragments: &[[u8; N]; F],
+    order: &[u8; N],
+    rotate: &[u8; N],
+    offset: &[u8; N],
+) -> Zeroizing<[u8; N]> {
     let mut material = Zeroizing::new([0u8; N]);
     for index in 0..N {
-        // Keep the public fragments separate in optimized output. The final key is
-        // reconstructed only at runtime and remains owned by a zeroizing buffer.
-        material[index] = black_box(left[index]) ^ black_box(right[index]);
+        let slot = order[index] as usize;
+        let mut encoded = 0u8;
+        for fragment in fragments {
+            encoded ^= black_box(fragment[slot]);
+        }
+        material[index] = encoded
+            .wrapping_sub(black_box(offset[index]))
+            .rotate_right(u32::from(black_box(rotate[index])));
     }
     material
 }

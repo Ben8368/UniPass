@@ -4,11 +4,9 @@ use ecb::Encryptor;
 use md5::{Digest, Md5};
 use zeroize::Zeroizing;
 
-use crate::secret::{SecretBytes, reconstruct};
+use crate::generated_material::j_key;
+use crate::secret::SecretBytes;
 use crate::unipass;
-
-const J_PART_A: [u8; 8] = [0x19, 0xa4, 0x2d, 0x73, 0x88, 0x0c, 0xe1, 0x4a];
-const J_PART_B: [u8; 8] = [0x69, 0xcc, 0x42, 0x16, 0xe6, 0x65, 0x99, 0x15];
 const HEX_LOWER: &[u8; 16] = b"0123456789abcdef";
 const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
 
@@ -26,7 +24,7 @@ pub(crate) fn transform(input: &[u8]) -> Option<SecretBytes> {
         digest_hex[index * 2 + 1] = HEX_LOWER[(byte & 0x0f) as usize];
     }
 
-    let key = reconstruct::<8>(&J_PART_A, &J_PART_B);
+    let key = j_key();
     let encryptor = Encryptor::<Des>::new_from_slice(key.as_ref()).ok()?;
     let encrypted = Zeroizing::new(encryptor.encrypt_padded_vec_mut::<Pkcs7>(digest_hex.as_ref()));
     let mut output = Zeroizing::new(vec![0u8; encrypted.len() * 2]);

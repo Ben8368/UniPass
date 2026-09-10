@@ -1,9 +1,11 @@
 import type { FillRequest, FillResult } from "../shared/types";
 import { appUrlMatches } from "../shared/url";
 
-const marker = "data-unipass-minimal-listener";
-if (document.documentElement.getAttribute(marker) !== "ready") {
-  document.documentElement.setAttribute(marker, "ready");
+const isolatedWorldState = globalThis as typeof globalThis & {
+  __unipassMinimalListenerInstalled?: boolean;
+};
+if (!isolatedWorldState.__unipassMinimalListenerInstalled) {
+  isolatedWorldState.__unipassMinimalListenerInstalled = true;
   chrome.runtime.onMessage.addListener(
     (message: FillRequest, _sender, sendResponse: (result: FillResult) => void) => {
       if (message.type !== "fillCredentials") return;

@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import puppeteer from "puppeteer-core";
 
 const root = resolve(import.meta.dirname, "..");
-const dist = resolve(root, "dist");
+const dist = resolve(root, process.argv[2] ?? process.env.CHROME_SMOKE_DIST ?? "dist");
 const manifest = JSON.parse(await readFile(join(dist, "manifest.json"), "utf8"));
 const chromePath = await findChrome();
 const userDataDir = join(tmpdir(), `unipass-chrome-smoke-${process.pid}-${Date.now()}`);
