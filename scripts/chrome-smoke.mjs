@@ -55,7 +55,6 @@ try {
     setTimeout(() => chrome.runtime.reload(), 0);
     return true;
   });
-  const restartedTarget = await waitForTarget(browser, (target) => target.type() === "service_worker" && target !== serviceWorkerTarget, { timeout: 15_000 });
 
   const restartedPopup = await browser.newPage();
   restartedPopup.on("console", (message) => {
@@ -63,6 +62,7 @@ try {
   });
   restartedPopup.on("pageerror", (error) => errors.push(`restarted popup page error: ${error.message}`));
   await restartedPopup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+  const restartedTarget = await waitForTarget(browser, (target) => target.type() === "service_worker" && target !== serviceWorkerTarget, { timeout: 15_000 });
   await assertWasmLoads(await waitForWorker(restartedTarget));
 
   assert.deepEqual(errors, [], `extension console errors:\n${errors.join("\n")}`);
