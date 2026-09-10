@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      crypto-core:
+        patterns:
+          - aes
+          - cipher
+          - des
+          - ecb
 
   - package-ecosystem: npm
     directory: /
