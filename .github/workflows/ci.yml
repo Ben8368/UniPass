@@ -21,6 +21,7 @@ jobs:
       - name: Audit Cargo.lock with RustSec
         uses: rustsec/audit-check@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           working-directory: credential-core
 
   verify:
