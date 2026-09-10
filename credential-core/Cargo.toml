@@ -8,7 +8,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-aes = { version = "0.8.4", features = ["zeroize"] }
+aes = { version = "0.9.3", features = ["zeroize"] }
 base64 = "0.23.1"
 cipher = { version = "0.4.4", features = ["alloc", "block-padding", "zeroize"] }
 des = { version = "0.8.1", features = ["zeroize"] }
