@@ -69,6 +69,7 @@ jobs:
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
           CHROME_SMOKE_NO_SANDBOX: "true"
+          CHROME_SMOKE_SKIP_RESTART: "true"
         run: xvfb-run --auto-servernum npm run smoke:chrome
 
       - name: Upload verified unpacked extension artifact

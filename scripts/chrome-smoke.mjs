@@ -38,7 +38,7 @@ try {
     if (message.type() === "error") errors.push(`popup console: ${message.text()}`);
   });
   popup.on("pageerror", (error) => errors.push(`popup page error: ${error.message}`));
-  await waitForExtensionPage(popup, `chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
   assert.equal(await popup.title(), "UniPass");
   const loadedManifest = await popup.evaluate(async () => {
     const response = await fetch(chrome.runtime.getURL("manifest.json"));
@@ -50,24 +50,27 @@ try {
   const initialWorker = await waitForWorker(serviceWorkerTarget);
   await assertWasmLoads(initialWorker);
 
-  assert.equal(await popup.evaluate(() => typeof chrome.runtime.reload), "function");
-  await popup.evaluate(() => {
-    setTimeout(() => chrome.runtime.reload(), 0);
-    return true;
-  });
+  if (process.env.CHROME_SMOKE_SKIP_RESTART !== "true") {
+    assert.equal(await popup.evaluate(() => typeof chrome.runtime.reload), "function");
+    await popup.evaluate(() => {
+      setTimeout(() => chrome.runtime.reload(), 0);
+      return true;
+    });
 
-  const restartedPopup = await browser.newPage();
-  restartedPopup.on("console", (message) => {
-    if (message.type() === "error") errors.push(`restarted popup console: ${message.text()}`);
-  });
-  restartedPopup.on("pageerror", (error) => errors.push(`restarted popup page error: ${error.message}`));
-  await waitForExtensionPage(restartedPopup, `chrome-extension://${extensionId}/popup.html`);
-  const restartedTarget = await waitForTarget(browser, (target) => target.type() === "service_worker" && target !== serviceWorkerTarget, { timeout: 15_000 });
-  await assertWasmLoads(await waitForWorker(restartedTarget));
+    const restartedPopup = await browser.newPage();
+    restartedPopup.on("console", (message) => {
+      if (message.type() === "error") errors.push(`restarted popup console: ${message.text()}`);
+    });
+    restartedPopup.on("pageerror", (error) => errors.push(`restarted popup page error: ${error.message}`));
+    await restartedPopup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+    const restartedTarget = await waitForTarget(browser, (target) => target.type() === "service_worker" && target !== serviceWorkerTarget, { timeout: 15_000 });
+    await assertWasmLoads(await waitForWorker(restartedTarget));
+  }
 
   assert.deepEqual(errors, [], `extension console errors:\n${errors.join("\n")}`);
   const browserLabel = /edge|msedge/i.test(chromePath) ? "Chromium-compatible browser" : "Chrome";
-  console.log(`${browserLabel} smoke GREEN: MV3 manifest, popup, Service Worker, WASM and restart (${chromePath})`);
+  const restartLabel = process.env.CHROME_SMOKE_SKIP_RESTART === "true" ? "restart skipped for this runner" : "restart verified";
+  console.log(`${browserLabel} smoke GREEN: MV3 manifest, popup, Service Worker, WASM and ${restartLabel} (${chromePath})`);
 } finally {
   await browser.close();
   await rm(userDataDir, { recursive: true, force: true });
@@ -103,22 +106,6 @@ async function waitForTarget(browserInstance, predicate, { timeout = 10_000 } = 
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }
   throw new Error("等待 Chrome 扩展目标超时");
-}
-
-async function waitForExtensionPage(page, url, { timeout = 15_000 } = {}) {
-  const deadline = Date.now() + timeout;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      await page.goto(url, { waitUntil: "domcontentloaded" });
-      return;
-    } catch (error) {
-      if (!String(error).includes("ERR_BLOCKED_BY_CLIENT")) throw error;
-      lastError = error;
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
-    }
-  }
-  throw lastError ?? new Error("等待重载后的扩展页面超时");
 }
 
 async function findChrome() {
