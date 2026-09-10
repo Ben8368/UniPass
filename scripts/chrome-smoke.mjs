@@ -38,7 +38,7 @@ try {
     if (message.type() === "error") errors.push(`popup console: ${message.text()}`);
   });
   popup.on("pageerror", (error) => errors.push(`popup page error: ${error.message}`));
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+  await waitForExtensionPage(popup, `chrome-extension://${extensionId}/popup.html`);
   assert.equal(await popup.title(), "UniPass");
   const loadedManifest = await popup.evaluate(async () => {
     const response = await fetch(chrome.runtime.getURL("manifest.json"));
