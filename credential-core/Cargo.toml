@@ -13,7 +13,7 @@ base64 = "0.23.1"
 cipher = { version = "0.4.4", features = ["alloc", "block-padding", "zeroize"] }
 des = { version = "0.8.1", features = ["zeroize"] }
 ecb = { version = "0.1.2", features = ["alloc", "block-padding"] }
-md-5 = "0.10.6"
+md-5 = "0.11.0"
 zeroize = { version = "1.8.1", features = ["alloc"] }
 
 [profile.release]
