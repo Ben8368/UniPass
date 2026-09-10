@@ -61,7 +61,7 @@ try {
     if (message.type() === "error") errors.push(`restarted popup console: ${message.text()}`);
   });
   restartedPopup.on("pageerror", (error) => errors.push(`restarted popup page error: ${error.message}`));
-  await restartedPopup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+  await waitForExtensionPage(restartedPopup, `chrome-extension://${extensionId}/popup.html`);
   const restartedTarget = await waitForTarget(browser, (target) => target.type() === "service_worker" && target !== serviceWorkerTarget, { timeout: 15_000 });
   await assertWasmLoads(await waitForWorker(restartedTarget));
 
@@ -103,6 +103,22 @@ async function waitForTarget(browserInstance, predicate, { timeout = 10_000 } = 
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }
   throw new Error("等待 Chrome 扩展目标超时");
+}
+
+async function waitForExtensionPage(page, url, { timeout = 15_000 } = {}) {
+  const deadline = Date.now() + timeout;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded" });
+      return;
+    } catch (error) {
+      if (!String(error).includes("ERR_BLOCKED_BY_CLIENT")) throw error;
+      lastError = error;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+  }
+  throw lastError ?? new Error("等待重载后的扩展页面超时");
 }
 
 async function findChrome() {
