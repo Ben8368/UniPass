@@ -108,6 +108,7 @@ for (const script of [
   "verify:hardened:diversity",
   "smoke:chrome",
   "smoke:chrome:hardened",
+  "verify:hardened",
   "verify",
 ]) {
   if (!packageJson.scripts?.[script]) errors.push(`package.json: 缺少脚本“${script}”`);

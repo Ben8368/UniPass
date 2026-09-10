@@ -3,9 +3,19 @@ import { access, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import puppeteer from "puppeteer-core";
+import { inspectHardenedMetadata } from "./release-artifact-check.mjs";
 
 const root = resolve(import.meta.dirname, "..");
-const dist = resolve(root, process.argv[2] ?? process.env.CHROME_SMOKE_DIST ?? "dist");
+const smokeArguments = process.argv.slice(2);
+const hardened = smokeArguments.includes("--hardened");
+const distArgument = smokeArguments.find((argument) => argument !== "--hardened");
+const dist = resolve(root, distArgument ?? process.env.CHROME_SMOKE_DIST ?? "dist");
+if (hardened) {
+  const metadataErrors = await inspectHardenedMetadata(resolve(root, "artifacts/hardened"), dist);
+  if (metadataErrors.length) {
+    throw new Error(`Hardened Chrome smoke requires a verified hardened dist:\n${metadataErrors.join("\n")}`);
+  }
+}
 const manifest = JSON.parse(await readFile(join(dist, "manifest.json"), "utf8"));
 const chromePath = await findChrome();
 const userDataDir = join(tmpdir(), `unipass-chrome-smoke-${process.pid}-${Date.now()}`);

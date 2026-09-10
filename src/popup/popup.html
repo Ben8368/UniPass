@@ -126,7 +126,7 @@
           <form id="versionForm" class="settings-form">
             <a class="plugin-store-link" href="https://chromewebstore.google.com/detail/unipass/gjphikebcceegfolnbfncepfmjnhdkam" target="_blank" rel="noopener noreferrer">商店插件版本<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></a>
             <p class="settings-help">默认提交商店基线。本地开发未及时跟进商店版时，可手动指定网络提交版本；清空后恢复基线。</p>
-            <div class="version-status"><span>本地构建</span><strong id="localBuildPluginVersion">检查中</strong><small>浏览器扩展管理页显示的版本</small></div>
+            <div class="version-status"><span>本地构建</span><div class="version-value"><strong id="localBuildPluginVersion">检查中</strong><span id="localBuildTime" class="version-build-time">检查中</span></div><small>浏览器扩展管理页显示的版本 · 构建时间 YYMMDD-HHMM</small></div>
             <div class="version-status"><span>网络提交</span><strong id="networkPluginVersion">检查中</strong><small id="networkPluginVersionSource">所有 UniPass 请求的 <code>X-Browser-Plugin-Version</code></small></div>
             <label class="version-override" for="pluginVersionOverride">手动网络版本
               <input id="pluginVersionOverride" type="text" inputmode="numeric" autocomplete="off" placeholder="留空则使用商店基线" aria-describedby="networkPluginVersionSource" />

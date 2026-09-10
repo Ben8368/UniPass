@@ -23,7 +23,7 @@ export const EXPECTED_ARTIFACT_FILES = Object.freeze([
 ]);
 export const EXPECTED_WASM_IMPORTS = Object.freeze([]);
 export const EXPECTED_WASM_EXPORTS = Object.freeze(["memory", "c_a", "c_f", "c_u", "c_v", "c_k"]);
-export const HARDENED_ARTIFACT_FILES = Object.freeze(["integrity.json", "hardened-build-report.json"]);
+export const HARDENED_METADATA_FILES = Object.freeze(["hardened-build-report.json", "integrity.json"]);
 
 const EXPECTED_DIRECTORIES = new Set(["background", "content", "icons"]);
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json"]);
@@ -51,6 +51,11 @@ const FORBIDDEN_WASM_TEXT = [
   ["UniPass 固定解密材料（Base64）", Buffer.from("VlXCSJg7qO66MNrMMJir3g==")],
   ["UniPass 固定解密材料（hex）", Buffer.from("5655c248983ba8eeba30dacc3098abde", "utf8")],
   ["Jupiter 固定密码协议材料", Buffer.from("phoenix_toptou")],
+  ["strategy 语义字符串", Buffer.from("StrategyA")],
+  ["strategy 语义字符串", Buffer.from("StrategyB")],
+  ["strategy 语义字符串", Buffer.from("xor_rotate")],
+  ["strategy 语义字符串", Buffer.from("table_lookup")],
+  ["strategy 语义字符串", Buffer.from("reconstruct_key")],
 ];
 const FORBIDDEN_WASM_BYTES = [
   ["UniPass 完整 raw AES key", Buffer.from("5655c248983ba8eeba30dacc3098abde", "hex")],
@@ -120,11 +125,47 @@ export async function inspectReleaseArtifact(directory, { additionalFiles = [] }
   return [...new Set(errors)];
 }
 
-export async function inspectHardenedArtifact(directory) {
+export async function inspectHardenedArtifact(directory, {
+  metadataDirectory = resolve(import.meta.dirname, "../artifacts/hardened"),
+} = {}) {
   const root = resolve(directory);
-  const errors = await inspectReleaseArtifact(root, { additionalFiles: HARDENED_ARTIFACT_FILES });
+  const errors = await inspectReleaseArtifact(root);
+  errors.push(...await inspectHardenedMetadata(metadataDirectory, root));
   try {
-    const integrity = JSON.parse(await readFile(resolve(root, "integrity.json"), "utf8"));
+    const inspection = inspectWasm(await readFile(resolve(root, "credential-core.wasm")));
+    for (const hit of inspection.forbiddenHits) errors.push(`包含禁止的 WASM 路径特征：${hit}`);
+  } catch (error) {
+    errors.push(`无法完成 hardened WASM 路径审计：${error instanceof Error ? error.message : String(error)}`);
+  }
+  return [...new Set(errors)];
+}
+
+export async function inspectHardenedMetadata(directory, extensionDirectory) {
+  const root = resolve(directory);
+  const errors = [];
+  let entries;
+  try {
+    entries = await collectEntries(root);
+  } catch (error) {
+    return [`无法读取 hardened 构建元数据目录 ${root}：${error instanceof Error ? error.message : String(error)}`];
+  }
+  for (const entry of [...entries.directories, ...entries.specialEntries]) {
+    errors.push(`hardened 构建元数据不得包含目录或特殊文件：${entry}`);
+  }
+  const actualFiles = new Set(entries.files);
+  const expectedFiles = new Set(HARDENED_METADATA_FILES);
+  for (const file of expectedFiles) {
+    if (!actualFiles.has(file)) errors.push(`缺少 hardened 构建元数据：${file}`);
+  }
+  for (const file of actualFiles) {
+    if (!expectedFiles.has(file)) errors.push(`出现未审计 hardened 构建元数据：${file}`);
+  }
+  if (errors.length) return errors;
+
+  let integrity;
+  try {
+    integrity = JSON.parse(await readFile(resolve(root, "integrity.json"), "utf8"));
+    if (integrity.version !== 1) errors.push("integrity.json 版本无效");
     const expected = new Set([
       "credential-core.wasm",
       "background/service-worker.js",
@@ -135,30 +176,41 @@ export async function inspectHardenedArtifact(directory) {
     if (JSON.stringify([...actual].sort()) !== JSON.stringify([...expected].sort())) {
       errors.push("integrity.json 文件集合不符合白名单");
     }
-    for (const file of expected) {
-      const expectedHash = integrity.files?.[file];
-      const bytes = await readFile(resolve(root, ...file.split("/")));
-      const actualHash = createHash("sha256").update(bytes).digest("hex");
-      if (expectedHash !== actualHash) errors.push(`integrity.json 与 ${file} 不匹配`);
+    if (extensionDirectory) {
+      for (const file of expected) {
+        const expectedHash = integrity.files?.[file];
+        const bytes = await readFile(resolve(extensionDirectory, ...file.split("/")));
+        const actualHash = createHash("sha256").update(bytes).digest("hex");
+        if (expectedHash !== actualHash) errors.push(`integrity.json 与 ${file} 不匹配`);
+      }
     }
   } catch (error) {
     errors.push(`integrity.json 无效：${error instanceof Error ? error.message : String(error)}`);
   }
   try {
     const report = JSON.parse(await readFile(resolve(root, "hardened-build-report.json"), "utf8"));
+    if (report.reportVersion !== 2) errors.push("hardened-build-report.json 版本无效");
     if (!/^[a-f0-9]{64}$/.test(report.hardenSeedSha256 ?? "")) errors.push("hardened report 缺少 seed hash");
+    if (!Number.isInteger(report.strategyId) || report.strategyId < 0 || report.strategyId > 3) {
+      errors.push("hardened report 缺少有效 strategy ID");
+    }
+    if (report.wasmOpt?.available !== true && report.wasmOpt?.explicitlyAllowed !== true) {
+      errors.push("hardened report 未确认 wasm-opt 已执行");
+    }
+    if (!report.warningCounts || typeof report.warningCounts !== "object") {
+      errors.push("hardened report 缺少 WASM warning counts");
+    }
     if ("seed" in report || "fragments" in report || "password" in report || "key" in report) {
       errors.push("hardened report 不得包含 seed、fragment、password 或 key");
     }
+    if (extensionDirectory) {
+      const wasm = await readFile(resolve(extensionDirectory, "credential-core.wasm"));
+      const actualHash = createHash("sha256").update(wasm).digest("hex");
+      if (report.optimizedWasmSha256 !== actualHash) errors.push("hardened report 与 credential-core.wasm 不匹配");
+      if (report.finalWasmSize !== wasm.byteLength) errors.push("hardened report 与 WASM size 不匹配");
+    }
   } catch (error) {
     errors.push(`hardened-build-report.json 无效：${error instanceof Error ? error.message : String(error)}`);
-  }
-  try {
-    const wasm = await readFile(resolve(root, "credential-core.wasm"));
-    const inspection = inspectWasm(wasm);
-    for (const hit of inspection.forbiddenHits) errors.push(`包含禁止的 WASM 路径特征：${hit}`);
-  } catch (error) {
-    errors.push(`无法完成 hardened WASM 路径审计：${error instanceof Error ? error.message : String(error)}`);
   }
   return [...new Set(errors)];
 }

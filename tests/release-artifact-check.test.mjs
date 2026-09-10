@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import test from "node:test";
 import {
-  HARDENED_ARTIFACT_FILES,
+  HARDENED_METADATA_FILES,
   EXPECTED_ARTIFACT_FILES,
   inspectHardenedArtifact,
   inspectReleaseArtifact,
@@ -15,6 +15,11 @@ async function artifactFixture(t) {
   const root = await mkdtemp(join(tmpdir(), "unipass-artifact-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const builtWasm = await readFile(new URL("../credential-core/target/wasm32-unknown-unknown/release/credential_core.wasm", import.meta.url));
+  const fixtureWasm = Buffer.from(builtWasm);
+  const fixtureText = fixtureWasm.toString("latin1");
+  for (const match of fixtureText.matchAll(/src[\\/][^\\/\0]{1,160}\.rs/g)) {
+    fixtureWasm.fill(0x20, match.index, match.index + match[0].length);
+  }
   for (const file of EXPECTED_ARTIFACT_FILES) {
     const path = join(root, ...file.split("/"));
     await mkdir(dirname(path), { recursive: true });
@@ -26,7 +31,7 @@ async function artifactFixture(t) {
         : extension === ".png"
           ? Buffer.from([0x89, 0x50, 0x4e, 0x47])
           : extension === ".wasm"
-            ? builtWasm
+            ? fixtureWasm
           : "body{}\n";
     await writeFile(path, content);
   }
@@ -35,13 +40,23 @@ async function artifactFixture(t) {
 
 async function hardenedArtifactFixture(t) {
   const root = await artifactFixture(t);
+  const metadata = await mkdtemp(join(tmpdir(), "unipass-hardened-metadata-"));
+  t.after(() => rm(metadata, { recursive: true, force: true }));
   const hashes = {};
   for (const file of ["credential-core.wasm", "background/service-worker.js", "content/content-script.js", "popup.js"]) {
     hashes[file] = createHash("sha256").update(await readFile(join(root, ...file.split("/")))).digest("hex");
   }
-  await writeFile(join(root, "integrity.json"), JSON.stringify({ version: 1, files: hashes }));
-  await writeFile(join(root, "hardened-build-report.json"), JSON.stringify({ hardenSeedSha256: "a".repeat(64) }));
-  return root;
+  await writeFile(join(metadata, "integrity.json"), JSON.stringify({ version: 1, files: hashes }));
+  await writeFile(join(metadata, "hardened-build-report.json"), JSON.stringify({
+    reportVersion: 2,
+    hardenSeedSha256: "a".repeat(64),
+    strategyId: 0,
+    wasmOpt: { available: true },
+    warningCounts: {},
+    optimizedWasmSha256: hashes["credential-core.wasm"],
+    finalWasmSize: (await readFile(join(root, "credential-core.wasm"))).byteLength,
+  }));
+  return { root, metadata };
 }
 
 test("accepts the exact audited artifact layout", async (t) => {
@@ -116,10 +131,10 @@ test("rejects credential-core name and producers custom sections", async (t) => 
 });
 
 test("accepts hardened integrity/report files and rejects a mismatched integrity hash", async (t) => {
-  assert.deepEqual([...HARDENED_ARTIFACT_FILES].sort(), ["hardened-build-report.json", "integrity.json"]);
-  const root = await hardenedArtifactFixture(t);
-  assert.deepEqual(await inspectHardenedArtifact(root), []);
-  await writeFile(join(root, "integrity.json"), JSON.stringify({
+  assert.deepEqual([...HARDENED_METADATA_FILES].sort(), ["hardened-build-report.json", "integrity.json"]);
+  const { root, metadata } = await hardenedArtifactFixture(t);
+  assert.deepEqual(await inspectHardenedArtifact(root, { metadataDirectory: metadata }), []);
+  await writeFile(join(metadata, "integrity.json"), JSON.stringify({
     version: 1,
     files: {
       "credential-core.wasm": "0".repeat(64),
@@ -128,6 +143,6 @@ test("accepts hardened integrity/report files and rejects a mismatched integrity
       "popup.js": "0".repeat(64),
     },
   }));
-  const errors = await inspectHardenedArtifact(root);
+  const errors = await inspectHardenedArtifact(root, { metadataDirectory: metadata });
   assert.ok(errors.some((error) => error.includes("integrity.json 与 credential-core.wasm 不匹配")));
 });

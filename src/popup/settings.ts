@@ -1,4 +1,5 @@
 import type { PluginVersionSettings } from "../shared/types";
+import { BUILD_TIME } from "../shared/build-info";
 import { send } from "./bridge";
 import { errorText, get } from "./dom";
 import type { DomStorage } from "./dom";
@@ -15,6 +16,7 @@ export class SettingsController {
   private readonly override = get<HTMLInputElement>("pluginVersionOverride");
   private readonly restoreBaseline = get<HTMLButtonElement>("restorePluginVersionBaseline");
   private readonly localBuildVersion = get("localBuildPluginVersion");
+  private readonly localBuildTime = get("localBuildTime");
   private readonly networkVersion = get("networkPluginVersion");
   private readonly networkVersionSource = get("networkPluginVersionSource");
   private readonly systemTheme = window.matchMedia("(prefers-color-scheme: light)");
@@ -81,6 +83,7 @@ export class SettingsController {
     this.dialog.classList.remove("hidden");
     this.settingsButton.setAttribute("aria-expanded", "true");
     this.localBuildVersion.textContent = "检查中";
+    this.localBuildTime.textContent = BUILD_TIME;
     this.networkVersion.textContent = "检查中";
     this.networkVersionSource.textContent = "";
     this.closeButton.focus();

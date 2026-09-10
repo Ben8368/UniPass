@@ -36,7 +36,7 @@ npm install
 npm run verify
 ```
 
-credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown；`npm run verify` 已包含 native test、native/wasm clippy、fmt 和 WASM release build。发布或发版前另运行 `npm run verify:wasm-reproducible`，它使用两个隔离 target 目录做两次独立构建；`npm run smoke:chrome` 在本机 Chromium 中加载已构建的 `dist/` 并回归 MV3/Service Worker/WASM 重启。最终交付使用 `npm run build:hardened`，它直接生成可加载的 hardened `dist/`，再运行 `npm run audit:hardened`、`npm run verify:hardened:diversity` 和 `npm run smoke:chrome:hardened`。hardened seed 可由 `UNIPASS_HARDEN_SEED` 指定；不指定时随机生成，seed 本身不会进入产物。上述命令不要求最终用户安装 Rust、Node、Binaryen 或其他外部运行时。
+credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调试使用 `npm run build`；实际本地安装必须使用 `npm run build:hardened` 或完整的 `npm run verify:hardened`。hardened 构建要求开发机提供 `wasm-opt`；缺失时默认失败，只有显式设置 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。构建报告和 `integrity.json` 写入 `artifacts/hardened/`，不会进入最终 `dist/`。`npm run verify` 和 `npm run verify:hardened` 是两条独立门禁；发布或发版前另运行 `npm run verify:wasm-reproducible`。上述运行时不要求最终用户安装 Rust、Node、Binaryen 或其他外部运行时。
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
@@ -49,7 +49,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown；`npm run v
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[SECURITY.md](SECURITY.md)：扩展数据流和凭据/权限边界。
 - [CONTRIBUTING.md](CONTRIBUTING.md)：开发、验证与 PR 要求。
 
-`npm run verify` 是本地与 CI 的统一门禁，依次执行治理检查、静态红绿灯、测试、类型检查、标准压缩构建和最终产物审计。产物审计使用精确文件白名单，并阻断源码/source map、调试语句、常见私钥/API token 格式和未审计文件。静态黄灯不会伪装成失败，但必须在人工 `🚦 Audit Report` 中确认并按需登记技术债；红灯会阻断验证。
+`npm run verify` 是普通构建门禁，依次执行治理检查、静态红绿灯、测试、类型检查、标准压缩构建和最终产物审计。`npm run verify:hardened` 负责 hardened 构建、运行文件审计、外置构建元数据审计、多个 strategy/vector 验证和 hardened Chrome smoke。两者都必须通过；审计使用精确白名单，并阻断源码/source map、调试语句、常见私钥/API token 格式和未审计文件。静态黄灯不会伪装成失败，但必须在人工 `🚦 Audit Report` 中确认并按需登记技术债；红灯会阻断验证。
 
 WASM 本身保证 byte-for-byte 可复现；`dist` 文件内容由构建流程确定。Release ZIP 采用固定排序、固定时间和去除额外属性的 best-effort 确定性打包，但不宣称跨 zip 工具版本的完全 byte-for-byte reproducibility。自动化与人工 Chrome 清单见 [Chrome 验收清单](docs/CHROME-ACCEPTANCE.md)。
 

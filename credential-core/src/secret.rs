@@ -40,22 +40,61 @@ impl Drop for SecretBytes {
     }
 }
 
-pub(crate) fn reconstruct<const N: usize, const F: usize>(
+pub(crate) fn reconstruct<const STRATEGY: usize, const N: usize, const F: usize>(
     fragments: &[[u8; N]; F],
     order: &[u8; N],
     rotate: &[u8; N],
     offset: &[u8; N],
 ) -> Zeroizing<[u8; N]> {
     let mut material = Zeroizing::new([0u8; N]);
-    for index in 0..N {
-        let slot = order[index] as usize;
-        let mut encoded = 0u8;
-        for fragment in fragments {
-            encoded ^= black_box(fragment[slot]);
+    match STRATEGY {
+        1 => {
+            for index in 0..N {
+                let slot = order[index] as usize;
+                let encoded = fragments.iter().fold(0u8, |acc, fragment| {
+                    acc.wrapping_add(black_box(fragment[slot]))
+                });
+                material[index] = encoded
+                    .rotate_right(u32::from(black_box(rotate[index])))
+                    .wrapping_sub(black_box(offset[index]));
+            }
         }
-        material[index] = encoded
-            .wrapping_sub(black_box(offset[index]))
-            .rotate_right(u32::from(black_box(rotate[index])));
+        2 => {
+            let mut intermediate = Zeroizing::new([0u8; N]);
+            for slot in 0..N {
+                intermediate[slot] = fragments
+                    .iter()
+                    .fold(0u8, |acc, fragment| acc ^ black_box(fragment[slot]));
+            }
+            for index in 0..N {
+                let slot = order[index] as usize;
+                material[index] = intermediate[slot]
+                    .wrapping_sub(black_box(offset[index]))
+                    .rotate_right(u32::from(black_box(rotate[index])));
+            }
+        }
+        3 => {
+            for index in 0..N {
+                let slot = order[index] as usize;
+                let encoded = fragments
+                    .iter()
+                    .fold(0u8, |acc, fragment| acc ^ black_box(fragment[slot]));
+                material[index] = (encoded ^ black_box(offset[index]))
+                    .rotate_right(u32::from(black_box(rotate[index])));
+            }
+        }
+        _ => {
+            for index in 0..N {
+                let slot = order[index] as usize;
+                let mut encoded = 0u8;
+                for fragment in fragments {
+                    encoded ^= black_box(fragment[slot]);
+                }
+                material[index] = encoded
+                    .wrapping_sub(black_box(offset[index]))
+                    .rotate_right(u32::from(black_box(rotate[index])));
+            }
+        }
     }
     material
 }

@@ -5,9 +5,16 @@ import { assertReleaseArtifact } from "./scripts/release-artifact-check.mjs";
 import { buildCredentialCore } from "./scripts/build-wasm.mjs";
 
 const root = resolve(import.meta.dirname);
+
+export function formatBuildTime(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${pad(date.getFullYear() % 100)}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
 export async function buildExtension({
   outDirectory = resolve(root, "dist"),
   seed = "stable-v1",
+  buildTime = formatBuildTime(new Date()),
   wasmPostProcess,
   audit = assertReleaseArtifact,
 } = {}) {
@@ -40,6 +47,7 @@ export async function buildExtension({
     treeShaking: true,
     drop: ["debugger"],
     legalComments: "eof",
+    define: { __UNIPASS_BUILD_TIME__: JSON.stringify(buildTime) },
     logLevel: "info",
     loader: { ".html": "text", ".css": "text" },
   });

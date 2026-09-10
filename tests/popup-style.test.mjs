@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { formatBuildTime } from "../build.mjs";
 
 const liquidGlassCss = await readFile(new URL("../src/popup/liquid-glass.css", import.meta.url), "utf8");
+const popupHtml = await readFile(new URL("../src/popup/popup.html", import.meta.url), "utf8");
+
+test("build time uses the compact YYMMDD-HHMM format", () => {
+  assert.equal(formatBuildTime(new Date(2026, 8, 10, 21, 12)), "260910-2112");
+});
+
+test("version settings places the build time beside the local version", () => {
+  assert.match(popupHtml, /id="localBuildPluginVersion"[^>]*>检查中<\/strong><span id="localBuildTime"/);
+});
 
 test("dark online session badge removes its fill on hover", () => {
   assert.match(

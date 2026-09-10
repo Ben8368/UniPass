@@ -1,20 +1,19 @@
 export const WASM_CRYPTO_WARNING_PATTERNS = Object.freeze([
-  ["aes-", /aes-/i],
-  ["des-", /des-/i],
-  ["md-5", /md-5/i],
-  ["cipher-", /cipher-/i],
-  ["ecb-", /ecb-/i],
+  ["aes", /aes-/i],
+  ["des", /des-/i],
+  ["md5", /md-5/i],
+  ["cipher", /cipher-/i],
+  ["ecb", /ecb-/i],
   ["rustc", /rustc/i],
-  ["library/std", /library\/std/i],
+  ["std", /library\/std/i],
   ["panic", /panic/i],
-  ["dlmalloc", /dlmalloc/i],
+  ["allocator", /dlmalloc/i],
 ]);
 
 export const WASM_HARDENED_FORBIDDEN_PATTERNS = Object.freeze([
-  ["src/jupiter.rs", /src[\\/]jupiter\.rs/i],
-  ["src/unipass.rs", /src[\\/]unipass\.rs/i],
+  ["项目 Rust source path", /(?:^|[\0\s])src[\\/][^\\/\0]{1,160}\.rs(?:$|[^A-Za-z0-9_.-])|\/s\/src[\\/][^\\/\0]{1,160}\.rs(?:$|[^A-Za-z0-9_.-])/i],
   ["credential-core/src", /credential-core[\\/]src/i],
-  ["本机绝对路径", /(?:[A-Za-z]:[\\/]|\/home\/|\/Users\/|\/workspaces\/)/],
+  ["本机绝对路径", /(?:[A-Za-z]:[\\/]|\/home\/|\/Users\/|\/workspaces\/|\/workspace\/)/],
 ]);
 
 export function inspectWasm(bytes) {

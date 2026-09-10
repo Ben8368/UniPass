@@ -80,16 +80,16 @@ if (!/edition\s*=\s*["']2024["']/.test(rustManifest)) errors.push("credential-co
 if (/\bgit\s*=|git\+/.test(`${rustManifest}\n${rustLock}`)) errors.push("Rust 依赖不得使用 git source");
 
 for (const workflowFile of workflowFiles) {
-  const workflow = await readFile(resolve(root, workflowFile), "utf8");
+  const workflow = (await readFile(resolve(root, workflowFile), "utf8")).replaceAll("\r\n", "\n");
   for (const match of workflow.matchAll(/uses:\s*([^\s@]+)@([^\s#]+)/g)) {
     if (!/^[0-9a-f]{40}$/i.test(match[2])) {
       errors.push(`${workflowFile} 的外部 Action 必须 pin 到完整 SHA：${match[1]}@${match[2]}`);
     }
   }
 }
-const releaseWorkflow = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
-if (!releaseWorkflow.includes("needs: [dependency-audit, verify]")) {
-  errors.push("Release publish job 必须依赖 verify 与 RustSec dependency-audit");
+const releaseWorkflow = (await readFile(resolve(root, ".github/workflows/release.yml"), "utf8")).replaceAll("\r\n", "\n");
+if (!releaseWorkflow.includes("needs: [dependency-audit, verify, hardened]")) {
+  errors.push("Release publish job 必须依赖 verify、hardened 与 RustSec dependency-audit");
 }
 if (!releaseWorkflow.includes("permissions:\n      contents: write")) {
   errors.push("Release publish job 必须单独声明 contents: write");

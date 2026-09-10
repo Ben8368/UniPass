@@ -16,7 +16,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
-构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，同时对 workspace、Cargo registry 和 toolchain 路径做 remap；esbuild 使用标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。`npm run verify` 是本地统一入口，额外的 `npm run verify:wasm-reproducible` 使用两个隔离 Cargo target 目录确认普通 WASM byte-for-byte 一致；`npm run smoke:chrome` 负责真实 Chromium 的 MV3/Service Worker/WASM 重启 smoke。最终交付使用 `npm run build:hardened`，直接输出可加载的 hardened `dist/`，使用 seed 驱动的材料多样化、可用时的实际 `wasm-opt` 后处理、`integrity.json` 和不含 seed/fragment 的构建报告。最终产物审计只允许固定文件清单，并验证 WASM magic/version、可实例化性、无 `name`/`producers` custom section、imports/exports 白名单、原始 key/协议文本和 JS 中的旧密码学特征，同时阻断源码/source map、调试语句、常见私钥/API token 格式及仍可被标准压缩显著缩小的 JavaScript；CI 与 Release verify job 复用普通门禁，hardened 另有 audit/diversity/smoke 命令。
+构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，同时对 workspace、Cargo registry 和 toolchain 路径做 remap；esbuild 使用标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。`npm run verify` 是普通门禁，`npm run verify:hardened` 是实际安装目录的独立门禁；后者要求 Binaryen `wasm-opt`（默认缺失即失败），使用 seed 选择有限的等价 reconstruction strategy，并把 `integrity.json`、strategy、hash、size 和 warning counts 写入 `artifacts/hardened/`。`dist/` 只保留运行文件。最终产物审计只允许固定文件清单，并验证 WASM magic/version、无 `name`/`producers` custom section、imports/exports 白名单、原始 key/协议文本、项目 `src/*.rs` path 和 JS 中的旧密码学特征；CI 与 Release 分别执行 normal 与 hardened job，hardened smoke 会先验证外置元数据。
 
 ## 模块职责
 
