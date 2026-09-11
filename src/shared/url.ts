@@ -1,3 +1,5 @@
+import type { VaultTarget } from "./vault";
+
 const SAME_ORIGIN_SPA_HOSTS = new Set(["jupiter.tec-do.com"]);
 const JUPITER_ORIGIN = "https://jupiter.tec-do.com";
 const UNIPASS_LOGIN_URL = "https://portal.unipass.top/login";
@@ -33,6 +35,43 @@ export function appUrlMatches(appUrl: string, currentUrl: string): boolean {
 export function isHttpsUrl(value: string): boolean {
   try {
     return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeWebDavUrl(value: string): string {
+  const requested = value.trim();
+  if (!requested) throw new Error("WebDAV 地址不能为空");
+  let url: URL;
+  try {
+    url = new URL(requested);
+  } catch {
+    throw new Error("WebDAV 地址格式无效");
+  }
+  if (url.protocol !== "https:") throw new Error("为保护凭据安全，WebDAV 仅支持 HTTPS 地址");
+  if (!url.hostname || url.username || url.password || url.search || url.hash) {
+    throw new Error("WebDAV 地址只能包含 HTTPS 主机和路径");
+  }
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+  return url.toString();
+}
+
+export function webDavPermissionOrigin(value: string): string {
+  const url = new URL(normalizeWebDavUrl(value));
+  return `${url.origin}/*`;
+}
+
+export function vaultTargetMatches(target: VaultTarget, currentUrl: string): boolean {
+  try {
+    const current = new URL(currentUrl);
+    const host = current.hostname.toLowerCase();
+    const expectedHost = target.host.toLowerCase();
+    const hostMatches = host === expectedHost || Boolean(target.includeSubdomains && host.endsWith(`.${expectedHost}`));
+    if (target.scheme !== "https" || current.protocol !== "https:" || !hostMatches) return false;
+    const prefix = normalizedPath(target.pathPrefix || "/");
+    const currentPath = normalizedPath(current.pathname);
+    return prefix === "/" || currentPath === prefix || currentPath.startsWith(`${prefix}/`);
   } catch {
     return false;
   }

@@ -12,7 +12,7 @@ export interface PopupEnvironment {
   root?: Document | ShadowRoot;
   storage?: DomStorage;
   pageContext?: () => Promise<PageContext>;
-  openApp?: (appId: string | number, userScope: string) => Promise<void>;
+  openApp?: (appId: string | number, userScope: string, vaultId?: string) => Promise<void>;
   overlay?: boolean;
   themeTarget?: HTMLElement;
 }

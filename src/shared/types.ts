@@ -1,8 +1,13 @@
+import type { AccountRef, AppRef, VaultAccount, VaultApp, VaultTarget } from "./vault";
+
 export interface UniPassApp {
   id: string | number;
   name?: string;
   appName?: string;
   favorite?: boolean;
+  vaultId?: string;
+  appRef?: AppRef;
+  targets?: VaultTarget[];
 }
 
 export interface UniPassAccount {
@@ -14,6 +19,9 @@ export interface UniPassAccount {
   email?: string;
   remark?: string;
   topPriority?: boolean;
+  vaultId?: string;
+  appId?: string;
+  accountRef?: AccountRef;
 }
 
 export interface Credential {
@@ -39,9 +47,9 @@ export type BackgroundRequest =
   | { type: "session" }
   | { type: "pageContext" }
   | { type: "pageTheme" }
-  | { type: "openApp"; appId: string | number; userScope: string }
-  | { type: "fillFromOverlay"; accountId: string | number; expectedAppUrl: string; userScope: string }
-  | { type: "fillFromPopup"; tabId: number; accountId: string | number; expectedAppUrl: string; userScope: string }
+  | { type: "openApp"; appId: string | number; vaultId?: string; userScope: string }
+  | { type: "fillFromOverlay"; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope: string }
+  | { type: "fillFromPopup"; tabId: number; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope: string }
   | { type: "enableAdvancedMode" }
   | { type: "startUniPassLogin" }
   | { type: "completeUniPassLogin" }
@@ -50,12 +58,24 @@ export type BackgroundRequest =
   | { type: "readSelfBuildFile"; path: string }
   | { type: "accountCatalog"; userScope: string }
   | { type: "listApps"; keyword: string; userScope: string }
-  | { type: "accountsForApp"; appId: string | number; userScope: string }
-  | { type: "appUrl"; appId: string | number; userScope: string }
-  | { type: "credentialAvailability"; accountIds: Array<string | number>; userScope: string }
-  | { type: "revealCredential"; accountId: string | number; userScope: string }
+  | { type: "accountsForApp"; appId: string | number; vaultId?: string; userScope: string }
+  | { type: "appUrl"; appId: string | number; vaultId?: string; userScope: string }
+  | { type: "credentialAvailability"; accountIds: Array<string | number>; accountRefs?: AccountRef[]; userScope: string }
+  | { type: "revealCredential"; accountId: string | number; accountRef?: AccountRef; userScope: string }
   | { type: "getJupiterKeepalive"; userScope: string }
-  | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string };
+  | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }
+  | { type: "listVaultProfiles" }
+  | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string }
+  | { type: "saveWebDavVault"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string }
+  | { type: "removeVault"; vaultId: string }
+  | { type: "vaultCatalog" }
+  | { type: "createVaultApp"; vaultId: string; app: Omit<VaultApp, "id" | "vaultId"> }
+  | { type: "updateVaultApp"; vaultId: string; app: VaultApp }
+  | { type: "deleteVaultApp"; vaultId: string; appId: string }
+  | { type: "createVaultAccount"; vaultId: string; account: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string } }
+  | { type: "updateVaultAccount"; vaultId: string; account: VaultAccount }
+  | { type: "deleteVaultAccount"; vaultId: string; accountId: string }
+  | { type: "updateVaultCredential"; vaultId: string; accountId: string; credential: Credential };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }
@@ -86,6 +106,7 @@ export interface JupiterKeepaliveSettings {
 export interface AccountListResult {
   appUrl: string;
   accounts: UniPassAccount[];
+  vaultId?: string;
 }
 
 export interface AccountCatalogEntry {
@@ -93,12 +114,15 @@ export interface AccountCatalogEntry {
   appName: string;
   appUrl: string;
   accounts: UniPassAccount[];
+  vaultId?: string;
+  targets?: VaultTarget[];
 }
 
 export interface AccountCatalogFailure {
   appId: string | number;
   appName: string;
   error: string;
+  vaultId?: string;
 }
 
 export interface AccountCatalogResult {
@@ -111,6 +135,7 @@ export type CredentialAvailabilityStatus = "available" | "empty" | "error";
 
 export interface CredentialAvailabilityResult {
   accountId: string | number;
+  accountRef?: AccountRef;
   status: CredentialAvailabilityStatus;
   error?: string;
 }

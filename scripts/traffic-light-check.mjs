@@ -55,6 +55,10 @@ for (const host of manifest.host_permissions ?? []) {
   if (!allowedHosts.has(host)) errors.push(`manifest 出现未审计主机：${host}`);
   if (host === "<all_urls>" || !host.startsWith("https://")) errors.push(`manifest 主机范围不安全：${host}`);
 }
+for (const host of manifest.optional_host_permissions ?? []) {
+  if (host !== "https://*/*") errors.push(`manifest 出现未审计可选主机：${host}`);
+  if (host === "<all_urls>" || !host.startsWith("https://")) errors.push(`manifest 可选主机范围不安全：${host}`);
+}
 if (manifest.content_scripts) errors.push("manifest 不得注册常驻 content_scripts；填充脚本必须由用户操作临时注入");
 
 const api = await readFile(resolve(root, "src/shared/api.ts"), "utf8");

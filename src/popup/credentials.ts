@@ -1,4 +1,5 @@
 import type { Credential, FillResult } from "../shared/types";
+import type { AccountRef } from "../shared/vault";
 import { send } from "./bridge";
 import { errorText, get } from "./dom";
 
@@ -29,26 +30,28 @@ export class CredentialController {
     window.addEventListener("pagehide", () => this.clear());
   }
 
-  async reveal(accountId: string | number): Promise<void> {
+  async reveal(accountId: string | number, accountRef?: AccountRef): Promise<void> {
     try {
       if (!this.isAdvancedModeEnabled()) throw new Error("当前上下文未启用高级模式");
       this.reportStatus("正在获取凭据");
       const userScope = this.getUserScope();
       if (!userScope) throw new Error("尚未登录 UniPass");
-      this.show(await send<Credential>({ type: "revealCredential", accountId, userScope }));
+      const resolved = resolveAccountRef(accountId, accountRef);
+      this.show(await send<Credential>({ type: "revealCredential", accountId: resolved.accountId, accountRef: resolved.ref, userScope }));
       this.reportStatus("高级模式已开启，密码只保留在当前界面内存中");
     } catch (error) {
       this.reportStatus(errorText(error), true);
     }
   }
 
-  async fill(tabId: number | undefined, accountId: string | number, expectedAppUrl?: string): Promise<void> {
+  async fill(tabId: number | undefined, accountId: string | number, expectedAppUrl?: string, accountRef?: AccountRef): Promise<void> {
     if (tabId == null || !expectedAppUrl) return;
     if (this.fillFromOverlay) {
       try {
         const userScope = this.getUserScope();
         if (!userScope) throw new Error("尚未登录 UniPass");
-        const result = await send<FillResult>({ type: "fillFromOverlay", accountId, expectedAppUrl, userScope });
+        const resolved = resolveAccountRef(accountId, accountRef);
+        const result = await send<FillResult>({ type: "fillFromOverlay", accountId: resolved.accountId, accountRef: resolved.ref, expectedAppUrl, userScope });
         if (!result?.ok) throw new Error(result?.error || "填充失败");
         this.reportStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
       } catch (error) {
@@ -60,10 +63,12 @@ export class CredentialController {
       this.reportStatus("正在填入当前页面");
       const userScope = this.getUserScope();
       if (!userScope) throw new Error("尚未登录 UniPass");
+      const resolved = resolveAccountRef(accountId, accountRef);
       const result = await send<FillResult>({
         type: "fillFromPopup",
         tabId,
-        accountId,
+        accountId: resolved.accountId,
+        accountRef: resolved.ref,
         expectedAppUrl,
         userScope,
       });
@@ -120,4 +125,13 @@ export class CredentialController {
       this.reportStatus("浏览器拒绝写入剪贴板", true);
     }
   }
+}
+
+function resolveAccountRef(accountId: string | number, accountRef?: AccountRef): { accountId: string | number; ref?: AccountRef } {
+  if (accountRef) return { accountId: accountRef.accountId, ref: accountRef };
+  if (typeof accountId === "string") {
+    const separator = accountId.indexOf(":");
+    if (separator > 0) return { accountId: accountId.slice(separator + 1), ref: { vaultId: accountId.slice(0, separator), accountId: accountId.slice(separator + 1) } };
+  }
+  return { accountId };
 }

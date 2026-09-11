@@ -6,7 +6,7 @@
 
 ## 强制安全不变量
 
-- 真实用户的明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物；仅允许不对应任何真实账号的固定算法测试向量。
+- 真实用户的 UniPass/Vault credential 明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物；仅允许不对应任何真实账号的固定算法测试向量。WebDAV App Password 是另行管理的认证 secret，仅限当前会话保存。
 - Normal Mode 可完整展示 username/email/phone/account name、备注和账号选择，并允许 Fill；Normal Mode 的明文 password 只在 Service Worker 到 Content Script 的 Fill 短路径中存在，不返回 Popup/页面浮层 UI。
 - Advanced Mode 是 ephemeral plaintext disclosure capability：只有当前 Popup/页面浮层完成显式握手并保持 `unipass-advanced-mode` Port 时，`revealCredential` 才能由 Service Worker 返回选中账号的 `{ username, password }`；Credential panel、Reveal 和 Copy Password 只属于该路径。
 - Advanced capability 绑定 `sender.documentId` 与 Port，Port disconnect、Popup `pagehide`、页面浮层移除或 Service Worker 重启都会 revoke；不写入 `localStorage`、`chrome.storage.local` 或 `chrome.storage.session`，也不使用 TTL/alarm 做 capability 持久化。
@@ -25,6 +25,10 @@
 - 发布构建使用标准 minification 且不生成 sourcemap；最小 CSP 增加 `wasm-unsafe-eval` 以实例化本地 WASM。普通 `verify` 与 hardened `verify:hardened` 都是正式门禁；hardened 默认要求固定版本 Binaryen `wasm-opt`，只有显式 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。最终 `dist/` 审计只接受运行文件，构建报告与 `integrity.json` 位于 `artifacts/hardened/`，并验证 WASM magic/version、可实例化性、imports/exports 白名单、完整 raw AES key、Base64/hex key、Jupiter 固定协议文本和项目 `src/*.rs` path 不出现在运行产物中。WASM 与材料重构只提高静态分析成本；客户端仍必须持有协议材料，不能作为对终端用户保密的安全边界，这是当前接受的产品边界。
 
 - Self Derived Build 是 Popup 内的静态打包器：只按当前构建生成的 `self-build-files.json` fetch runtime 文件；清单不存在或文件超出单文件/总量限制时 fail closed。禁止读取 `chrome.storage`、`localStorage`、cookies、凭据、token、会话或用户输入数据（目标版号除外）。生成前后均 fail closed 审计 manifest 版本/key、除 `version`/`version_name` 外的顶层字段、WASM magic、runtime config、完整文件集合和 WASM byte-for-byte 一致性；不申请 `downloads` 权限，使用用户点击触发的 Blob 下载。它不会重新编译 Rust/WASM、生成新的 hardened crypto strategy 或 AES material fragmentation。
+
+WebDAV Vault 是独立于 Legacy UniPass 的新数据源。管理页只接受 HTTPS URL，并在用户主动测试/保存时通过 `chrome.permissions.request` 申请对应的 `https://host/*` optional origin；manifest 不包含 WebDAV 永久 host permission。网络请求和 `Authorization` header 由 Service Worker 的 `WebDavBackend` 生成，Popup/Content Script 不接触。认证用户名与 App Password 只保存在当前会话的 `chrome.storage.session`，不写入 `chrome.storage.local`、localStorage、Vault Object 或日志；浏览器会话结束后必须重新输入。Vault Key 也只以当前会话的 base64 包装值保存在 `chrome.storage.session`，绝不上传 WebDAV，故这是一个 fail-closed 的会话级 MVP。
+
+Vault Core 使用 AES-256-GCM、每对象随机 12-byte nonce、`formatVersion: 1` 与 `keyVersion: 1`。WebDAV 只保存加密后的 App/Account/Credential/Manifest objects；目录 `PROPFIND` 只读取 App/Account 对象，Credential object 仅在 Fill/Reveal/可用性检查时按需读取。对象更新以 WebDAV ETag 映射为 opaque `RevisionToken`，使用 `If-Match`；新建使用 `If-None-Match: *`，409/412 映射为结构化 conflict，禁止 silent last-write-wins。删除在 Core 中保留 `deletedAt` tombstone 并加密更新对象，给未来 D1/GitHub 同步保留扩展点。
 
 ## 权限与主机
 

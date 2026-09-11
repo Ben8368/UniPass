@@ -22,8 +22,12 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 | 模块 | 职责 | 禁止事项 |
 | --- | --- | --- |
-| `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、版本设置和用户点击查看/复制/填入；`self-builder.ts` 只读取静态扩展资源并导出 ZIP | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码；Self Builder 读取 storage 或凭据 |
-| `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话、Advanced capability 生命周期 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
+| `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、WebDAV 地址/版本设置和用户点击查看/复制/填入；`self-builder.ts` 只读取静态扩展资源并导出 ZIP | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码；Self Builder 读取 storage 或凭据 |
+| `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话、Advanced capability 生命周期，以及 Vault Service | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
+| `src/background/vault/` | `VaultService` 管理 VaultProfile/session secrets，`VaultCore` 管理 App/Account/Credential CRUD、tombstone 与目录，`WebDavBackend` 只保存 opaque encrypted bytes | Backend 不得接触 plaintext、Authorization header 不得离开 Service Worker；Core 不依赖 ETag/Git SHA/SQL version |
+| `src/shared/vault.ts` | Vault identity、`AccountRef`、通用模型、`VaultBackend`、opaque revision 与结构化错误 | 不绑定具体存储服务 |
+| `src/shared/vault-crypto.ts` | Web Crypto AES-256-GCM、versioned envelope、nonce/key import/export | 不复用 Legacy UniPass 密文格式；不上传 Vault Key |
+| `src/manage/` | 用户主动触发的 WebDAV 连接测试、权限申请和 Vault/App/Account/Credential 管理 | 不读取 Legacy 密码；不直接访问 WebDAV 网络 |
 | `src/background/advanced-capability.ts` | 以 `sender.documentId` 和 `runtime.Port` 管理 ephemeral Advanced plaintext disclosure capability | 自动因任意 `connect` 授权；使用 storage/TTL/alarm 持久化 capability |
 | `src/content/` | 用户点击扩展后挂载页面浮层，或用户点击填入后在当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
@@ -32,13 +36,15 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/background/credential-core.ts` | 单例加载扩展本地 WASM；校验输入/输出内存范围并释放/清零 WASM 分配；提供 reveal/fill 解密、availability 状态和 ciphertext→Jupiter transformed password | 网络加载代码、持久化密码或让 availability/Jupiter 获取原始明文 |
 | `credential-core/` | `abi` 负责分配登记、边界、status 和 exports；`unipass` 负责 AES 解密/UTF-8；`jupiter` 负责 MD5/DES 转换；`secret` 负责 zeroizing secret ownership 与 key reconstruction | 变更 UniPass/Jupiter 协议、暴露给网页或承诺可阻止运行时分析 |
 
-`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`advanced-capability.ts` 只授权 plaintext Reveal，不扩大 host、tab、network 或 storage 能力；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。几个模块通过显式导出连接，消息契约明确区分 Fill 与 Reveal。
+`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`advanced-capability.ts` 只授权 plaintext Reveal，不扩大 host、tab、network 或 storage 能力；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。`VaultService` 将 `legacy-unipass` 与每个 WebDAV `vaultId` 合并为统一目录，但一个 VaultProfile 只有一个 primary backend，禁止双写。几个模块通过显式导出连接，消息契约明确区分 Fill 与 Reveal。
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
 `src/background/unipass-login.ts` 只处理用户触发的 UniPass/Tec-IAM 登录：复用或新建一个登录标签页，在两分钟窗口内依次校验并点击唯一的“钛动科技”和“授权”按钮。飞书阶段固定校验 OAuth `client_id`、`redirect_uri`、非空 `state` 和授权文案；离开已知认证 origin、完成授权、关闭标签页或超时后即清除状态。
 
 ## 关键数据流
 
-- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题、版本设置和三击状态机）、`self-builder.ts`（静态文件自派生打包）以及 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、runtime config 网络基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。网络请求优先使用手动 override，否则读取并缓存 `runtime-config.json`。设置页的“恢复默认”仅在手动版本非空时可点击；恢复后在 `1400ms` 内连续两击保存会解锁当前 Popup 生命周期内的高级模式入口。进入后到 Popup/页面浮层关闭前，当前页账号展示“查看”按钮，全部应用的应用图标可打开账号列表；未进入时“查看”不渲染，应用图标保留原状并静默无操作。原固定 `1400ms` 保存三击仍只进入自派生构建确认页。确认后通过 Service Worker 读取当前构建生成的 `self-build-files.json` 列出的静态资源；缺少清单时 fail closed，随后修改 `manifest.json` 和 `runtime-config.json`，生成 ZIP 并回读校验文件集合、manifest（仅允许 version/version_name 改变）、runtime-config、manifest.key 和 WASM 字节一致性；不查询商店、不修改当前扩展，也不把脚本/WASM 加入 `web_accessible_resources`。
+- 设置弹窗提供 WebDAV 地址入口；独立 `manage.html` 在用户点击测试/保存时验证 HTTPS、申请单一 origin optional host permission，并由 Service Worker 执行 WebDAV capability 检查。认证信息不经 Popup 持久化；保存成功后清空管理页密码输入框。原有 UniPass 版本 override、自派生构建和高级模式解锁流程保持不变，但构建相关控件从 UI 隐藏。
+
+- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题、WebDAV 地址/版本设置和三击状态机）、`self-builder.ts`（静态文件自派生打包）以及 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、runtime config 网络基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。WebDAV 地址由同一设置页执行 HTTPS-only 校验并保存到 Popup 本机 `localStorage`，当前不连接 WebDAV。网络请求优先使用手动 override，否则读取并缓存 `runtime-config.json`。设置页的“恢复默认”仅在手动版本或 WebDAV 地址非空时可点击；恢复后在 `1400ms` 内连续两击保存会解锁当前 Popup 生命周期内的高级模式入口。进入后到 Popup/页面浮层关闭前，当前页账号展示“查看”按钮，全部应用的应用图标可打开账号列表；未进入时“查看”不渲染，应用图标保留原状并静默无操作。原固定 `1400ms` 保存三击仍只进入自派生构建确认页。确认后通过 Service Worker 读取当前构建生成的 `self-build-files.json` 列出的静态资源；缺少清单时 fail closed，随后修改 `manifest.json` 和 `runtime-config.json`，生成 ZIP 并回读校验文件集合、manifest（仅允许 version/version_name 改变）、runtime-config、manifest.key 和 WASM 字节一致性；不查询商店、不修改当前扩展，也不把脚本/WASM 加入 `web_accessible_resources`。
 - 页面浮层的 `pageContext`、页面主题、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；页面主题检测仅读取当前 HTTPS 页面的渲染背景色与 `color-scheme`，不读取页面正文、Cookie、表单值或页面存储；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
 
 ### 当前页面账号
@@ -48,9 +54,15 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 3. Popup 从本地目录缓存匹配应用 origin/path；过期时请求 Service Worker 完整同步。
 4. Service Worker 校验用户作用域后只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
 5. Popup 当前页账号和应用列表均只请求凭据可用性；后台返回三态，不返回密码。应用列表由 Service Worker 逐应用读取账号 ID 后过滤，仅返回至少含一个 `available` 账号的应用，并以汇总计数区分空密码、凭据验证失败和账号目录失败。
-6. Normal Fill 消息只包含 `accountId`、目标 URL、用户作用域和 Popup 的 `tabId`（浮层由 sender 标签页确定）；Service Worker 在后台获取 `credentialForAccount(accountId)`，账号标识优先使用 `/app/app_config` 的后台响应，缺失时只从后台重新取得的可信账号目录解析，不接受 Popup 任意字符串。随后经 HTTPS/origin/path/active-tab/document 校验填入 Content Script，不向 Popup 返回 password。
+6. Normal Fill 消息只携带 `AccountRef`（Legacy 兼容时另带其 API accountId）、目标 URL、用户作用域和 Popup 的 `tabId`（浮层由 sender 标签页确定）；Service Worker 在后台获取对应 Vault credential，Legacy 账号标识仍优先使用 `/app/app_config` 的后台响应，缺失时只从后台重新取得的可信账号目录解析。随后经 HTTPS/origin/path/active-tab/document 校验填入 Content Script，不向 Popup 返回 password。
 7. Advanced 解锁完成后，Popup/浮层先请求 `enableAdvancedMode`，再使用返回的一次性内存 token 建立 `unipass-advanced-mode` Port。Service Worker 只有在握手 token、扩展 sender 和 `documentId` 均匹配时才登记 capability；Port disconnect、Popup `pagehide`、浮层移除或 Service Worker 重启均 fail closed。
 8. `revealCredential` 与 Fill 完全分开：Service Worker 先执行 `withUserScope` 和 `requireAdvancedCapability(sender)`，再只解密所选账号并返回 `{ username, password }` 给当前 Advanced UI。Credential panel、Reveal 和 Copy Password 都依赖该返回值；Normal UI 永远不预取 password。
+
+### Vault 数据流
+
+1. `VaultService` 为每个 WebDAV `VaultProfile` 创建一个 `VaultCore` 和一个 `WebDavBackend`；`vaultId + objectId` 构成业务引用，Legacy 使用固定 `legacy-unipass` vaultId。未来 Cloudflare/GitHub 只需实现同一 `VaultBackend`，不改变 Core、Crypto、URL matcher 或 Fill。
+2. `VaultCore` 将 App、Account、Credential 分成独立对象。PROPFIND 目录只加载 App/Account，Credential 只在用户操作或后台可用性检查时按需 GET；当前 URL 始终在本地用 `VaultTarget` 匹配，不发送到 WebDAV。
+3. `VaultCrypto` 在 Service Worker 内把对象序列化为 `EncryptedVaultObject` 后才交给 Backend。Backend 只见 ciphertext；WebDAV ETag 被作为 opaque revision，PUT/DELETE 使用条件请求，409/412 返回 `VaultConflictError`。
 
 ### 密码学核心
 
@@ -73,9 +85,9 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 | 位置 | 允许内容 |
 | --- | --- |
-| Popup `localStorage` | 主题、按用户隔离的账号目录展示信息；不含密码 |
-| `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖；不含密码/token |
-| `chrome.storage.session` | 凭据可用性状态、Jupiter 会话；随浏览器会话清除 |
+| Popup `localStorage` | 主题、按用户隔离的账号目录展示信息，以及 WebDAV HTTPS 地址；不含密码、用户名、App Password 或 Authorization header |
+| `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖、非认证 VaultProfile（名称、backend、HTTPS endpoint）；不含密码/token/App Password |
+| `chrome.storage.session` | 凭据可用性状态、Jupiter 会话、WebDAV 用户名/App Password 与当前会话 Vault Key；随浏览器会话清除 |
 | `chrome.storage.session` 登录项 | 当前一键登录的标签页 ID、阶段和两分钟过期时间；不含 Cookie、授权码或用户资料 |
 | 内存/消息 | Normal Fill 仅在 Service Worker→Content Script 的短生命周期消息中传递明文；Advanced Reveal 额外在当前 Popup/浮层内存保留最多 60 秒；不落盘 |
 

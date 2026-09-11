@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UniPass Vault 管理</title>
+    <link rel="stylesheet" href="manage.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header><div><span class="eyebrow">UNIPASS VAULT</span><h1>Vault 管理</h1><p>Legacy UniPass 与 WebDAV Vault 是相互独立的数据源。</p></div><button id="refresh" type="button">刷新</button></header>
+      <section class="card">
+        <h2>WebDAV Vault</h2>
+        <div id="profiles" class="profiles"></div>
+        <form id="vaultForm" class="form-grid">
+          <label>Vault 名称<input id="vaultName" required autocomplete="off" /></label>
+          <label>WebDAV URL<input id="endpoint" required type="url" placeholder="https://nas.example.com/dav/" autocomplete="off" /></label>
+          <label>用户名<input id="username" required autocomplete="username" /></label>
+          <label>App Password<input id="appPassword" required type="password" autocomplete="new-password" /></label>
+          <p class="help">仅支持 HTTPS。建议使用 WebDAV 专用账号或 App Password，不要使用 NAS 管理员主密码。认证信息只保存在当前浏览器会话的 session storage 中。</p>
+          <div class="actions"><button id="testVault" type="button">测试连接</button><button class="primary" type="submit">保存 Vault</button><button id="removeVault" type="button" disabled>删除 Vault</button></div>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Application</h2>
+        <form id="appForm" class="form-grid">
+          <input id="appId" type="hidden" />
+          <label>应用名称<input id="appName" required autocomplete="off" /></label>
+          <label>HTTPS 主机<input id="appHost" required placeholder="example.com" autocomplete="off" /></label>
+          <label>路径前缀<input id="appPath" placeholder="/login" autocomplete="off" /></label>
+          <div class="actions"><button class="primary" type="submit">保存应用</button><button id="deleteApp" type="button" disabled>删除应用</button></div>
+        </form>
+        <div id="apps" class="list"></div>
+      </section>
+      <section class="card">
+        <h2>Account / Credential</h2>
+        <form id="accountForm" class="form-grid">
+          <input id="accountId" type="hidden" />
+          <label>应用<select id="accountApp" required></select></label>
+          <label>账号<input id="accountUsername" required autocomplete="username" /></label>
+          <label>备注<input id="accountRemark" autocomplete="off" /></label>
+          <label>密码<input id="accountPassword" type="password" autocomplete="new-password" placeholder="新增或修改时填写" /></label>
+          <div class="actions"><button class="primary" type="submit">保存账号</button><button id="deleteAccount" type="button" disabled>删除账号</button></div>
+        </form>
+        <div id="accounts" class="list"></div>
+      </section>
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script type="module" src="manage.js"></script>
+  </body>
+</html>

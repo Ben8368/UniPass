@@ -33,6 +33,7 @@ export async function buildExtension({
       "content/content-script": "src/content/content-script.ts",
       "content/page-overlay": "src/content/page-overlay.ts",
       popup: "src/popup/popup.ts",
+      manage: "src/manage/manage.ts",
     },
     bundle: true,
     format: "esm",
@@ -55,6 +56,8 @@ export async function buildExtension({
     ["src/popup/popup.html", "popup.html"],
     ...["popup.css", "components.css", "theme.css", "liquid-glass.css"].map((file) => [`src/popup/${file}`, file]),
     ["public/manifest.json", "manifest.json"],
+    ["src/manage/manage.html", "manage.html"],
+    ["src/manage/manage.css", "manage.css"],
   ]) {
     await cp(resolve(root, source), resolve(out, target));
   }

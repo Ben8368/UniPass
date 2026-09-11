@@ -67,7 +67,7 @@ async function mount(): Promise<void> {
     overlay: true,
     themeTarget: overlayRoot,
     pageContext: () => send<PageContext>({ type: "pageContext" }),
-    openApp: (appId, userScope) => send<void>({ type: "openApp", appId, userScope }),
+    openApp: (appId, userScope, vaultId) => send<void>({ type: "openApp", appId, vaultId, userScope }),
   });
 }
 

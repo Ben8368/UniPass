@@ -10,6 +10,23 @@ const ADVANCED_MODE_PORT_NAME = "unipass-advanced-mode";
 
 type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "unipass-theme";
+const WEBDAV_URL_STORAGE_KEY = "unipass-webdav-url";
+
+export function normalizeWebDavUrl(value: string): string {
+  const requestedUrl = value.trim();
+  if (!requestedUrl) return "";
+  let url: URL;
+  try {
+    url = new URL(requestedUrl);
+  } catch {
+    throw new Error("WebDAV 地址格式无效");
+  }
+  if (url.protocol !== "https:") throw new Error("为保护凭据安全，WebDAV 仅支持 HTTPS 地址");
+  if (!url.hostname || url.username || url.password || url.search || url.hash) {
+    throw new Error("WebDAV 地址只能包含 HTTPS 主机和路径");
+  }
+  return url.toString();
+}
 
 export class SettingsController {
   private readonly themeToggle = get<HTMLButtonElement>("themeToggle");
@@ -17,8 +34,10 @@ export class SettingsController {
   private readonly settingsButton = get<HTMLButtonElement>("pluginVersionSettingsButton");
   private readonly closeButton = get<HTMLButtonElement>("closeVersionSettings");
   private readonly versionForm = get<HTMLFormElement>("versionForm");
+  private readonly webdavUrl = get<HTMLInputElement>("webdavUrl");
   private readonly override = get<HTMLInputElement>("pluginVersionOverride");
   private readonly saveButton = get<HTMLButtonElement>("versionSave");
+  private readonly openVaultManager = get<HTMLButtonElement>("openVaultManager");
   private readonly restoreBaseline = get<HTMLButtonElement>("restorePluginVersionBaseline");
   private readonly localBuildVersion = get("localBuildPluginVersion");
   private readonly localBuildTime = get("localBuildTime");
@@ -73,6 +92,8 @@ export class SettingsController {
     this.closeButton.addEventListener("click", () => this.close());
     this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); this.resetSaveClicks(); void this.saveOverride(); });
     this.saveButton.addEventListener("click", (event) => { event.preventDefault(); this.handleSaveClick(); });
+    this.openVaultManager.addEventListener("click", () => void chrome.tabs.create({ url: chrome.runtime.getURL("manage.html") }));
+    this.webdavUrl.addEventListener("input", () => this.updateRestoreButton());
     this.override.addEventListener("input", () => this.updateRestoreButton());
     this.restoreBaseline.addEventListener("click", () => {
       if (this.advancedModeUnlock.isUnlockReady) {
@@ -81,6 +102,7 @@ export class SettingsController {
       }
       this.advancedModeUnlock.markRestoreDefault();
       this.resetSaveClicks();
+      this.webdavUrl.value = "";
       this.override.value = "";
       this.updateRestoreButton();
       void this.saveOverride(true);
@@ -153,6 +175,7 @@ export class SettingsController {
     this.localBuildTime.textContent = manifest.version_name || "无构建描述";
     this.networkVersion.textContent = "检查中";
     this.networkVersionSource.textContent = "";
+    this.webdavUrl.value = this.readStoredWebDavUrl();
     this.closeButton.focus();
     try {
       this.apply(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));
@@ -184,12 +207,16 @@ export class SettingsController {
     if (this.selfBuildBusy) return;
     if (!keepControlsEnabled) this.setSaveControlsDisabled(true);
     try {
+      const webdavUrl = normalizeWebDavUrl(this.webdavUrl.value);
       const settings = await send<PluginVersionSettings>({
         type: "setPluginVersionOverride",
         version: this.override.value,
       });
+      if (webdavUrl) this.storage.setItem(WEBDAV_URL_STORAGE_KEY, webdavUrl);
+      else this.storage.removeItem(WEBDAV_URL_STORAGE_KEY);
+      this.webdavUrl.value = webdavUrl;
       this.apply(settings);
-      this.reportStatus(settings.source === "manual" ? "网络提交版本已手动指定" : "网络提交版本已恢复商店基线");
+      this.reportStatus(webdavUrl ? "WebDAV 地址已保存" : "WebDAV 地址已清除");
     } catch (error) {
       this.reportStatus(errorText(error), true);
     } finally {
@@ -327,6 +354,8 @@ export class SettingsController {
   private setSaveControlsDisabled(disabled: boolean): void {
     this.saveControlsDisabled = disabled;
     this.saveButton.disabled = disabled;
+    this.openVaultManager.disabled = disabled;
+    this.webdavUrl.disabled = disabled;
     this.override.disabled = disabled;
     this.updateRestoreButton();
   }
@@ -343,8 +372,18 @@ export class SettingsController {
       return;
     }
     const unlockReady = this.advancedModeUnlock.isUnlockReady;
-    this.restoreBaseline.textContent = unlockReady ? "解锁高级模式" : "恢复默认";
-    this.restoreBaseline.disabled = this.saveControlsDisabled || (!unlockReady && !this.override.value.trim());
+    this.restoreBaseline.textContent = unlockReady ? "解锁高级模式" : "确定";
+    this.restoreBaseline.disabled = this.saveControlsDisabled || (!unlockReady && !this.override.value.trim() && !this.webdavUrl.value.trim());
+  }
+
+  private readStoredWebDavUrl(): string {
+    const value = this.storage.getItem(WEBDAV_URL_STORAGE_KEY);
+    if (!value) return "";
+    try {
+      return normalizeWebDavUrl(value);
+    } catch {
+      return "";
+    }
   }
 
 }

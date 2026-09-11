@@ -1,4 +1,5 @@
 import { appUrlForApp, credentialForAccount } from "../shared/api";
+import { credentialForRef } from "./vault/vault-service";
 import { appUrlMatches, isHttpsUrl } from "../shared/url";
 import type { BackgroundRequest, FillRequest, FillResult, PageContext, PageTheme } from "../shared/types";
 import { detectPageTheme } from "../shared/page-theme";
@@ -48,7 +49,7 @@ export async function fillFromPopup(
 
 async function fillIntoTab(
   tabId: number,
-  message: Pick<Extract<BackgroundRequest, { type: "fillFromOverlay" }>, "accountId" | "expectedAppUrl" | "userScope">,
+  message: Pick<Extract<BackgroundRequest, { type: "fillFromOverlay" }>, "accountId" | "accountRef" | "expectedAppUrl" | "userScope">,
 ): Promise<FillResult> {
   const tab = await chrome.tabs.get(tabId);
   if (!tab.active || !tab.url || !isHttpsUrl(tab.url) || !appUrlMatches(message.expectedAppUrl, tab.url)) {
@@ -56,7 +57,8 @@ async function fillIntoTab(
   }
   let credential: { username: string; password: string } | null = null;
   try {
-    credential = await credentialForAccount(message.accountId);
+    if (message.accountRef) credential = await credentialForRef(message.accountRef);
+    else credential = await credentialForAccount(message.accountId);
     // Filling is a non-rollbackable side effect. Re-check after the credential
     // request and again immediately before the injection so a session switch
     // cannot be detected only after the old user's password was written.

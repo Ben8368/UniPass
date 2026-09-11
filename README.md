@@ -26,6 +26,7 @@
 - `https://portal.unipass.top/*`：调用 UniPass API，并使用浏览器已有的 UniPass 登录会话。
 - `https://accounts.feishu.cn/*`：仅在用户点击“一键登录”后，对固定 Tec-IAM OAuth 客户端和回调地址点击“授权”；不读取飞书账号数据或授权码。
 - `https://jupiter.tec-do.com/*`：仅在用户主动开启木星保活后登录并同步会话。
+- `optional_host_permissions: https://*/*`：仅在用户在 Vault 管理页主动测试/保存 WebDAV URL 时申请对应的 `https://host/*`；不会申请常驻全站访问。
 
 扩展不申请 `cookies`、`privacy`、`webNavigation`、`contextMenus`、`declarativeNetRequest` 或 `<all_urls>`，也不注册常驻 Content Script。
 
@@ -40,7 +41,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
-设置页的普通单击/双击“保存”仍保存手动 `X-Browser-Plugin-Version` override。输入目标本地三段版本后，在固定 `1400ms` 窗口内连续点击同一按钮三次，会先显示确认框；确认后生成 `UniPass-x.y.z.zip`。这是自派生构建：它复制当前已构建 runtime，改写 `manifest.version` 和 `runtime-config.json`，不重新编译 Rust/WASM，也不修改当前扩展。目标版本各段必须在 Chrome 支持的 `0..65535` 范围内；缺少 `self-build-files.json` 时拒绝构建。解压 ZIP 后目录可直接在 Chrome 中加载；覆盖目录后需手动重新加载扩展。
+设置页提供 WebDAV 地址入口，独立的“打开 Vault 管理”页面负责连接测试、Vault 保存和 Application/Account/Credential CRUD。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
 
 ## 项目治理
 
@@ -73,7 +74,9 @@ WASM 本身保证 byte-for-byte 可复现；`dist` 文件内容由构建流程�
 ## 安全与行为
 
 - Normal Mode 可以展示完整账号并执行 Fill，但 plaintext password 不返回 UI：Popup/浮层只发送 `accountId`，Service Worker 获取所选 credential 后经临时 Content Script 填入页面。Advanced Mode 在此基础上通过 ephemeral capability 允许 Reveal 和 Copy Password；availability 在 WASM 内只返回状态，Jupiter keepalive 在 WASM 内完成 ciphertext→transformed password。
-- 密码不写入 `chrome.storage`、日志或持久化文件。
+- UniPass/Vault credential 明文密码不写入 `chrome.storage`、日志或持久化文件；WebDAV App Password 是单独的会话级认证 secret，详见下方安全说明。
+- Legacy UniPass 是只读兼容数据源；WebDAV 是独立 New Vault。WebDAV 服务器只接收客户端 AES-256-GCM 加密后的版本化 App/Account/Credential objects，不接收明文密码或 Vault Key；WebDAV App Password 仅在当前浏览器会话的 `chrome.storage.session` 中保存，关闭会话后需重新连接。
+- WebDAV 修改使用 ETag 对应的 opaque revision token，`If-Match`/`If-None-Match` 冲突会显式失败，不使用 silent last-write-wins。
 - Advanced Credential panel 的明文凭据 60 秒后自动清除；关闭 Popup、Popup `pagehide`、移除页面浮层、Port disconnect 或 Service Worker 重启都会回到 Normal/fail-closed。系统剪贴板不会被自动清空。
 - 自动填充只处理当前页面主文档中的可见输入框，不自动提交表单。
 - 每次源码/CI 构建仍通过 Google Chrome 官方更新接口核验 UniPass 商店 CRX 版本；查询失败、ID 不符、本地版本不是商店当前版的下一补丁版，或网络商店基线不等于当前商店版都会阻断普通构建。网络基线由构建生成到 `runtime-config.json`，而非运行时使用本地 manifest 版本。Popup 可在开发中断或未及时跟进时手动指定三段数字网络版号；该临时覆盖不改变构建或发布门禁，清空后恢复 runtime 基线。Self Derived Build 只要求目标本地版本高于当前且 patch 至少为 `1`，不查询或依赖 Store Version。

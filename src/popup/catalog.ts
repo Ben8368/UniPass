@@ -1,5 +1,6 @@
 import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, AvailableAppsResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, PageContext, UniPassAccount, UniPassApp } from "../shared/types";
-import { appUrlMatches, isHttpsUrl } from "../shared/url";
+import type { AccountRef } from "../shared/vault";
+import { appUrlMatches, isHttpsUrl, vaultTargetMatches } from "../shared/url";
 import { userScopeFor } from "../shared/user-scope";
 import { send } from "./bridge";
 import { accountIcon, button, empty, errorText, get, loading, textElement } from "./dom";
@@ -26,7 +27,7 @@ export class CatalogController {
     private readonly reveal: (accountId: string | number) => Promise<void>,
     private readonly fill: (tabId: number | undefined, accountId: string | number, appUrl?: string) => Promise<void>,
     private readonly getPageContext?: () => Promise<PageContext>,
-    private readonly openApp?: (appId: string | number, userScope: string) => Promise<void>,
+    private readonly openApp?: (appId: string | number, userScope: string, vaultId?: string) => Promise<void>,
     private readonly storage: DomStorage = window.localStorage,
     private readonly isAdvancedModeEnabled: () => boolean = () => false,
   ) {}
@@ -115,9 +116,11 @@ export class CatalogController {
 
   private accountsForUrl(entries: AccountCatalogEntry[], url: string): UniPassAccount[] {
     const seen = new Set<string>();
-    return entries.flatMap((entry) => appUrlMatches(entry.appUrl, url) ? entry.accounts : []).filter((account) => {
+    return entries.flatMap((entry) => entry.targets?.length
+      ? (entry.targets.some((target) => vaultTargetMatches(target, url)) ? entry.accounts : [])
+      : (appUrlMatches(entry.appUrl, url) ? entry.accounts : [])).filter((account) => {
       const id = account.id ?? account.accountId ?? account.appAccountUserId;
-      const key = id == null ? JSON.stringify(account) : String(id);
+      const key = id == null ? JSON.stringify(account) : `${account.vaultId ?? "legacy-unipass"}:${String(id)}`;
       if (seen.has(key)) return false;
       seen.add(key); return true;
     });
@@ -144,7 +147,7 @@ export class CatalogController {
     const keepalive = await send<JupiterKeepaliveSettings>({ type: "getJupiterKeepalive", userScope: this.requireUserScope() });
     for (const app of apps) {
       const title = app.name || app.appName || `应用 ${app.id}`;
-      const isJupiter = /木星|jupiter/i.test(title);
+      const isJupiter = !app.vaultId && /木星|jupiter/i.test(title);
       const root = document.createElement("article"); root.className = "item app-item";
       const main = document.createElement("div"); main.className = "item-main";
       main.append(textElement("div", "item-title", title));
@@ -183,8 +186,8 @@ export class CatalogController {
   private async openAppPage(app: UniPassApp): Promise<void> {
     try {
       this.reportStatus("正在获取应用地址");
-      if (this.openApp) await this.openApp(app.id, this.requireUserScope());
-      else await chrome.tabs.create({ url: await send<string>({ type: "appUrl", appId: app.id, userScope: this.requireUserScope() }) });
+      if (this.openApp) await this.openApp(app.id, this.requireUserScope(), app.vaultId);
+      else await chrome.tabs.create({ url: await send<string>({ type: "appUrl", appId: app.id, vaultId: app.vaultId, userScope: this.requireUserScope() }) });
       this.reportStatus("已打开应用页面");
     }
     catch (error) { this.reportStatus(errorText(error), true); }
@@ -192,7 +195,7 @@ export class CatalogController {
 
   private async loadAppAccounts(app: UniPassApp): Promise<void> {
     this.apps.classList.add("hidden"); this.heading.classList.add("hidden"); this.back.classList.remove("hidden"); this.appAccounts.classList.remove("hidden"); this.appAccounts.innerHTML = loading("正在加载账号");
-    try { const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id, userScope: this.requireUserScope() }); const tab = await this.getTabContext(); const id = tab?.tabId != null && tab.url && appUrlMatches(result.appUrl, tab.url) ? tab.tabId : undefined; await this.renderAccounts(this.appAccounts, result.accounts, id, result.appUrl); }
+    try { const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id, vaultId: app.vaultId, userScope: this.requireUserScope() }); const tab = await this.getTabContext(); const id = tab?.tabId != null && tab.url && appUrlMatches(result.appUrl, tab.url) ? tab.tabId : undefined; await this.renderAccounts(this.appAccounts, result.accounts, id, result.appUrl); }
     catch (error) { this.appAccounts.innerHTML = empty(errorText(error)); }
   }
 
@@ -200,15 +203,18 @@ export class CatalogController {
     const candidates = accounts.filter((account) => (account.id ?? account.accountId ?? account.appAccountUserId) != null);
     if (!candidates.length) { container.innerHTML = empty("没有可用账号"); return; }
     if (!this.userScope) throw new Error("尚未登录 UniPass");
-    const results = await send<CredentialAvailabilityResult[]>({ type: "credentialAvailability", accountIds: candidates.map((account) => (account.id ?? account.accountId ?? account.appAccountUserId) as string | number), userScope: this.userScope });
-    const availability = new Map(results.map((result) => [String(result.accountId), result]));
-    const available = candidates.filter((account) => { const id = account.id ?? account.accountId ?? account.appAccountUserId; return id != null && availability.get(String(id))?.status === "available"; });
+    const refs = candidates.map((account) => this.accountRefFor(account));
+    const results = await send<CredentialAvailabilityResult[]>({ type: "credentialAvailability", accountIds: candidates.map((account) => (account.id ?? account.accountId ?? account.appAccountUserId) as string | number), accountRefs: refs, userScope: this.userScope });
+    const availability = new Map(results.map((result) => [`${result.accountRef?.vaultId ?? "legacy-unipass"}:${String(result.accountRef?.accountId ?? result.accountId)}`, result]));
+    const available = candidates.filter((account) => { const id = account.id ?? account.accountId ?? account.appAccountUserId; return id != null && availability.get(`${this.accountRefFor(account).vaultId}:${String(id)}`)?.status === "available"; });
     const failures = results.filter((result) => result.status === "error");
     if (failures.length) this.reportStatus(`有 ${failures.length} 个账号暂时无法验证，已跳过显示`, true);
     if (!available.length) { container.innerHTML = empty(failures.length ? "暂时无法验证账号凭据，请稍后重试" : "没有可用账号"); return; }
     container.replaceChildren();
     for (const account of available) {
-      const id = account.id ?? account.accountId ?? account.appAccountUserId; if (id == null) continue;
+      const rawId = account.id ?? account.accountId ?? account.appAccountUserId; if (rawId == null) continue;
+      const ref = this.accountRefFor(account);
+      const id: string | number = ref.vaultId === "legacy-unipass" ? rawId : `${ref.vaultId}:${ref.accountId}`;
       const username = account.account || account.phoneNumber || account.email || "未命名账号";
       const root = document.createElement("article"); root.className = "item account-item";
       const main = document.createElement("div"); main.className = "item-main"; main.append(textElement("div", "item-title", username), textElement("div", "item-meta", account.remark || (account.topPriority ? "优先账号" : "无备注")));
@@ -230,6 +236,12 @@ export class CatalogController {
   private requireUserScope(): string {
     if (!this.userScope) throw new Error("尚未登录 UniPass");
     return this.userScope;
+  }
+
+  private accountRefFor(account: UniPassAccount): AccountRef {
+    const id = account.id ?? account.accountId ?? account.appAccountUserId;
+    if (id == null) throw new Error("账号缺少有效 ID");
+    return account.accountRef ?? { vaultId: account.vaultId ?? "legacy-unipass", accountId: String(id) };
   }
 
   private async copyUsername(username: string): Promise<void> {
