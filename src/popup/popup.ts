@@ -30,15 +30,22 @@ export function initializePopup(environment: PopupEnvironment = {}): void {
     status.textContent = text;
     status.classList.toggle("error", isError);
   };
-  const settings = new SettingsController(setStatus, environment.storage, environment.themeTarget ?? (environment.root instanceof ShadowRoot ? environment.root.host as HTMLElement : document.documentElement));
+  let catalog!: CatalogController;
+  const settings = new SettingsController(
+    setStatus,
+    environment.storage,
+    environment.themeTarget ?? (environment.root instanceof ShadowRoot ? environment.root.host as HTMLElement : document.documentElement),
+    () => catalog.refreshForAdvancedModeChange(),
+  );
   const credentials = new CredentialController(setStatus, () => userScope, environment.overlay);
-  const catalog = new CatalogController(
+  catalog = new CatalogController(
     setStatus,
     (id, username) => credentials.reveal(id, username),
     (tabId, id, username, appUrl) => credentials.fill(tabId, id, username, appUrl),
     environment.pageContext,
     environment.openApp,
     environment.storage,
+    () => settings.isAdvancedModeEnabled,
   );
   void initialize();
 

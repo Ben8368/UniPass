@@ -26,14 +26,14 @@ test("Service Worker rechecks the user scope before filling a credential", () =>
   );
 });
 
-test("application cards use their icon to view accounts while retaining their page-opening action", () => {
+test("application cards keep their icon and only view accounts in advanced mode", () => {
   assert.match(catalogSource, /root\.className = "item app-item"/);
   assert.match(catalogSource, /root\.append\(this\.appIcon\(title, app\), main, actions\)/);
   assert.match(catalogSource, /slot\.append\(icon\);\s+return slot/);
-  assert.match(catalogSource, /icon\.addEventListener\("click", \(\) => void this\.loadAppAccounts\(app\)\)/);
+  assert.match(catalogSource, /icon\.addEventListener\("click", \(\) => \{\s*if \(this\.isAdvancedModeEnabled\(\)\) void this\.loadAppAccounts\(app\);\s*\}\)/);
   assert.match(catalogSource, /const open = button\("打开页面"\);[\s\S]*?open\.addEventListener\("click", \(\) => void this\.openAppPage\(app\)\)/);
 });
 
-test("current-page account cards place viewing before filling", () => {
-  assert.match(catalogSource, /const view = button\("查看"\);[\s\S]*?actions\.append\(view, fill\)/);
+test("current-page account cards only show viewing in advanced mode before filling", () => {
+  assert.match(catalogSource, /if \(this\.isAdvancedModeEnabled\(\)\) \{[\s\S]*?const view = button\("查看"\);[\s\S]*?actions\.append\(view\);[\s\S]*?\}\s*actions\.append\(fill\)/);
 });

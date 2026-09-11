@@ -8,7 +8,6 @@ import type { DomStorage } from "./dom";
 
 type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "unipass-theme";
-const ADVANCED_MODE_NOTICE_MS = 1_000;
 
 export class SettingsController {
   private readonly themeToggle = get<HTMLButtonElement>("themeToggle");
@@ -35,7 +34,6 @@ export class SettingsController {
   private selfBuildPromptOpen = false;
   private selfBuildBusy = false;
   private saveControlsDisabled = false;
-  private advancedModeNoticeTimer: number | undefined;
   private readonly advancedModeUnlock = new AdvancedModeUnlock(SELF_BUILD_CLICK_WINDOW_MS);
   private readonly saveGesture = new SaveGestureStateMachine(
     () => void this.saveOverride(),
@@ -49,7 +47,12 @@ export class SettingsController {
     private readonly reportStatus: (text: string, isError?: boolean) => void,
     private readonly storage: DomStorage = window.localStorage,
     private readonly themeTarget: HTMLElement = document.documentElement,
+    private readonly onAdvancedModeChange: () => void = () => {},
   ) {}
+
+  get isAdvancedModeEnabled(): boolean {
+    return this.advancedModeUnlock.isEntered;
+  }
 
   bind(): void {
     this.applyStoredTheme();
@@ -192,13 +195,8 @@ export class SettingsController {
   private enterAdvancedMode(): void {
     if (!this.advancedModeUnlock.enter()) return;
     this.updateRestoreButton();
-    this.reportStatus("已进入高级模式，具体功能暂未开放");
-    if (this.advancedModeNoticeTimer != null) window.clearTimeout(this.advancedModeNoticeTimer);
-    this.advancedModeNoticeTimer = window.setTimeout(() => {
-      this.advancedModeNoticeTimer = undefined;
-      this.advancedModeUnlock.reset();
-      this.updateRestoreButton();
-    }, ADVANCED_MODE_NOTICE_MS);
+    this.onAdvancedModeChange();
+    this.reportStatus("已进入高级模式，可查看账号");
   }
 
   private resetSaveClicks(): void {

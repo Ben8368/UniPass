@@ -28,12 +28,17 @@ export class CatalogController {
     private readonly getPageContext?: () => Promise<PageContext>,
     private readonly openApp?: (appId: string | number, userScope: string) => Promise<void>,
     private readonly storage: DomStorage = window.localStorage,
+    private readonly isAdvancedModeEnabled: () => boolean = () => false,
   ) {}
 
   bind(): void {
     this.refresh.addEventListener("click", () => void this.refreshCurrentPage());
     get<HTMLFormElement>("searchForm").addEventListener("submit", (event) => { event.preventDefault(); void this.loadApps(get<HTMLInputElement>("searchInput").value); });
     this.back.addEventListener("click", () => this.showAppList());
+  }
+
+  refreshForAdvancedModeChange(): void {
+    void this.loadCurrentPage();
   }
 
   initializeFor(user: CurrentUser): string | null {
@@ -140,7 +145,9 @@ export class CatalogController {
     icon.textContent = title.trim().charAt(0) || "A";
     icon.title = "查看应用账号";
     icon.setAttribute("aria-label", `查看${title}账号`);
-    icon.addEventListener("click", () => void this.loadAppAccounts(app));
+    icon.addEventListener("click", () => {
+      if (this.isAdvancedModeEnabled()) void this.loadAppAccounts(app);
+    });
     slot.append(icon);
     return slot;
   }
@@ -188,7 +195,12 @@ export class CatalogController {
       const main = document.createElement("div"); main.className = "item-main"; main.append(textElement("div", "item-title", username), textElement("div", "item-meta", account.remark || (account.topPriority ? "优先账号" : "无备注")));
       const actions = document.createElement("div"); actions.className = "actions";
       const fill = button("填入", "primary"); fill.disabled = tabId == null || !appUrl; fill.title = fill.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面"; fill.addEventListener("click", () => void this.fill(tabId, id, username, appUrl));
-      const view = button("查看"); view.addEventListener("click", () => void this.reveal(id, username)); actions.append(view, fill); root.append(accountIcon(), main, actions); container.append(root);
+      if (this.isAdvancedModeEnabled()) {
+        const view = button("查看");
+        view.addEventListener("click", () => void this.reveal(id, username));
+        actions.append(view);
+      }
+      actions.append(fill); root.append(accountIcon(), main, actions); container.append(root);
     }
   }
 
