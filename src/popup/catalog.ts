@@ -23,8 +23,8 @@ export class CatalogController {
 
   constructor(
     private readonly reportStatus: (text: string, isError?: boolean) => void,
-    private readonly reveal: (accountId: string | number, username: string) => Promise<void>,
-    private readonly fill: (tabId: number | undefined, accountId: string | number, username: string, appUrl?: string) => Promise<void>,
+    private readonly reveal: (accountId: string | number) => Promise<void>,
+    private readonly fill: (tabId: number | undefined, accountId: string | number, appUrl?: string) => Promise<void>,
     private readonly getPageContext?: () => Promise<PageContext>,
     private readonly openApp?: (appId: string | number, userScope: string) => Promise<void>,
     private readonly storage: DomStorage = window.localStorage,
@@ -194,10 +194,14 @@ export class CatalogController {
       const root = document.createElement("article"); root.className = "item account-item";
       const main = document.createElement("div"); main.className = "item-main"; main.append(textElement("div", "item-title", username), textElement("div", "item-meta", account.remark || (account.topPriority ? "优先账号" : "无备注")));
       const actions = document.createElement("div"); actions.className = "actions";
-      const fill = button("填入", "primary"); fill.disabled = tabId == null || !appUrl; fill.title = fill.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面"; fill.addEventListener("click", () => void this.fill(tabId, id, username, appUrl));
+      const copy = button("复制账号");
+      copy.title = "复制完整账号";
+      copy.addEventListener("click", () => void this.copyUsername(username));
+      actions.append(copy);
+      const fill = button("填入", "primary"); fill.disabled = tabId == null || !appUrl; fill.title = fill.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面"; fill.addEventListener("click", () => void this.fill(tabId, id, appUrl));
       if (this.isAdvancedModeEnabled()) {
         const view = button("查看");
-        view.addEventListener("click", () => void this.reveal(id, username));
+        view.addEventListener("click", () => void this.reveal(id));
         actions.append(view);
       }
       actions.append(fill); root.append(accountIcon(), main, actions); container.append(root);
@@ -207,6 +211,15 @@ export class CatalogController {
   private requireUserScope(): string {
     if (!this.userScope) throw new Error("尚未登录 UniPass");
     return this.userScope;
+  }
+
+  private async copyUsername(username: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(username);
+      this.reportStatus("账号已复制");
+    } catch {
+      this.reportStatus("浏览器拒绝写入剪贴板", true);
+    }
   }
 
   private async getTabContext(): Promise<PageContext> {

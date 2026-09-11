@@ -6,6 +6,8 @@ import { send } from "./bridge";
 import { errorText, get } from "./dom";
 import type { DomStorage } from "./dom";
 
+const ADVANCED_MODE_PORT_NAME = "unipass-advanced-mode";
+
 type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "unipass-theme";
 
@@ -34,6 +36,10 @@ export class SettingsController {
   private selfBuildPromptOpen = false;
   private selfBuildBusy = false;
   private saveControlsDisabled = false;
+  private advancedModeActive = false;
+  private advancedModePending = false;
+  private advancedPort: chrome.runtime.Port | null = null;
+  private disposed = false;
   private readonly advancedModeUnlock = new AdvancedModeUnlock(SELF_BUILD_CLICK_WINDOW_MS);
   private readonly saveGesture = new SaveGestureStateMachine(
     () => void this.saveOverride(),
@@ -51,7 +57,7 @@ export class SettingsController {
   ) {}
 
   get isAdvancedModeEnabled(): boolean {
-    return this.advancedModeUnlock.isEntered;
+    return this.advancedModeActive;
   }
 
   bind(): void {
@@ -70,7 +76,7 @@ export class SettingsController {
     this.override.addEventListener("input", () => this.updateRestoreButton());
     this.restoreBaseline.addEventListener("click", () => {
       if (this.advancedModeUnlock.isUnlockReady) {
-        this.enterAdvancedMode();
+        void this.enterAdvancedMode();
         return;
       }
       this.advancedModeUnlock.markRestoreDefault();
@@ -85,6 +91,7 @@ export class SettingsController {
     this.selfBuildDialog.addEventListener("click", (event) => { if (event.target === this.selfBuildDialog) this.closeSelfBuildPrompt(); });
     this.generateSelfBuildButton.addEventListener("click", () => void this.generateSelfBuild());
     window.addEventListener("pagehide", () => {
+      this.dispose();
       if (!this.selfBuildPromptOpen && !this.selfBuildBusy) this.saveGesture.flushPendingSave();
     });
     window.addEventListener("keydown", (event) => {
@@ -92,6 +99,15 @@ export class SettingsController {
       if (!this.selfBuildDialog.classList.contains("hidden")) this.closeSelfBuildPrompt();
       else if (!this.dialog.classList.contains("hidden")) this.close();
     });
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.advancedPort?.disconnect();
+    this.advancedPort = null;
+    this.advancedModeActive = false;
+    this.advancedModePending = false;
+    this.advancedModeUnlock.reset();
   }
 
   private getStoredTheme(): Theme | null {
@@ -192,11 +208,60 @@ export class SettingsController {
     this.saveGesture.click();
   }
 
-  private enterAdvancedMode(): void {
-    if (!this.advancedModeUnlock.enter()) return;
+  private async enterAdvancedMode(): Promise<void> {
+    if (this.disposed || this.advancedModePending || !this.advancedModeUnlock.enter()) return;
+    this.advancedModePending = true;
     this.updateRestoreButton();
-    this.onAdvancedModeChange();
-    this.reportStatus("已进入高级模式，可查看账号");
+    try {
+      const token = await send<string>({ type: "enableAdvancedMode" });
+      const port = await this.connectAdvancedMode(token);
+      if (this.disposed) {
+        port.disconnect();
+        return;
+      }
+      this.advancedPort = port;
+      this.advancedModeActive = true;
+      port.onDisconnect.addListener(() => {
+        if (this.advancedPort !== port) return;
+        this.advancedPort = null;
+        this.advancedModeActive = false;
+        this.advancedModeUnlock.reset();
+        this.updateRestoreButton();
+        this.onAdvancedModeChange();
+      });
+      this.updateRestoreButton();
+      this.onAdvancedModeChange();
+      this.reportStatus("高级模式已开启，可查看和复制密码");
+    } catch (error) {
+      this.advancedModeUnlock.reset();
+      this.updateRestoreButton();
+      this.reportStatus(errorText(error), true);
+    } finally {
+      this.advancedModePending = false;
+      this.updateRestoreButton();
+    }
+  }
+
+  private connectAdvancedMode(token: string): Promise<chrome.runtime.Port> {
+    const port = chrome.runtime.connect({ name: ADVANCED_MODE_PORT_NAME });
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        if (error) {
+          port.disconnect();
+          reject(error);
+        } else {
+          resolve(port);
+        }
+      };
+      port.onMessage.addListener((message: { type?: string }) => {
+        if (message?.type === "advancedModeEnabled") finish();
+      });
+      port.onDisconnect.addListener(() => finish(new Error("高级模式未能启用")));
+      port.postMessage({ type: "advancedModeHandshake", token });
+    });
   }
 
   private resetSaveClicks(): void {
@@ -268,6 +333,11 @@ export class SettingsController {
 
   private updateRestoreButton(): void {
     if (this.advancedModeUnlock.isEntered) {
+      if (this.advancedModePending) {
+        this.restoreBaseline.textContent = "正在开启高级模式";
+        this.restoreBaseline.disabled = true;
+        return;
+      }
       this.restoreBaseline.textContent = "高级模式已开启";
       this.restoreBaseline.disabled = true;
       return;

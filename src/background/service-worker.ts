@@ -23,7 +23,10 @@ import { clearUniPassLoginForTab, completeUniPassLogin, processUniPassLoginTab, 
 import { fillFromOverlay, fillFromPopup, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
 import { readSelfBuildFile } from "./self-build-files";
 import { withUserScope } from "./user-scope-guard";
+import { AdvancedCapabilityRegistry } from "./advanced-capability";
 import type { BackgroundRequest, BackgroundResponse } from "../shared/types";
+
+const advancedCapabilities = new AdvancedCapabilityRegistry();
 
 void restoreJupiterKeepaliveAlarm().catch((error: unknown) => {
   console.warn("木星保活恢复失败", error);
@@ -69,6 +72,14 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+chrome.runtime.onConnect.addListener((port) => {
+  try {
+    advancedCapabilities.attachPort(port);
+  } catch {
+    if (port.name === "unipass-advanced-mode") port.disconnect();
+  }
+});
+
 function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender = {}): Promise<unknown> {
   switch (message.type) {
     case "session":
@@ -79,6 +90,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return pageThemeFor(sender);
     case "openApp":
       return withUserScope(message.userScope, () => openApp(message.appId));
+    case "enableAdvancedMode":
+      return Promise.resolve(advancedCapabilities.prepare(sender));
     case "fillFromOverlay":
       return withUserScope(message.userScope, () => fillFromOverlay(sender, message));
     case "fillFromPopup":
@@ -103,8 +116,11 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return withUserScope(message.userScope, () => appUrlForApp(message.appId));
     case "credentialAvailability":
       return withUserScope(message.userScope, () => credentialAvailability(message.accountIds, message.userScope));
-    case "credential":
-      return withUserScope(message.userScope, () => credentialForAccount(message.accountId, message.fallbackUsername));
+    case "revealCredential":
+      return withUserScope(message.userScope, async () => {
+        advancedCapabilities.require(sender);
+        return credentialForAccount(message.accountId);
+      });
     case "getJupiterKeepalive":
       return withUserScope(message.userScope, () => getJupiterKeepaliveSettings(message.userScope));
     case "setJupiterKeepalive":

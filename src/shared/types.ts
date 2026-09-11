@@ -40,8 +40,9 @@ export type BackgroundRequest =
   | { type: "pageContext" }
   | { type: "pageTheme" }
   | { type: "openApp"; appId: string | number; userScope: string }
-  | { type: "fillFromOverlay"; accountId: string | number; fallbackUsername: string; expectedAppUrl: string; userScope: string }
-  | { type: "fillFromPopup"; tabId: number; accountId: string | number; fallbackUsername: string; expectedAppUrl: string; userScope: string }
+  | { type: "fillFromOverlay"; accountId: string | number; expectedAppUrl: string; userScope: string }
+  | { type: "fillFromPopup"; tabId: number; accountId: string | number; expectedAppUrl: string; userScope: string }
+  | { type: "enableAdvancedMode" }
   | { type: "startUniPassLogin" }
   | { type: "completeUniPassLogin" }
   | { type: "getPluginVersionSettings" }
@@ -52,7 +53,7 @@ export type BackgroundRequest =
   | { type: "accountsForApp"; appId: string | number; userScope: string }
   | { type: "appUrl"; appId: string | number; userScope: string }
   | { type: "credentialAvailability"; accountIds: Array<string | number>; userScope: string }
-  | { type: "credential"; accountId: string | number; fallbackUsername: string; userScope: string }
+  | { type: "revealCredential"; accountId: string | number; userScope: string }
   | { type: "getJupiterKeepalive"; userScope: string }
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string };
 

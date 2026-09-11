@@ -162,13 +162,14 @@ export async function credentialAvailableForAccount(accountId: string | number):
 
 export async function credentialForAccount(
   accountId: string | number,
-  fallbackUsername: string,
 ): Promise<Credential> {
   const config = await appConfigForAccount(accountId);
   const encryptedPassword = config?.user?.password;
   if (!encryptedPassword) throw new Error("该账号没有可用密码");
+  const username = config?.user?.username?.trim() || await usernameFromCatalog(accountId);
+  if (!username) throw new Error("该账号缺少可用账号标识");
   return {
-    username: config?.user?.username || fallbackUsername,
+    username,
     password: await decryptPassword(encryptedPassword),
   };
 }
@@ -214,6 +215,18 @@ async function request<T>(path: string): Promise<T> {
 
 async function resolvePluginVersion(): Promise<string> {
   return (await readPluginVersionOverride()) ?? (await readRuntimeConfig()).networkPluginVersion;
+}
+
+async function usernameFromCatalog(accountId: string | number): Promise<string> {
+  const catalog = await accountCatalog();
+  for (const entry of catalog.entries) {
+    const account = entry.accounts.find((candidate) => {
+      const id = candidate.id ?? candidate.accountId ?? candidate.appAccountUserId;
+      return id != null && String(id) === String(accountId);
+    });
+    if (account) return account.account?.trim() || account.phoneNumber?.trim() || account.email?.trim() || "";
+  }
+  return "";
 }
 
 async function readPluginVersionOverride(): Promise<string | null> {

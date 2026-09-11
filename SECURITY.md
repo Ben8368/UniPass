@@ -7,7 +7,9 @@
 ## 强制安全不变量
 
 - 真实用户的明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物；仅允许不对应任何真实账号的固定算法测试向量。
-- Popup 列表渲染只接收凭据可用性状态；只有用户点击“查看”或“填入”后才能接收一个选中账号的密码。
+- Normal Mode 可完整展示 username/email/phone/account name、备注和账号选择，并允许 Fill；Normal Mode 的明文 password 只在 Service Worker 到 Content Script 的 Fill 短路径中存在，不返回 Popup/页面浮层 UI。
+- Advanced Mode 是 ephemeral plaintext disclosure capability：只有当前 Popup/页面浮层完成显式握手并保持 `unipass-advanced-mode` Port 时，`revealCredential` 才能由 Service Worker 返回选中账号的 `{ username, password }`；Credential panel、Reveal 和 Copy Password 只属于该路径。
+- Advanced capability 绑定 `sender.documentId` 与 Port，Port disconnect、Popup `pagehide`、页面浮层移除或 Service Worker 重启都会 revoke；不写入 `localStorage`、`chrome.storage.local` 或 `chrome.storage.session`，也不使用 TTL/alarm 做 capability 持久化。
 - 填充只允许 HTTPS 且与应用 URL 的 origin/path 匹配；执行前重新检查标签页仍活动且未导航到其他应用。
 - 木星是 manifest 明确允许的单页应用；其登录前后路由可变，但仅限 `https://jupiter.tec-do.com` 同一 origin 内匹配，其他应用仍按 origin/path 严格校验。
 - Content Script 只按用户操作临时注入，只写标准可见输入框，不自动提交表单；扩展 Action 点击后可在当前 HTTPS 页面临时挂载 Shadow DOM 浮层，点击页面外部、按 Escape、再次点击扩展或页面离开后不保留。
@@ -19,7 +21,7 @@
 - UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。网络版号优先取经校验的 `chrome.storage.local` 手动 override，否则只读取本地 `runtime-config.json`，不使用本地 manifest 版本作为网络版号。
 - UniPass AES-ECB-PKCS7 解密与 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换位于随扩展本地打包的 `credential-core.wasm`。Service Worker 通过 `chrome.runtime.getURL` 只加载一次本地核心，重启后按需重建；不下载或执行远程代码。WASM 的输入、密钥材料、轮密钥、摘要、plaintext 和临时输出在完成后显式清零；ABI allocation registry 区分 `Input`/`Output`、最多保留 64 个 live allocation，只有匹配登记的 pointer/length 才能释放，crypto input 只能使用 `Input`。非法 pointer/length、double free 和上限耗尽均 fail closed。`c_v` 只返回状态，`c_k` 只返回 Jupiter 请求所需的 transformed password；只有 Reveal/Fill 的既有功能才把原始明文交给 JS。
 - `Jupiter transformedPassword` 是 credential-equivalent secret：虽然它不是原始密码，但同样不得写入 `localStorage`、`chrome.storage.local`、日志、缓存、telemetry 或错误文本。它只在一次用户主动开启的 Jupiter 保活请求中存在于 Service Worker 的局部变量、请求 body 和短暂消息对象中；请求结束或异常时必须在 `finally` 中清空 username 与 transformed password 引用，且不得保存历史或返回给 Popup/页面。
-- Reveal/Fill 的明文仍是既有产品能力，不因 hardening 删除；Service Worker、Popup 消息和 Content Script 只保留完成当前操作所需的最小引用。Content Script 填充完成后立即清空消息中的 username/password 字段；页面离开、Popup 关闭、账号切换、再次 Reveal 和 60 秒 TTL 到期均清除 Popup 内存字段。
+- Reveal/Fill 的明文仍是既有产品能力，不因 hardening 删除，但两条数据流严格分开：`fillFromPopup`/`fillFromOverlay` 只携带 `accountId`，由 Service Worker 获取并填入；`revealCredential` 先检查 Advanced capability，再把选中凭据交给当前 Advanced UI。Content Script 填充完成后立即清空消息中的 username/password 字段；页面离开、Popup 关闭、浮层移除、账号切换、再次 Reveal 和 60 秒 TTL 到期均清除 UI 内存字段。
 - 发布构建使用标准 minification 且不生成 sourcemap；最小 CSP 增加 `wasm-unsafe-eval` 以实例化本地 WASM。普通 `verify` 与 hardened `verify:hardened` 都是正式门禁；hardened 默认要求固定版本 Binaryen `wasm-opt`，只有显式 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。最终 `dist/` 审计只接受运行文件，构建报告与 `integrity.json` 位于 `artifacts/hardened/`，并验证 WASM magic/version、可实例化性、imports/exports 白名单、完整 raw AES key、Base64/hex key、Jupiter 固定协议文本和项目 `src/*.rs` path 不出现在运行产物中。WASM 与材料重构只提高静态分析成本；客户端仍必须持有协议材料，不能作为对终端用户保密的安全边界，TD-004 仅在外部后端权限与接口契约可用时重新评估。
 
 - Self Derived Build 是 Popup 内的静态打包器：只按当前构建生成的 `self-build-files.json` fetch runtime 文件；清单不存在或文件超出单文件/总量限制时 fail closed。禁止读取 `chrome.storage`、`localStorage`、cookies、凭据、token、会话或用户输入数据（目标版号除外）。生成前后均 fail closed 审计 manifest 版本/key、除 `version`/`version_name` 外的顶层字段、WASM magic、runtime config、完整文件集合和 WASM byte-for-byte 一致性；不申请 `downloads` 权限，使用用户点击触发的 Blob 下载。它不会重新编译 Rust/WASM、生成新的 hardened crypto strategy 或 AES material fragmentation。
@@ -46,8 +48,8 @@
 - 浏览器扩展无法阻止目标 HTTPS 页面自身脚本读取已填入的输入框；因此必须依赖应用 URL 匹配和用户明确操作。
 - 系统剪贴板不会自动清空，避免覆盖用户后来复制的内容。
 - 跨域 iframe、关闭的 Shadow DOM、Canvas 和非标准登录控件不在通用填充承诺内。
-- 页面浮层使用 closed Shadow DOM 隔离页面样式和 DOM；其目录缓存与主题设置仅保存在浮层页面内存中，浮层移除后清除。浮层不读取页面正文、Cookie、localStorage 或表单值；打开时仅读取渲染背景色与 `color-scheme` 用于自动选择明暗主题；凭据仍只在后台消息和用户点击后的目标输入框中短暂存在。
-- 真实 UniPass/飞书 OAuth/Jupiter 行为依赖外部服务和登录状态，自动化测试不能替代按场景执行的手动集成验收。
+- 页面浮层使用 closed Shadow DOM 隔离页面样式和 DOM；其目录缓存与主题设置仅保存在浮层页面内存中，浮层移除后清除。浮层不读取页面正文、Cookie、localStorage 或表单值；打开时仅读取渲染背景色与 `color-scheme` 用于自动选择明暗主题。Normal 浮层可 Fill 但不能 Reveal；Advanced 浮层的 capability 独立绑定当前页面 document，移除时撤销。
+- Advanced Mode 是客户端内的误操作防护和能力分层，不是针对控制本机、DevTools、调试 Service Worker 或修改扩展代码攻击者的认证边界；真实 UniPass/飞书 OAuth/Jupiter 行为依赖外部服务和登录状态，自动化测试不能替代按场景执行的手动集成验收。
 - 发布工程同时要求 Cargo.lock 的 RustSec gate、固定 Rust 1.98.1 的两次独立 WASM 构建一致、完整 SHA pin 的 GitHub Actions、Dependabot，以及 [Chrome 验收清单](docs/CHROME-ACCEPTANCE.md) 中的自动化 smoke；人工登录清单仍需单独执行。
 - 飞书若显示账号选择、扫码、验证码、CAPTCHA、权限变化或其他非预期页面，一键登录会停止，由用户手动处理。
 

@@ -20,7 +20,7 @@
 - `activeTab`：仅在用户点击扩展后读取当前标签页地址，并在当前 HTTPS 页面挂载本次页面浮层和授权本次填充。
 - `scripting`：在用户点击扩展后临时注入页面浮层，点击“填入”后注入固定填充脚本；用户点击“一键登录”后，只在固定 UniPass/Tec-IAM 登录流程中点击两个精确匹配的按钮。
 - `clipboardWrite`：仅响应用户点击，将用户选择的账号或密码写入系统剪贴板。
-- `storage`：保存短期凭据可用性状态、用户主动开启的 Jupiter 保活配置和结果，以及一键登录的临时标签页状态；密码不会写入持久化存储。
+- `storage`：保存短期凭据可用性状态、用户主动开启的 Jupiter 保活配置和结果，以及一键登录的临时标签页状态；Advanced capability 不使用任何 storage，密码不会写入持久化存储。
 - `alarms`：仅用于用户主动开启后的木星会话定时保活；续期在后台重复提交登录请求，不刷新已打开的木星页面。
 - `tabs`：识别当前页面、管理用户触发的一键登录标签页，并把新获取的木星会话同步到已打开的木星标签页。
 - `https://portal.unipass.top/*`：调用 UniPass API，并使用浏览器已有的 UniPass 登录会话。
@@ -72,16 +72,17 @@ WASM 本身保证 byte-for-byte 可复现；`dist` 文件内容由构建流程�
 
 ## 安全与行为
 
-- 原始密码只有 Reveal/Fill 的既有用户操作路径会进入 JavaScript；availability 在 WASM 内只返回状态，Jupiter keepalive 在 WASM 内完成 ciphertext→transformed password。密码只存在于 Service Worker 消息、Popup 内存或用户主动填入的页面字段中。
+- Normal Mode 可以展示完整账号并执行 Fill，但 plaintext password 不返回 UI：Popup/浮层只发送 `accountId`，Service Worker 获取所选 credential 后经临时 Content Script 填入页面。Advanced Mode 在此基础上通过 ephemeral capability 允许 Reveal 和 Copy Password；availability 在 WASM 内只返回状态，Jupiter keepalive 在 WASM 内完成 ciphertext→transformed password。
 - 密码不写入 `chrome.storage`、日志或持久化文件。
-- 查看凭据 60 秒后自动从 Popup/页面浮层清除，关闭 Popup 或移除页面浮层时立即清除。
+- Advanced Credential panel 的明文凭据 60 秒后自动清除；关闭 Popup、Popup `pagehide`、移除页面浮层、Port disconnect 或 Service Worker 重启都会回到 Normal/fail-closed。系统剪贴板不会被自动清空。
 - 自动填充只处理当前页面主文档中的可见输入框，不自动提交表单。
 - 每次源码/CI 构建仍通过 Google Chrome 官方更新接口核验 UniPass 商店 CRX 版本；查询失败、ID 不符、本地版本不是商店当前版的下一补丁版，或网络商店基线不等于当前商店版都会阻断普通构建。网络基线由构建生成到 `runtime-config.json`，而非运行时使用本地 manifest 版本。Popup 可在开发中断或未及时跟进时手动指定三段数字网络版号；该临时覆盖不改变构建或发布门禁，清空后恢复 runtime 基线。Self Derived Build 只要求目标本地版本高于当前且 patch 至少为 `1`，不查询或依赖 Store Version。
 - 当前版本不监听 Cookie；若登录状态变化，重新点击扩展打开页面浮层即可刷新。浮层使用 closed Shadow DOM；打开时仅根据当前页面的渲染背景色与 `color-scheme` 自动选择浅色/暗色，不读取页面正文或页面存储；点击页面外部、按 Escape 或再次点击扩展会关闭浮层。
 - UniPass 离线时可点击顶部“一键登录”。前台浮层会显示登录中动画与状态；扩展在后台打开或复用登录页，依次点击“钛动科技”和固定 Tec-IAM 飞书授权页的“授权”，并在两分钟内确认 UniPass 会话，成功后自动刷新身份和当前页账号，同时关闭本次由扩展创建的后台登录标签；用户原有登录标签不会被关闭。账号选择、扫码、验证码、CAPTCHA 或授权内容变化时自动流程停止，需用户手动处理。
 - 当前版本不自动清空系统剪贴板。最小权限下无法安全确认剪贴板是否已被用户的新内容替换，强制清空可能误删用户内容。
 - 当前页面账号通过本地账号目录匹配：首次同步、目录超过 24 小时或用户点击同步按钮时，扩展会从 UniPass 拉取已保存应用的地址和账号展示信息。同步请求只使用服务器返回的应用地址，当前标签页 URL 不会发送到 UniPass，目录中不保存密码。目录缓存优先按服务端稳定用户 ID 隔离；缺失时使用服务端登录名或邮箱，昵称和姓名不参与隔离。三者均缺失时不执行需要用户身份的目录、应用或凭据请求。
-- 账号展示前，Service Worker 会按需检查匹配账号是否存在可用密码；空密码账号不会显示。检查结果只保存为 15 分钟会话缓存，Popup 不会在列表渲染时批量接收明文密码；解密失败会显式显示错误而不是伪装成空密码。只有用户点击“查看”或“填入”后，选中账号的密码才会发送到 Popup。
+- 账号展示前，Service Worker 会按需检查匹配账号是否存在可用密码；空密码账号不会显示。检查结果只保存为 15 分钟会话缓存，Popup 不会在列表渲染时批量接收明文密码；解密失败会显式显示错误而不是伪装成空密码。Normal 点击“填入”时密码只沿 Service Worker→Content Script 路径进入目标表单；Advanced 点击“查看”时才沿 `revealCredential` 路径返回当前 UI。
+- Normal/Advanced 都完整展示账号（username/email/phone/account name）、备注并允许选择、打开应用和 Fill；Normal 没有“查看”或 Copy Password，Advanced 的文案为“高级模式已开启，可查看和复制密码”。Advanced Mode 是客户端内的 plaintext disclosure gate，不是针对本机控制权或 DevTools 的认证边界。
 - 凭据只允许填入 HTTPS 页面；填入前会再次确认当前标签页仍属于对应应用，避免切换页面后误填。目录、凭据和 Jupiter 保活消息会绑定当前用户作用域；UniPass 与 Jupiter 网络请求 12 秒超时，超时后返回可读错误。
 
 ## 已知限制

@@ -4,13 +4,14 @@ import themeCss from "../popup/theme.css";
 import glassCss from "../popup/liquid-glass.css";
 import popupHtml from "../popup/popup.html";
 import { send } from "../popup/bridge";
-import { initializePopup } from "../popup/popup";
+import { initializePopup, type PopupHandle } from "../popup/popup";
 import type { PageContext } from "../shared/types";
 
 const OVERLAY_ID = "unipass-page-overlay";
 
 const existing = document.getElementById(OVERLAY_ID);
 if (existing) {
+  existing.dispatchEvent(new Event("unipass-overlay-close"));
   existing.remove();
 } else {
   void mount();
@@ -44,15 +45,23 @@ async function mount(): Promise<void> {
   const closeOnEscape = (event: KeyboardEvent): void => {
     if (event.key === "Escape") closeOverlay();
   };
+  let popupHandle: PopupHandle | undefined;
   const closeOverlay = (): void => {
     document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
     document.removeEventListener("keydown", closeOnEscape, true);
+    removalObserver?.disconnect();
+    popupHandle?.dispose();
     host.remove();
   };
+  host.addEventListener("unipass-overlay-close", closeOverlay);
+  const removalObserver = new MutationObserver(() => {
+    if (!host.isConnected) popupHandle?.dispose();
+  });
+  removalObserver.observe(document.documentElement, { childList: true });
   document.addEventListener("pointerdown", closeOnOutsidePointer, true);
   document.addEventListener("keydown", closeOnEscape, true);
 
-  initializePopup({
+  popupHandle = initializePopup({
     root: shadow,
     storage: createMemoryStorage(),
     overlay: true,

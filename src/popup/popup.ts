@@ -17,7 +17,11 @@ export interface PopupEnvironment {
   themeTarget?: HTMLElement;
 }
 
-export function initializePopup(environment: PopupEnvironment = {}): void {
+export interface PopupHandle {
+  dispose(): void;
+}
+
+export function initializePopup(environment: PopupEnvironment = {}): PopupHandle {
   setDomRoot(environment.root ?? document);
   const identity = get("identity");
   const sessionBadge = get<HTMLButtonElement>("sessionBadge");
@@ -35,19 +39,28 @@ export function initializePopup(environment: PopupEnvironment = {}): void {
     setStatus,
     environment.storage,
     environment.themeTarget ?? (environment.root instanceof ShadowRoot ? environment.root.host as HTMLElement : document.documentElement),
-    () => catalog.refreshForAdvancedModeChange(),
+    () => {
+      credentials.clear();
+      catalog.refreshForAdvancedModeChange();
+    },
   );
-  const credentials = new CredentialController(setStatus, () => userScope, environment.overlay);
+  const credentials = new CredentialController(setStatus, () => userScope, environment.overlay, () => settings.isAdvancedModeEnabled);
   catalog = new CatalogController(
     setStatus,
-    (id, username) => credentials.reveal(id, username),
-    (tabId, id, username, appUrl) => credentials.fill(tabId, id, username, appUrl),
+    (id) => credentials.reveal(id),
+    (tabId, id, appUrl) => credentials.fill(tabId, id, appUrl),
     environment.pageContext,
     environment.openApp,
     environment.storage,
     () => settings.isAdvancedModeEnabled,
   );
   void initialize();
+  return {
+    dispose: () => {
+      credentials.dispose();
+      settings.dispose();
+    },
+  };
 
   async function initialize(): Promise<void> {
     settings.bind();

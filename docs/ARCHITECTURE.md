@@ -23,7 +23,8 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | 模块 | 职责 | 禁止事项 |
 | --- | --- | --- |
 | `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、版本设置和用户点击查看/复制/填入；`self-builder.ts` 只读取静态扩展资源并导出 ZIP | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码；Self Builder 读取 storage 或凭据 |
-| `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
+| `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话、Advanced capability 生命周期 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
+| `src/background/advanced-capability.ts` | 以 `sender.documentId` 和 `runtime.Port` 管理 ephemeral Advanced plaintext disclosure capability | 自动因任意 `connect` 授权；使用 storage/TTL/alarm 持久化 capability |
 | `src/content/` | 用户点击扩展后挂载页面浮层，或用户点击填入后在当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
@@ -31,7 +32,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/background/credential-core.ts` | 单例加载扩展本地 WASM；校验输入/输出内存范围并释放/清零 WASM 分配；提供 reveal/fill 解密、availability 状态和 ciphertext→Jupiter transformed password | 网络加载代码、持久化密码或让 availability/Jupiter 获取原始明文 |
 | `credential-core/` | `abi` 负责分配登记、边界、status 和 exports；`unipass` 负责 AES 解密/UTF-8；`jupiter` 负责 MD5/DES 转换；`secret` 负责 zeroizing secret ownership 与 key reconstruction | 变更 UniPass/Jupiter 协议、暴露给网页或承诺可阻止运行时分析 |
 
-`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。三个模块通过显式导出连接，不改变 Popup 与 Service Worker 的消息契约。
+`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`advanced-capability.ts` 只授权 plaintext Reveal，不扩大 host、tab、network 或 storage 能力；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。几个模块通过显式导出连接，消息契约明确区分 Fill 与 Reveal。
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
 `src/background/unipass-login.ts` 只处理用户触发的 UniPass/Tec-IAM 登录：复用或新建一个登录标签页，在两分钟窗口内依次校验并点击唯一的“钛动科技”和“授权”按钮。飞书阶段固定校验 OAuth `client_id`、`redirect_uri`、非空 `state` 和授权文案；离开已知认证 origin、完成授权、关闭标签页或超时后即清除状态。
 
@@ -47,7 +48,9 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 3. Popup 从本地目录缓存匹配应用 origin/path；过期时请求 Service Worker 完整同步。
 4. Service Worker 校验用户作用域后只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
 5. Popup 仅针对匹配账号请求凭据可用性；后台返回三态，不返回密码。
-6. 用户点击“查看”或“填入”后，后台再次校验用户作用域才返回选中账号的凭据。
+6. Normal Fill 消息只包含 `accountId`、目标 URL、用户作用域和 Popup 的 `tabId`（浮层由 sender 标签页确定）；Service Worker 在后台获取 `credentialForAccount(accountId)`，账号标识优先使用 `/app/app_config` 的后台响应，缺失时只从后台重新取得的可信账号目录解析，不接受 Popup 任意字符串。随后经 HTTPS/origin/path/active-tab/document 校验填入 Content Script，不向 Popup 返回 password。
+7. Advanced 解锁完成后，Popup/浮层先请求 `enableAdvancedMode`，再使用返回的一次性内存 token 建立 `unipass-advanced-mode` Port。Service Worker 只有在握手 token、扩展 sender 和 `documentId` 均匹配时才登记 capability；Port disconnect、Popup `pagehide`、浮层移除或 Service Worker 重启均 fail closed。
+8. `revealCredential` 与 Fill 完全分开：Service Worker 先执行 `withUserScope` 和 `requireAdvancedCapability(sender)`，再只解密所选账号并返回 `{ username, password }` 给当前 Advanced UI。Credential panel、Reveal 和 Copy Password 都依赖该返回值；Normal UI 永远不预取 password。
 
 ### 密码学核心
 
@@ -74,7 +77,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖；不含密码/token |
 | `chrome.storage.session` | 凭据可用性状态、Jupiter 会话；随浏览器会话清除 |
 | `chrome.storage.session` 登录项 | 当前一键登录的标签页 ID、阶段和两分钟过期时间；不含 Cookie、授权码或用户资料 |
-| 内存/消息 | 用户选中账号的短生命周期明文密码 |
+| 内存/消息 | Normal Fill 仅在 Service Worker→Content Script 的短生命周期消息中传递明文；Advanced Reveal 额外在当前 Popup/浮层内存保留最多 60 秒；不落盘 |
 
 ## 变更规则
 

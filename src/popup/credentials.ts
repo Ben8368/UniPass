@@ -19,6 +19,7 @@ export class CredentialController {
     private readonly reportStatus: (text: string, isError?: boolean) => void,
     private readonly getUserScope: () => string | null,
     private readonly fillFromOverlay = false,
+    private readonly isAdvancedModeEnabled: () => boolean = () => false,
   ) {}
 
   bind(): void {
@@ -28,25 +29,26 @@ export class CredentialController {
     window.addEventListener("pagehide", () => this.clear());
   }
 
-  async reveal(accountId: string | number, fallbackUsername: string): Promise<void> {
+  async reveal(accountId: string | number): Promise<void> {
     try {
+      if (!this.isAdvancedModeEnabled()) throw new Error("当前上下文未启用高级模式");
       this.reportStatus("正在获取凭据");
       const userScope = this.getUserScope();
       if (!userScope) throw new Error("尚未登录 UniPass");
-      this.show(await send<Credential>({ type: "credential", accountId, fallbackUsername, userScope }));
-      this.reportStatus("凭据只保留在当前弹窗内存中");
+      this.show(await send<Credential>({ type: "revealCredential", accountId, userScope }));
+      this.reportStatus("高级模式已开启，密码只保留在当前界面内存中");
     } catch (error) {
       this.reportStatus(errorText(error), true);
     }
   }
 
-  async fill(tabId: number | undefined, accountId: string | number, fallbackUsername: string, expectedAppUrl?: string): Promise<void> {
+  async fill(tabId: number | undefined, accountId: string | number, expectedAppUrl?: string): Promise<void> {
     if (tabId == null || !expectedAppUrl) return;
     if (this.fillFromOverlay) {
       try {
         const userScope = this.getUserScope();
         if (!userScope) throw new Error("尚未登录 UniPass");
-        const result = await send<FillResult>({ type: "fillFromOverlay", accountId, fallbackUsername, expectedAppUrl, userScope });
+        const result = await send<FillResult>({ type: "fillFromOverlay", accountId, expectedAppUrl, userScope });
         if (!result?.ok) throw new Error(result?.error || "填充失败");
         this.reportStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
       } catch (error) {
@@ -62,7 +64,6 @@ export class CredentialController {
         type: "fillFromPopup",
         tabId,
         accountId,
-        fallbackUsername,
         expectedAppUrl,
         userScope,
       });
@@ -87,7 +88,7 @@ export class CredentialController {
     this.clearTimer = window.setTimeout(() => this.clear(), CREDENTIAL_TTL_SECONDS * 1000);
   }
 
-  private clear(): void {
+  clear(): void {
     if (this.current) this.current.password = "";
     this.current = null;
     this.username.value = "";
@@ -99,6 +100,10 @@ export class CredentialController {
     if (this.countdownTimer) window.clearInterval(this.countdownTimer);
     this.clearTimer = undefined;
     this.countdownTimer = undefined;
+  }
+
+  dispose(): void {
+    this.clear();
   }
 
   private updateCountdown(): void {
