@@ -17,6 +17,7 @@ async function loadModule(path) {
 }
 
 const { SaveGestureStateMachine } = await loadModule("../src/popup/save-gesture.ts");
+const { AdvancedModeUnlock } = await loadModule("../src/popup/advanced-mode.ts");
 const { CHROME_VERSION_COMPONENT_MAX, assertLocalNetworkPair, compareVersions, deriveNetworkVersion, parseVersion } = await loadModule("../src/shared/version.ts");
 const builder = await loadModule("../src/popup/self-builder.ts");
 
@@ -127,6 +128,33 @@ test("flushPendingSave saves one pending single or double click and never flushe
   gesture.flushPendingSave();
   assert.equal(builds, 1);
   assert.equal(saves, 2);
+});
+
+test("advanced mode requires restore default followed by two saves in the same window", () => {
+  let time = 0;
+  const unlock = new AdvancedModeUnlock(1400, () => time);
+
+  assert.equal(unlock.recordSaveClick(), false);
+  unlock.markRestoreDefault();
+  assert.equal(unlock.recordSaveClick(), false);
+  time = 900;
+  assert.equal(unlock.recordSaveClick(), true);
+  assert.equal(unlock.isUnlockReady, true);
+  assert.equal(unlock.enter(), true);
+  assert.equal(unlock.isEntered, true);
+  unlock.reset();
+  assert.equal(unlock.isEntered, false);
+  assert.equal(unlock.isUnlockReady, false);
+});
+
+test("advanced mode does not unlock after the restore-default window expires", () => {
+  let time = 0;
+  const unlock = new AdvancedModeUnlock(1400, () => time);
+
+  unlock.markRestoreDefault();
+  time = 1401;
+  assert.equal(unlock.recordSaveClick(), false);
+  assert.equal(unlock.isUnlockReady, false);
 });
 
 test("version derivation and comparison use three integer segments", () => {

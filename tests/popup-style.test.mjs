@@ -14,6 +14,11 @@ test("version settings places the build time beside the local version", () => {
   assert.match(popupHtml, /id="localBuildPluginVersion"[^>]*>检查中<\/strong><span id="localBuildTime"/);
 });
 
+test("version reset starts disabled and uses the requested labels", () => {
+  assert.match(popupHtml, /id="restorePluginVersionBaseline"[^>]*disabled[^>]*>恢复默认<\/button>/);
+  assert.match(popupHtml, /id="selfBuildDialogTitle">生成本地升级构建<\/h2>/);
+});
+
 test("dark online session badge removes its fill on hover", () => {
   assert.match(
     liquidGlassCss,

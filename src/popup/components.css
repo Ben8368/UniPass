@@ -58,7 +58,7 @@
 .settings-save svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-save:hover { background: #4bdca5; }
 .settings-save:disabled,
-.settings-reset:disabled { cursor: wait; opacity: .58; }
+.settings-reset:disabled { cursor: not-allowed; opacity: .58; }
 .self-build-dialog { width: min(100%, 370px); }
 .self-build-form { gap: 8px; }
 .self-build-kind { margin: 0; color: var(--green-text); font-size: 10px; font-weight: 750; }
@@ -170,6 +170,7 @@
 }
 .item:last-child { border-bottom: 0; }
 .item:hover { background: rgba(255, 255, 255, .035); }
+.app-item:hover { background: transparent; }
 .item-icon {
   display: grid;
   width: 34px;
@@ -185,6 +186,9 @@
   font-weight: 800;
   text-transform: uppercase;
 }
+.app-item .item-title { font-size: 14px; font-weight: 750; letter-spacing: -.01em; }
+.app-icon-button { padding: 0; cursor: pointer; appearance: none; }
+.app-icon-button:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(65, 211, 155, .26), inset 0 1px 0 rgba(255, 255, 255, .045); }
 .item.account-item .item-icon {
   border-color: rgba(112, 167, 255, .15);
   background: linear-gradient(145deg, rgba(112, 167, 255, .15), rgba(112, 167, 255, .045));

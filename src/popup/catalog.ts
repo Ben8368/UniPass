@@ -121,19 +121,29 @@ export class CatalogController {
     for (const app of apps) {
       const title = app.name || app.appName || `应用 ${app.id}`;
       const isJupiter = /木星|jupiter/i.test(title);
-      const root = document.createElement("article"); root.className = "item";
+      const root = document.createElement("article"); root.className = "item app-item";
       const main = document.createElement("div"); main.className = "item-main";
       main.append(textElement("div", "item-title", title));
-       const meta = document.createElement("button"); meta.type = "button"; meta.className = "item-meta-link"; meta.title = "打开应用页面"; meta.setAttribute("aria-label", `打开${title}页面`); meta.innerHTML = '打开<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8" /><path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg>';
-      meta.addEventListener("click", () => void this.openAppPage(app)); main.append(meta);
       const actions = document.createElement("div"); actions.className = "actions";
-      const view = button("查看账号", "primary"); view.addEventListener("click", () => void this.loadAppAccounts(app)); actions.append(view);
+      const open = button("打开页面"); open.title = "打开应用页面"; open.setAttribute("aria-label", `打开${title}页面`); open.addEventListener("click", () => void this.openAppPage(app)); actions.append(open);
       if (isJupiter) { const enabled = keepalive.enabled && String(keepalive.appId) === String(app.id); const control = button(enabled ? "关闭托管" : "自动托管", enabled ? "primary keepalive-enabled" : ""); control.title = "每 25 分钟后台提交登录请求以保持会话，不刷新当前页面"; control.addEventListener("click", () => void this.toggleKeepalive(app, enabled, control)); actions.prepend(control); }
-      root.append(this.appIcon(title), main, actions); this.apps.append(root);
+      root.append(this.appIcon(title, app), main, actions); this.apps.append(root);
     }
   }
 
-  private appIcon(title: string): HTMLElement { const icon = document.createElement("span"); icon.className = "item-icon"; icon.textContent = title.trim().charAt(0) || "A"; icon.setAttribute("aria-hidden", "true"); return icon; }
+  private appIcon(title: string, app: UniPassApp): HTMLElement {
+    const slot = document.createElement("div");
+    slot.className = "app-icon-slot";
+    const icon = document.createElement("button");
+    icon.type = "button";
+    icon.className = "item-icon app-icon-button";
+    icon.textContent = title.trim().charAt(0) || "A";
+    icon.title = "查看应用账号";
+    icon.setAttribute("aria-label", `查看${title}账号`);
+    icon.addEventListener("click", () => void this.loadAppAccounts(app));
+    slot.append(icon);
+    return slot;
+  }
 
   private async toggleKeepalive(app: UniPassApp, enabled: boolean, control: HTMLButtonElement): Promise<void> {
     control.disabled = true;
@@ -178,7 +188,7 @@ export class CatalogController {
       const main = document.createElement("div"); main.className = "item-main"; main.append(textElement("div", "item-title", username), textElement("div", "item-meta", account.remark || (account.topPriority ? "优先账号" : "无备注")));
       const actions = document.createElement("div"); actions.className = "actions";
       const fill = button("填入", "primary"); fill.disabled = tabId == null || !appUrl; fill.title = fill.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面"; fill.addEventListener("click", () => void this.fill(tabId, id, username, appUrl));
-      const view = button("查看"); view.addEventListener("click", () => void this.reveal(id, username)); actions.append(fill, view); root.append(accountIcon(), main, actions); container.append(root);
+      const view = button("查看"); view.addEventListener("click", () => void this.reveal(id, username)); actions.append(view, fill); root.append(accountIcon(), main, actions); container.append(root);
     }
   }
 

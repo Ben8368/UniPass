@@ -1,4 +1,5 @@
 import type { PluginVersionSettings } from "../shared/types";
+import { AdvancedModeUnlock } from "./advanced-mode";
 import { buildSelfDerivedBuild, SELF_BUILD_CLICK_WINDOW_MS, validateSelfBuildTarget } from "./self-builder";
 import { SaveGestureStateMachine } from "./save-gesture";
 import { send } from "./bridge";
@@ -7,6 +8,7 @@ import type { DomStorage } from "./dom";
 
 type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "unipass-theme";
+const ADVANCED_MODE_NOTICE_MS = 1_000;
 
 export class SettingsController {
   private readonly themeToggle = get<HTMLButtonElement>("themeToggle");
@@ -32,6 +34,9 @@ export class SettingsController {
   private readonly systemTheme = window.matchMedia("(prefers-color-scheme: light)");
   private selfBuildPromptOpen = false;
   private selfBuildBusy = false;
+  private saveControlsDisabled = false;
+  private advancedModeNoticeTimer: number | undefined;
+  private readonly advancedModeUnlock = new AdvancedModeUnlock(SELF_BUILD_CLICK_WINDOW_MS);
   private readonly saveGesture = new SaveGestureStateMachine(
     () => void this.saveOverride(),
     () => this.openSelfBuildPrompt(),
@@ -59,7 +64,18 @@ export class SettingsController {
     this.closeButton.addEventListener("click", () => this.close());
     this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); this.resetSaveClicks(); void this.saveOverride(); });
     this.saveButton.addEventListener("click", (event) => { event.preventDefault(); this.handleSaveClick(); });
-    this.restoreBaseline.addEventListener("click", () => { this.resetSaveClicks(); this.override.value = ""; void this.saveOverride(); });
+    this.override.addEventListener("input", () => this.updateRestoreButton());
+    this.restoreBaseline.addEventListener("click", () => {
+      if (this.advancedModeUnlock.isUnlockReady) {
+        this.enterAdvancedMode();
+        return;
+      }
+      this.advancedModeUnlock.markRestoreDefault();
+      this.resetSaveClicks();
+      this.override.value = "";
+      this.updateRestoreButton();
+      void this.saveOverride(true);
+    });
     this.dialog.addEventListener("click", (event) => { if (event.target === this.dialog) this.close(); });
     this.closeSelfBuildButton.addEventListener("click", () => this.closeSelfBuildPrompt());
     this.cancelSelfBuildButton.addEventListener("click", () => this.closeSelfBuildPrompt());
@@ -142,11 +158,12 @@ export class SettingsController {
     this.networkVersionSource.textContent = settings.source === "manual"
       ? `手动指定（内置基线 ${settings.storeBaselineVersion}）`
       : "构建内置网络基线（构建时生成）";
+    this.updateRestoreButton();
   }
 
-  private async saveOverride(): Promise<void> {
+  private async saveOverride(keepControlsEnabled = false): Promise<void> {
     if (this.selfBuildBusy) return;
-    this.setSaveControlsDisabled(true);
+    if (!keepControlsEnabled) this.setSaveControlsDisabled(true);
     try {
       const settings = await send<PluginVersionSettings>({
         type: "setPluginVersionOverride",
@@ -157,13 +174,31 @@ export class SettingsController {
     } catch (error) {
       this.reportStatus(errorText(error), true);
     } finally {
-      this.setSaveControlsDisabled(false);
+      if (!keepControlsEnabled) this.setSaveControlsDisabled(false);
     }
   }
 
   private handleSaveClick(): void {
     if (this.selfBuildBusy || this.selfBuildPromptOpen) return;
+    if (this.advancedModeUnlock.recordSaveClick()) {
+      this.resetSaveClicks();
+      this.updateRestoreButton();
+      this.reportStatus("高级模式已解锁，点击“解锁高级模式”进入");
+      return;
+    }
     this.saveGesture.click();
+  }
+
+  private enterAdvancedMode(): void {
+    if (!this.advancedModeUnlock.enter()) return;
+    this.updateRestoreButton();
+    this.reportStatus("已进入高级模式，具体功能暂未开放");
+    if (this.advancedModeNoticeTimer != null) window.clearTimeout(this.advancedModeNoticeTimer);
+    this.advancedModeNoticeTimer = window.setTimeout(() => {
+      this.advancedModeNoticeTimer = undefined;
+      this.advancedModeUnlock.reset();
+      this.updateRestoreButton();
+    }, ADVANCED_MODE_NOTICE_MS);
   }
 
   private resetSaveClicks(): void {
@@ -227,9 +262,21 @@ export class SettingsController {
   }
 
   private setSaveControlsDisabled(disabled: boolean): void {
+    this.saveControlsDisabled = disabled;
     this.saveButton.disabled = disabled;
     this.override.disabled = disabled;
-    this.restoreBaseline.disabled = disabled;
+    this.updateRestoreButton();
+  }
+
+  private updateRestoreButton(): void {
+    if (this.advancedModeUnlock.isEntered) {
+      this.restoreBaseline.textContent = "高级模式已开启";
+      this.restoreBaseline.disabled = true;
+      return;
+    }
+    const unlockReady = this.advancedModeUnlock.isUnlockReady;
+    this.restoreBaseline.textContent = unlockReady ? "解锁高级模式" : "恢复默认";
+    this.restoreBaseline.disabled = this.saveControlsDisabled || (!unlockReady && !this.override.value.trim());
   }
 
 }
