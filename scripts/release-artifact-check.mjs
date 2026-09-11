@@ -1,28 +1,14 @@
 import { readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { extname, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
 import { inspectWasm } from "./wasm-inspect.mjs";
 
-export const EXPECTED_ARTIFACT_FILES = Object.freeze([
-  "background/service-worker.js",
-  "components.css",
-  "credential-core.wasm",
-  "content/content-script.js",
-  "content/page-overlay.js",
-  "icons/icon16.png",
-  "icons/icon48.png",
-  "icons/icon128.png",
-  "liquid-glass.css",
-  "manifest.json",
-  "popup.css",
-  "popup.html",
-  "popup.js",
-  "runtime-config.json",
-  "self-build-files.json",
-  "theme.css",
-]);
+const require = createRequire(import.meta.url);
+export const EXPECTED_ARTIFACT_FILES = Object.freeze(require("../src/shared/runtime-artifact-files.json"));
+const CHROME_VERSION_COMPONENT_MAX = 65535;
 export const EXPECTED_WASM_IMPORTS = Object.freeze([]);
 export const EXPECTED_WASM_EXPORTS = Object.freeze(["memory", "c_a", "c_f", "c_u", "c_v", "c_k"]);
 export const HARDENED_METADATA_FILES = Object.freeze(["hardened-build-report.json", "integrity.json"]);
@@ -132,6 +118,12 @@ export async function inspectReleaseArtifact(directory, { additionalFiles = [] }
 async function inspectRuntimeConfiguration(root, actualFiles) {
   const errors = [];
   try {
+    const manifest = JSON.parse(await readFile(resolve(root, "manifest.json"), "utf8"));
+    if (!isPluginVersion(manifest?.version)) errors.push("manifest.json 版本超出 Chrome 合法范围或格式无效");
+  } catch (error) {
+    errors.push(`manifest.json 格式无效：${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
     const runtimeConfig = JSON.parse(await readFile(resolve(root, "runtime-config.json"), "utf8"));
     const configKeys = Object.keys(runtimeConfig ?? {}).sort();
     if (JSON.stringify(configKeys) !== JSON.stringify(["networkPluginVersion", "version"])) {
@@ -160,7 +152,9 @@ async function inspectRuntimeConfiguration(root, actualFiles) {
 }
 
 function isPluginVersion(value) {
-  return typeof value === "string" && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value);
+  if (typeof value !== "string") return false;
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);
+  return Boolean(match) && match.slice(1).every((part) => Number(part) <= CHROME_VERSION_COMPONENT_MAX);
 }
 
 export async function inspectHardenedArtifact(directory, {

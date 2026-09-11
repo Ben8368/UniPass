@@ -24,7 +24,9 @@ async function artifactFixture(t) {
     const path = join(root, ...file.split("/"));
     await mkdir(dirname(path), { recursive: true });
     const extension = extname(file);
-    const content = file === "runtime-config.json"
+    const content = file === "manifest.json"
+      ? JSON.stringify({ manifest_version: 3, version: "5.3.3", name: "UniPass" })
+      : file === "runtime-config.json"
       ? JSON.stringify({ version: 1, networkPluginVersion: "5.3.2" })
       : file === "self-build-files.json"
         ? JSON.stringify({ version: 1, files: [...EXPECTED_ARTIFACT_FILES].sort() })

@@ -1,4 +1,4 @@
-import { SELF_BUILD_STATIC_FILES } from "../shared/self-build-files";
+import { MAX_SELF_BUILD_FILE_SIZE, SELF_BUILD_STATIC_FILES } from "../shared/self-build-files";
 
 const allowedFiles = new Set<string>(SELF_BUILD_STATIC_FILES);
 
@@ -7,7 +7,9 @@ export async function readSelfBuildFile(path: string): Promise<{ base64: string 
   try {
     const response = await fetch(chrome.runtime.getURL(path), { cache: "no-store" });
     if (!response.ok) throw new Error("not ok");
-    return { base64: bytesToBase64(new Uint8Array(await response.arrayBuffer())) };
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_SELF_BUILD_FILE_SIZE) throw new Error("file too large");
+    return { base64: bytesToBase64(bytes) };
   } catch {
     throw new Error(`无法读取 ${path}`);
   }

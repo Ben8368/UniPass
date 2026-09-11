@@ -65,6 +65,9 @@ export class SettingsController {
     this.cancelSelfBuildButton.addEventListener("click", () => this.closeSelfBuildPrompt());
     this.selfBuildDialog.addEventListener("click", (event) => { if (event.target === this.selfBuildDialog) this.closeSelfBuildPrompt(); });
     this.generateSelfBuildButton.addEventListener("click", () => void this.generateSelfBuild());
+    window.addEventListener("pagehide", () => {
+      if (!this.selfBuildPromptOpen && !this.selfBuildBusy) this.saveGesture.flushPendingSave();
+    });
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
       if (!this.selfBuildDialog.classList.contains("hidden")) this.closeSelfBuildPrompt();

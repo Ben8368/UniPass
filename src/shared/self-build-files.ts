@@ -1,21 +1,8 @@
-export const SELF_BUILD_STATIC_FILES = Object.freeze([
-  "background/service-worker.js",
-  "components.css",
-  "content/content-script.js",
-  "content/page-overlay.js",
-  "credential-core.wasm",
-  "icons/icon128.png",
-  "icons/icon16.png",
-  "icons/icon48.png",
-  "liquid-glass.css",
-  "manifest.json",
-  "popup.css",
-  "popup.html",
-  "popup.js",
-  "runtime-config.json",
-  "self-build-files.json",
-  "theme.css",
-]);
+import runtimeArtifactFiles from "./runtime-artifact-files.json";
+
+export const SELF_BUILD_STATIC_FILES = Object.freeze(runtimeArtifactFiles);
+export const MAX_SELF_BUILD_FILE_SIZE = 10 * 1024 * 1024;
+export const MAX_SELF_BUILD_TOTAL_SIZE = 50 * 1024 * 1024;
 
 export interface SelfBuildFileResponse {
   base64: string;

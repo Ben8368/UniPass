@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { access, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import puppeteer from "puppeteer-core";
+import { unzipSync } from "fflate";
 import { inspectHardenedMetadata } from "./release-artifact-check.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -11,92 +13,94 @@ const hardened = smokeArguments.includes("--hardened");
 const distArgument = smokeArguments.find((argument) => argument !== "--hardened");
 const dist = resolve(root, distArgument ?? process.env.CHROME_SMOKE_DIST ?? "dist");
 const downloadDirectory = join(tmpdir(), `unipass-chrome-smoke-download-${process.pid}-${Date.now()}`);
+const derivedDirectory = join(tmpdir(), `unipass-derived-${process.pid}-${Date.now()}`);
+
 if (hardened) {
   const metadataErrors = await inspectHardenedMetadata(resolve(root, "artifacts/hardened"), dist);
   if (metadataErrors.length) {
     throw new Error(`Hardened Chrome smoke requires a verified hardened dist:\n${metadataErrors.join("\n")}`);
   }
 }
+
 const manifest = JSON.parse(await readFile(join(dist, "manifest.json"), "utf8"));
 const chromePath = await findChrome();
 const userDataDir = join(tmpdir(), `unipass-chrome-smoke-${process.pid}-${Date.now()}`);
-const errors = [];
-const browser = await puppeteer.launch({
-  executablePath: chromePath,
-  headless: process.env.CHROME_SMOKE_HEADLESS === "true" ? "new" : false,
-  userDataDir,
-  defaultViewport: { width: 1280, height: 900 },
-  ignoreDefaultArgs: ["--disable-extensions"],
-  args: [
-    `--load-extension=${dist}`,
-    `--disable-extensions-except=${dist}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-background-networking",
-    "--disable-component-update",
-    "--disable-popup-blocking",
-    ...(process.env.CHROME_SMOKE_NO_SANDBOX === "true" ? ["--no-sandbox"] : []),
-  ],
-});
+let derivedBuild;
 
 try {
-  const serviceWorkerTarget = await waitForTarget(browser, (target) =>
-    target.type() === "service_worker" && target.url().endsWith("/background/service-worker.js"));
-  const extensionId = new URL(serviceWorkerTarget.url()).hostname;
-  assert.match(extensionId, /^[a-p]{32}$/);
+  const browser = await launchExtension(chromePath, dist, userDataDir);
+  const errors = [];
+  try {
+    const serviceWorkerTarget = await waitForTarget(browser, (target) =>
+      target.type() === "service_worker" && target.url().endsWith("/background/service-worker.js"));
+    const extensionId = new URL(serviceWorkerTarget.url()).hostname;
+    assert.match(extensionId, /^[a-p]{32}$/);
 
-  const popup = await browser.newPage();
-  popup.on("console", (message) => {
-    if (message.type() === "error") errors.push(`popup console: ${message.text()}`);
-  });
-  popup.on("pageerror", (error) => errors.push(`popup page error: ${error.message}`));
-  await gotoExtensionPage(popup, `chrome-extension://${extensionId}/popup.html`);
-  assert.equal(await popup.title(), "UniPass");
-  const loadedManifest = await popup.evaluate(async () => {
-    const response = await fetch(chrome.runtime.getURL("manifest.json"));
-    return response.json();
-  });
-  assert.equal(loadedManifest.manifest_version, 3);
-  assert.equal(loadedManifest.name, manifest.name);
-
-  const initialWorker = await waitForWorker(serviceWorkerTarget);
-  await assertWasmLoads(initialWorker);
-  await assertSelfBuildFlow(popup, manifest.version, downloadDirectory);
-
-  if (process.env.CHROME_SMOKE_SKIP_RESTART !== "true") {
-    assert.equal(await popup.evaluate(() => typeof chrome.runtime.reload), "function");
-    await popup.evaluate(() => {
-      setTimeout(() => chrome.runtime.reload(), 0);
-      return true;
+    const popup = await browser.newPage();
+    attachPageErrors(popup, errors);
+    await gotoExtensionPage(popup, `chrome-extension://${extensionId}/popup.html`);
+    assert.equal(await popup.title(), "UniPass");
+    const loadedManifest = await popup.evaluate(async () => {
+      const response = await fetch(chrome.runtime.getURL("manifest.json"));
+      return response.json();
     });
+    assert.equal(loadedManifest.manifest_version, 3);
+    assert.equal(loadedManifest.name, manifest.name);
 
-    // runtime.reload() may reuse the Service Worker target object. Wait for the
-    // old popup to close before opening the extension page again, then resolve
-    // the current worker by URL instead of requiring a new target identity.
-    await waitForPageClosed(popup);
-    const restartedTarget = await waitForTarget(browser, (target) =>
-      target.type() === "service_worker" && target.url().endsWith("/background/service-worker.js"), { timeout: 15_000 });
-    const restartedPopup = await browser.newPage();
-    restartedPopup.on("console", (message) => {
-      if (message.type() === "error") errors.push(`restarted popup console: ${message.text()}`);
-    });
-    restartedPopup.on("pageerror", (error) => errors.push(`restarted popup page error: ${error.message}`));
-    await gotoExtensionPage(restartedPopup, `chrome-extension://${extensionId}/popup.html`);
-    await assertWasmLoads(await waitForWorker(restartedTarget));
+    await assertWasmLoads(await waitForWorker(serviceWorkerTarget));
+    derivedBuild = await assertSelfBuildFlow(popup, manifest.version, downloadDirectory, extensionId);
+
+    if (process.env.CHROME_SMOKE_SKIP_RESTART !== "true") {
+      assert.equal(await popup.evaluate(() => typeof chrome.runtime.reload), "function");
+      await popup.evaluate(() => {
+        setTimeout(() => chrome.runtime.reload(), 0);
+        return true;
+      });
+
+      // runtime.reload() may reuse the Service Worker target object. Wait for the
+      // old popup to close before opening the extension page again, then resolve the
+      // current worker by URL instead of requiring a new target identity.
+      await waitForPageClosed(popup);
+      const restartedTarget = await waitForTarget(browser, (target) =>
+        target.type() === "service_worker" && target.url().endsWith("/background/service-worker.js"), { timeout: 15_000 });
+      const restartedPopup = await browser.newPage();
+      attachPageErrors(restartedPopup, errors);
+      await gotoExtensionPage(restartedPopup, `chrome-extension://${extensionId}/popup.html`);
+      await assertWasmLoads(await waitForWorker(restartedTarget));
+    }
+
+    assert.deepEqual(errors, [], `extension console errors:\n${errors.join("\n")}`);
+    const browserLabel = /edge|msedge/i.test(chromePath) ? "Chromium-compatible browser" : "Chrome";
+    const restartLabel = process.env.CHROME_SMOKE_SKIP_RESTART === "true" ? "restart skipped for this runner" : "restart verified";
+    console.log(`${browserLabel} smoke GREEN: MV3 manifest, popup, Service Worker, WASM and ${restartLabel} (${chromePath})`);
+  } finally {
+    await browser.close();
   }
-
-  assert.deepEqual(errors, [], `extension console errors:\n${errors.join("\n")}`);
-  const browserLabel = /edge|msedge/i.test(chromePath) ? "Chromium-compatible browser" : "Chrome";
-  const restartLabel = process.env.CHROME_SMOKE_SKIP_RESTART === "true" ? "restart skipped for this runner" : "restart verified";
-  console.log(`${browserLabel} smoke GREEN: MV3 manifest, popup, Service Worker, WASM and ${restartLabel} (${chromePath})`);
 } finally {
-  await browser.close();
   await rm(userDataDir, { recursive: true, force: true });
+}
+
+try {
+  const sourceWasm = new Uint8Array(await readFile(join(dist, "credential-core.wasm")));
+  await extractAndVerifyDerivedArchive(derivedBuild.archivePath, dist, derivedDirectory, {
+    targetVersion: derivedBuild.targetVersion,
+    targetNetworkVersion: derivedBuild.targetNetworkVersion,
+    sourceManifest: manifest,
+    sourceWasm,
+  });
+  await assertDerivedChromeSmoke(chromePath, derivedDirectory, {
+    extensionId: derivedBuild.extensionId,
+    targetVersion: derivedBuild.targetVersion,
+    targetNetworkVersion: derivedBuild.targetNetworkVersion,
+  });
+} finally {
+  await rm(derivedDirectory, { recursive: true, force: true });
   await rm(downloadDirectory, { recursive: true, force: true });
 }
 
-async function assertSelfBuildFlow(popup, currentVersion, downloadPath) {
+async function assertSelfBuildFlow(popup, currentVersion, downloadPath, extensionId) {
   const [major, minor, patch] = currentVersion.split(".").map(Number);
+  assert.ok(patch < 65535, "当前版本 patch 已达 Chrome 上限，无法生成下一代 smoke 目标");
   const targetVersion = `${major}.${minor}.${patch + 1}`;
   await mkdir(downloadPath, { recursive: true });
   const client = await popup.createCDPSession();
@@ -111,12 +115,131 @@ async function assertSelfBuildFlow(popup, currentVersion, downloadPath) {
   await popup.click("#versionSave");
   await popup.click("#versionSave");
   await popup.waitForSelector("#selfBuildDialog:not(.hidden)");
+  assert.equal(await popup.$eval("#selfBuildCurrentVersion", (element) => element.textContent), currentVersion);
   assert.equal(await popup.$eval("#selfBuildTargetVersion", (element) => element.textContent), targetVersion);
+  assert.equal(await popup.$eval("#selfBuildTargetNetworkVersion", (element) => element.textContent), currentVersion);
   await popup.click("#generateSelfBuild");
   const archive = join(downloadPath, `UniPass-${targetVersion}.zip`);
   await waitForFile(archive);
   const message = await popup.$eval("#selfBuildMessage", (element) => element.textContent);
   assert.match(message, new RegExp(`已生成 UniPass-${targetVersion}\\.zip`));
+  return { archivePath: archive, extensionId, targetVersion, targetNetworkVersion: currentVersion };
+}
+
+async function extractAndVerifyDerivedArchive(archivePath, sourceDirectory, derivedDirectoryPath, {
+  targetVersion,
+  targetNetworkVersion,
+  sourceManifest,
+  sourceWasm,
+}) {
+  const entries = unzipSync(await readFile(archivePath));
+  const sourceFileManifest = JSON.parse(await readFile(join(sourceDirectory, "self-build-files.json"), "utf8"));
+  const expectedPaths = [...sourceFileManifest.files].sort();
+  assert.deepEqual(Object.keys(entries).sort(), expectedPaths, "Derived ZIP 必须只包含顶层 runtime 文件");
+  for (const path of expectedPaths) {
+    assert.ok(path && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes(".."));
+    const destination = join(derivedDirectoryPath, ...path.split("/"));
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, entries[path]);
+  }
+
+  const derivedManifest = JSON.parse(new TextDecoder().decode(entries["manifest.json"]));
+  assert.equal(derivedManifest.version, targetVersion);
+  assert.match(derivedManifest.version_name, /^self-\d{6}-\d{4}$/);
+  assert.equal(derivedManifest.key, sourceManifest.key);
+  assert.deepEqual({ ...sourceManifest, version: derivedManifest.version, version_name: derivedManifest.version_name }, derivedManifest);
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(entries["runtime-config.json"])), {
+    version: 1,
+    networkPluginVersion: targetNetworkVersion,
+  });
+  assert.equal(sha256(entries["credential-core.wasm"]), sha256(sourceWasm));
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(entries["self-build-files.json"])), sourceFileManifest);
+  console.log(`Derived artifact GREEN: ${archivePath} -> ${derivedDirectoryPath}`);
+}
+
+async function assertDerivedChromeSmoke(chromePath, extensionDirectory, { extensionId, targetVersion, targetNetworkVersion }) {
+  const userDataDir = join(tmpdir(), `unipass-derived-chrome-smoke-${process.pid}-${Date.now()}`);
+  const browser = await launchExtension(chromePath, extensionDirectory, userDataDir);
+  const errors = [];
+  try {
+    const serviceWorkerTarget = await waitForTarget(browser, (target) =>
+      target.type() === "service_worker" && target.url().endsWith("/background/service-worker.js"));
+    assert.equal(new URL(serviceWorkerTarget.url()).hostname, extensionId, "Derived extension ID 必须保持不变");
+    await assertWasmLoads(await waitForWorker(serviceWorkerTarget));
+
+    const popup = await browser.newPage();
+    attachPageErrors(popup, errors);
+    await gotoExtensionPage(popup, `chrome-extension://${extensionId}/popup.html`);
+    const runtimeManifest = await popup.evaluate(() => chrome.runtime.getManifest());
+    assert.equal(runtimeManifest.version, targetVersion);
+    assert.match(runtimeManifest.version_name, /^self-\d{6}-\d{4}$/);
+    const runtimeConfig = await popup.evaluate(async () => (await fetch(chrome.runtime.getURL("runtime-config.json"))).json());
+    assert.deepEqual(runtimeConfig, { version: 1, networkPluginVersion: targetNetworkVersion });
+
+    const settingsResponse = await popup.evaluate(async () => chrome.runtime.sendMessage({ type: "getPluginVersionSettings" }));
+    assert.equal(settingsResponse.ok, true);
+    assert.equal(settingsResponse.data.localBuildVersion, targetVersion);
+    assert.equal(settingsResponse.data.networkVersion, targetNetworkVersion);
+    assert.equal(settingsResponse.data.source, "built-in");
+    assert.equal(settingsResponse.data.override, "");
+
+    await assertSecondGenerationPrompt(popup, targetVersion);
+    assert.deepEqual(errors, [], `derived extension console errors:\n${errors.join("\n")}`);
+    console.log(`Derived Chrome smoke GREEN: ID ${extensionId}, Service Worker, Popup, runtime-config, API settings, WASM and second-generation Self Build`);
+  } finally {
+    await browser.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+}
+
+async function assertSecondGenerationPrompt(popup, currentVersion) {
+  const [major, minor, patch] = currentVersion.split(".").map(Number);
+  const nextVersion = `${major}.${minor}.${patch + 1}`;
+  const nextNetworkVersion = currentVersion;
+  await popup.click("#pluginVersionSettingsButton");
+  await popup.waitForSelector("#versionSettingsDialog:not(.hidden)");
+  await popup.$eval("#pluginVersionOverride", (input, value) => {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, nextVersion);
+  await popup.click("#versionSave");
+  await popup.click("#versionSave");
+  await popup.click("#versionSave");
+  await popup.waitForSelector("#selfBuildDialog:not(.hidden)");
+  assert.equal(await popup.$eval("#selfBuildCurrentVersion", (element) => element.textContent), currentVersion);
+  assert.equal(await popup.$eval("#selfBuildTargetVersion", (element) => element.textContent), nextVersion);
+  assert.equal(await popup.$eval("#selfBuildTargetNetworkVersion", (element) => element.textContent), nextNetworkVersion);
+}
+
+function attachPageErrors(page, errors) {
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(`popup console: ${message.text()}`);
+  });
+  page.on("pageerror", (error) => errors.push(`popup page error: ${error.message}`));
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function launchExtension(chromePath, extensionDirectory, userDataDirectory) {
+  return puppeteer.launch({
+    executablePath: chromePath,
+    headless: process.env.CHROME_SMOKE_HEADLESS === "true" ? "new" : false,
+    userDataDir: userDataDirectory,
+    defaultViewport: { width: 1280, height: 900 },
+    ignoreDefaultArgs: ["--disable-extensions"],
+    args: [
+      `--load-extension=${extensionDirectory}`,
+      `--disable-extensions-except=${extensionDirectory}`,
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--disable-component-update",
+      "--disable-popup-blocking",
+      ...(process.env.CHROME_SMOKE_NO_SANDBOX === "true" ? ["--no-sandbox"] : []),
+    ],
+  });
 }
 
 async function waitForFile(path, { timeout = 15_000 } = {}) {

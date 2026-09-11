@@ -2,7 +2,7 @@
 
 ## 自动化 smoke
 
-`npm run smoke:chrome` 使用 `puppeteer-core` 和本机/`CHROME_BIN` 指定的 Chrome，在临时用户目录加载 `dist/`。`npm run smoke:chrome:hardened` 会先校验 `artifacts/hardened/` 的报告和完整性哈希，再加载 hardened `dist/`。两者验证 MV3 manifest、Service Worker 注册、popup、本地 `credential-core.wasm` fetch/instantiate、Self Builder 的三击确认与 ZIP 下载、CSP 和重启初始化；同时收集 popup 的 console/page error。它们不使用真实账号或密码。
+`npm run smoke:chrome` 使用 `puppeteer-core` 和本机/`CHROME_BIN` 指定的 Chrome，在临时用户目录加载 `dist/`。`npm run smoke:chrome:hardened` 会先校验 `artifacts/hardened/` 的报告和完整性哈希，再加载 hardened `dist/`。两者验证 MV3 manifest、Service Worker 注册、popup、本地 `credential-core.wasm` fetch/instantiate、第一代 Self Builder 的三击确认与 ZIP 下载、ZIP 解压后的精确顶层文件结构和自校验，然后关闭第一代浏览器，在新的临时 Profile 加载二代扩展，验证 ID、`runtime-config`、`getPluginVersionSettings`、WASM 和下一代 Self Build 确认框；同时收集 popup 的 console/page error。它们不使用真实账号或密码。
 
 CI 和 Release 分别运行 normal 与 hardened job；normal job 运行 `npm run verify`/独立 WASM 可复现构建，hardened job 运行 `npm run verify:hardened`。无图形 Linux runner 通过 `xvfb-run` 提供显示环境。
 

@@ -22,7 +22,7 @@
 - Reveal/Fill 的明文仍是既有产品能力，不因 hardening 删除；Service Worker、Popup 消息和 Content Script 只保留完成当前操作所需的最小引用。Content Script 填充完成后立即清空消息中的 username/password 字段；页面离开、Popup 关闭、账号切换、再次 Reveal 和 60 秒 TTL 到期均清除 Popup 内存字段。
 - 发布构建使用标准 minification 且不生成 sourcemap；最小 CSP 增加 `wasm-unsafe-eval` 以实例化本地 WASM。普通 `verify` 与 hardened `verify:hardened` 都是正式门禁；hardened 默认要求固定版本 Binaryen `wasm-opt`，只有显式 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。最终 `dist/` 审计只接受运行文件，构建报告与 `integrity.json` 位于 `artifacts/hardened/`，并验证 WASM magic/version、可实例化性、imports/exports 白名单、完整 raw AES key、Base64/hex key、Jupiter 固定协议文本和项目 `src/*.rs` path 不出现在运行产物中。WASM 与材料重构只提高静态分析成本；客户端仍必须持有协议材料，不能作为对终端用户保密的安全边界，TD-004 仅在外部后端权限与接口契约可用时重新评估。
 
-- Self Derived Build 是 Popup 内的静态打包器：只按构建生成的 `self-build-files.json` fetch 当前 runtime 文件，禁止读取 `chrome.storage`、`localStorage`、cookies、凭据、token、会话或用户输入数据（目标版号除外）。生成前后均 fail closed 审计 manifest 版本/key、WASM magic、runtime config、完整文件集合和 WASM byte-for-byte 一致性；不申请 `downloads` 权限，使用用户点击触发的 Blob 下载。它不会重新编译 Rust/WASM、生成新的 hardened crypto strategy 或 AES material fragmentation。
+- Self Derived Build 是 Popup 内的静态打包器：只按当前构建生成的 `self-build-files.json` fetch runtime 文件；清单不存在或文件超出单文件/总量限制时 fail closed。禁止读取 `chrome.storage`、`localStorage`、cookies、凭据、token、会话或用户输入数据（目标版号除外）。生成前后均 fail closed 审计 manifest 版本/key、除 `version`/`version_name` 外的顶层字段、WASM magic、runtime config、完整文件集合和 WASM byte-for-byte 一致性；不申请 `downloads` 权限，使用用户点击触发的 Blob 下载。它不会重新编译 Rust/WASM、生成新的 hardened crypto strategy 或 AES material fragmentation。
 
 ## 权限与主机
 

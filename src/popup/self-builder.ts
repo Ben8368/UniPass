@@ -1,6 +1,6 @@
 import { unzipSync, zipSync } from "fflate";
 import { RUNTIME_CONFIG_FILE, parseRuntimeConfig, type RuntimeConfig } from "../shared/runtime-config";
-import { SELF_BUILD_STATIC_FILES, type SelfBuildFileResponse } from "../shared/self-build-files";
+import { MAX_SELF_BUILD_FILE_SIZE, MAX_SELF_BUILD_TOTAL_SIZE, type SelfBuildFileResponse } from "../shared/self-build-files";
 import { send } from "./bridge";
 import {
   assertLocalNetworkPair,
@@ -87,8 +87,13 @@ export function assembleDerivedBuild(input: AssembleDerivedBuildInput): DerivedB
   const staticFiles = new Map<string, Uint8Array>();
   for (const file of input.files) {
     if (!isSafeRuntimePath(file.path) || staticFiles.has(file.path)) throw new Error("Self Build 文件清单无效");
+    if (!(file.bytes instanceof Uint8Array) || file.bytes.byteLength > MAX_SELF_BUILD_FILE_SIZE) {
+      throw new Error("Self Build 单文件大小超出限制");
+    }
     staticFiles.set(file.path, file.bytes);
   }
+  const totalSize = [...staticFiles.values()].reduce((total, bytes) => total + bytes.byteLength, 0);
+  if (totalSize > MAX_SELF_BUILD_TOTAL_SIZE) throw new Error("Self Build 总文件大小超出限制");
   const expectedPaths = new Set(filesManifest.files);
   if (staticFiles.size !== expectedPaths.size || [...staticFiles.keys()].some((path) => !expectedPaths.has(path))) {
     throw new Error("Self Build 文件清单与 runtime artifact 不完整");
@@ -108,7 +113,7 @@ export function assembleDerivedBuild(input: AssembleDerivedBuildInput): DerivedB
   archiveFiles[RUNTIME_CONFIG_FILE] = encodeJson(targetRuntimeConfig);
 
   const archive = zipSync(archiveFiles, { level: 0 });
-  verifyDerivedArchive(archive, filesManifest, currentManifest.key, wasm, targetLocalVersion, targetNetworkVersion);
+  verifyDerivedArchive(archive, filesManifest, currentManifest, wasm, targetLocalVersion, targetNetworkVersion);
   return {
     archive,
     targetLocalVersion,
@@ -131,7 +136,14 @@ async function buildSelfDerivedBuildOnce(targetLocalVersion: string): Promise<De
   if (!runtimeManifestVersion) throw new Error("当前本地版本格式无效");
   const fileManifest = await readSelfBuildFilesManifest();
   const fileList = fileManifest.files;
-  const files = await Promise.all(fileList.map(async (path) => ({ path, bytes: await fetchBytes(path) })));
+  const files: StaticFile[] = [];
+  let totalSize = 0;
+  for (const path of fileList) {
+    const bytes = await fetchBytes(path);
+    totalSize += bytes.byteLength;
+    if (totalSize > MAX_SELF_BUILD_TOTAL_SIZE) throw new Error("Self Build 总文件大小超出限制");
+    files.push({ path, bytes });
+  }
   const manifestBytes = requireFile(files, "manifest.json");
   const configBytes = requireFile(files, RUNTIME_CONFIG_FILE);
   const currentManifest = parseJson(manifestBytes, "当前 manifest.json 格式无效");
@@ -150,16 +162,7 @@ async function buildSelfDerivedBuildOnce(targetLocalVersion: string): Promise<De
 }
 
 export async function readSelfBuildFilesManifest(): Promise<SelfBuildFilesManifest> {
-  try {
-    return asSelfBuildFilesManifest(await fetchJson(SELF_BUILD_FILES_FILE));
-  } catch (error) {
-    // Builds made before the self-build manifest was added can still be upgraded
-    // when all files from the fixed, audited artifact layout are present.
-    if (error instanceof Error && error.message === `无法读取 ${SELF_BUILD_FILES_FILE}`) {
-      return { version: 1, files: [...SELF_BUILD_STATIC_FILES] };
-    }
-    throw error;
-  }
+  return asSelfBuildFilesManifest(await fetchJson(SELF_BUILD_FILES_FILE));
 }
 
 async function fetchBytes(path: string): Promise<Uint8Array> {
@@ -188,7 +191,7 @@ function downloadArchive(archive: Uint8Array, fileName: string): void {
 function verifyDerivedArchive(
   archive: Uint8Array,
   fileManifest: SelfBuildFilesManifest,
-  currentKey: string,
+  currentManifest: ManifestLike,
   currentWasm: Uint8Array,
   targetLocalVersion: string,
   targetNetworkVersion: string,
@@ -199,11 +202,25 @@ function verifyDerivedArchive(
   if (JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths)) throw new Error("生成 ZIP 文件集合不完整");
   const manifest = asManifest(parseJson(entries["manifest.json"], "生成 manifest.json 格式无效"), "生成 manifest.json 格式无效");
   const config = parseRuntimeConfig(parseJson(entries[RUNTIME_CONFIG_FILE], "生成 runtime-config 格式无效"));
-  if (manifest.version !== targetLocalVersion || manifest.key !== currentKey) throw new Error("生成 ZIP 的 manifest 校验失败");
+  if (manifest.version !== targetLocalVersion || manifest.key !== currentManifest.key || !/^self-\d{6}-\d{4}$/.test(String(manifest.version_name ?? ""))) {
+    throw new Error("生成 ZIP 的 manifest 校验失败");
+  }
+  assertDerivedManifestEquivalent(currentManifest, manifest);
   if (!config || config.networkPluginVersion !== targetNetworkVersion) throw new Error("生成 ZIP 的 runtime-config 校验失败");
   if (!sameBytes(entries["credential-core.wasm"], currentWasm)) throw new Error("生成 ZIP 的 WASM 与当前版本不一致");
   const generatedManifest = asSelfBuildFilesManifest(parseJson(entries[SELF_BUILD_FILES_FILE], "生成文件清单格式无效"));
   if (JSON.stringify(generatedManifest.files) !== JSON.stringify(fileManifest.files)) throw new Error("生成 ZIP 的文件清单校验失败");
+}
+
+export function assertDerivedManifestEquivalent(original: unknown, derived: unknown): void {
+  const originalManifest = asManifest(original, "原始 manifest.json 格式无效");
+  const derivedManifest = asManifest(derived, "生成 manifest.json 格式无效");
+  const expectedManifest: ManifestLike = {
+    ...originalManifest,
+    version: derivedManifest.version,
+    version_name: derivedManifest.version_name,
+  };
+  if (!deepEqual(expectedManifest, derivedManifest)) throw new Error("生成 ZIP 的 manifest 关键字段发生变化");
 }
 
 function asManifest(value: unknown, message: string): ManifestLike {
@@ -253,6 +270,21 @@ function encodeJson(value: unknown): Uint8Array {
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
+}
+
+function deepEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => deepEqual(value, right[index]));
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  return JSON.stringify(leftKeys) === JSON.stringify(rightKeys)
+    && leftKeys.every((key) => deepEqual(leftRecord[key], rightRecord[key]));
 }
 
 function base64ToBytes(value: string): Uint8Array {

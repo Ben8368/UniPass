@@ -10,7 +10,8 @@ const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "ut
 const STORE_EXTENSION_ID = "gjphikebcceegfolnbfncepfmjnhdkam";
 const STORE_UPDATE_URL = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0.0.0&acceptformat=crx3&x=id%3D${STORE_EXTENSION_ID}%26installsource%3Dondemand%26uc`;
 const idFromKey = (key) => [...createHash("sha256").update(Buffer.from(key ?? "", "base64")).digest("hex").slice(0, 32)].map((nibble) => String.fromCharCode("a".charCodeAt(0) + Number.parseInt(nibble, 16))).join("");
-const versionParts = String(manifest.version).split(".").map(Number);
+const CHROME_VERSION_COMPONENT_MAX = 65535;
+const versionParts = parseChromeVersion(manifest.version);
 const pluginVersion = await readFile(resolve(root, "src/shared/plugin-version.ts"), "utf8");
 const rustToolchain = await readFile(resolve(root, "rust-toolchain.toml"), "utf8");
 const rustManifest = await readFile(resolve(root, "credential-core/Cargo.toml"), "utf8");
@@ -20,7 +21,7 @@ const workflowFiles = [".github/workflows/ci.yml", ".github/workflows/release.ym
 const storeBaselineMatch = pluginVersion.match(/STORE_PLUGIN_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
 if (packageJson.version !== manifest.version) errors.push("package.json 与 manifest 版本必须一致");
 if (idFromKey(manifest.key) !== STORE_EXTENSION_ID) errors.push(`manifest key 必须派生为商店 ID ${STORE_EXTENSION_ID}`);
-if (versionParts.length !== 3 || versionParts.some((part) => !Number.isInteger(part) || part < 0)) errors.push("manifest 版本必须为三段非负整数");
+if (!versionParts) errors.push("manifest 版本必须为三段非负整数，且每段不超过 65535");
 if (!storeBaselineMatch) {
   errors.push("必须在 src/shared/plugin-version.ts 声明三段式 STORE_PLUGIN_VERSION");
 } else if (!isNextPatchVersion(versionParts, storeBaselineMatch.slice(1, 4).map(Number))) {
@@ -196,5 +197,15 @@ async function fetchStoreVersion() {
 }
 
 function isNextPatchVersion(local, store) {
-  return local.length === 3 && local[0] === store[0] && local[1] === store[1] && local[2] === store[2] + 1;
+  return Array.isArray(local) && Array.isArray(store)
+    && local.length === 3 && store.length === 3
+    && local[0] === store[0] && local[1] === store[1] && local[2] === store[2] + 1;
+}
+
+function parseChromeVersion(value) {
+  if (typeof value !== "string") return null;
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);
+  if (!match) return null;
+  const parts = match.slice(1).map(Number);
+  return parts.every((part) => Number.isInteger(part) && part >= 0 && part <= CHROME_VERSION_COMPONENT_MAX) ? parts : null;
 }

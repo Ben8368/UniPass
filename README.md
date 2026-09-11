@@ -40,7 +40,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
-设置页的普通单击/双击“保存”仍保存手动 `X-Browser-Plugin-Version` override。输入目标本地三段版本后，在 `1400ms` 内连续点击同一按钮三次，会先显示确认框；确认后生成 `UniPass-x.y.z.zip`。这是自派生构建：它复制当前已构建 runtime，改写 `manifest.version` 和 `runtime-config.json`，不重新编译 Rust/WASM，也不修改当前扩展。解压 ZIP 后目录可直接在 Chrome 中加载；覆盖目录后需手动重新加载扩展。
+设置页的普通单击/双击“保存”仍保存手动 `X-Browser-Plugin-Version` override。输入目标本地三段版本后，在固定 `1400ms` 窗口内连续点击同一按钮三次，会先显示确认框；确认后生成 `UniPass-x.y.z.zip`。这是自派生构建：它复制当前已构建 runtime，改写 `manifest.version` 和 `runtime-config.json`，不重新编译 Rust/WASM，也不修改当前扩展。目标版本各段必须在 Chrome 支持的 `0..65535` 范围内；缺少 `self-build-files.json` 时拒绝构建。解压 ZIP 后目录可直接在 Chrome 中加载；覆盖目录后需手动重新加载扩展。
 
 ## 项目治理
 

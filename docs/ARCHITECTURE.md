@@ -37,7 +37,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ## 关键数据流
 
-- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题、版本设置和三击状态机）、`self-builder.ts`（静态文件自派生打包）以及 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、runtime config 网络基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。网络请求优先使用手动 override，否则读取并缓存 `runtime-config.json`。三击只在确认后通过 Service Worker 读取 `self-build-files.json` 列出的静态资源；兼容缺少该清单的旧构建时，仅回退到固定审计白名单，仍逐文件校验，随后修改内存中的 `manifest.json` 和 `runtime-config.json`，生成 ZIP 并回读校验；不查询商店、不修改当前扩展，也不把脚本/WASM 加入 `web_accessible_resources`。
+- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题、版本设置和三击状态机）、`self-builder.ts`（静态文件自派生打包）以及 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、runtime config 网络基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。网络请求优先使用手动 override，否则读取并缓存 `runtime-config.json`。三击只在确认后通过 Service Worker 读取当前构建生成的 `self-build-files.json` 列出的静态资源；缺少清单时 fail closed，随后修改内存中的 `manifest.json` 和 `runtime-config.json`，生成 ZIP 并回读校验文件集合、manifest（仅允许 version/version_name 改变）、runtime-config、manifest.key 和 WASM 字节一致性；不查询商店、不修改当前扩展，也不把脚本/WASM 加入 `web_accessible_resources`。
 - 页面浮层的 `pageContext`、页面主题、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；页面主题检测仅读取当前 HTTPS 页面的渲染背景色与 `color-scheme`，不读取页面正文、Cookie、表单值或页面存储；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
 
 ### 当前页面账号

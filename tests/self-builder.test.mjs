@@ -10,21 +10,23 @@ async function loadModule(path) {
     bundle: true,
     format: "esm",
     platform: "node",
+    loader: { ".json": "json" },
     write: false,
   });
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`);
 }
 
 const { SaveGestureStateMachine } = await loadModule("../src/popup/save-gesture.ts");
-const { assertLocalNetworkPair, compareVersions, deriveNetworkVersion } = await loadModule("../src/shared/version.ts");
-const { SELF_BUILD_STATIC_FILES } = await loadModule("../src/shared/self-build-files.ts");
+const { CHROME_VERSION_COMPONENT_MAX, assertLocalNetworkPair, compareVersions, deriveNetworkVersion, parseVersion } = await loadModule("../src/shared/version.ts");
 const builder = await loadModule("../src/popup/self-builder.ts");
 
 function fakeTimers() {
   const callbacks = [];
+  const delays = [];
   return {
-    schedule(callback) {
+    schedule(callback, delay) {
       callbacks.push(callback);
+      delays.push(delay);
       return callback;
     },
     cancel(timer) {
@@ -37,11 +39,15 @@ function fakeTimers() {
     get pending() {
       return callbacks.length;
     },
+    get delays() {
+      return delays.slice();
+    },
   };
 }
 
-test("save gesture saves once for one or two clicks and builds once for triple click", () => {
+test("save gesture uses one fixed window for one/two clicks and triple-click build", () => {
   const timers = fakeTimers();
+  let time = 0;
   let saves = 0;
   let builds = 0;
   const gesture = new SaveGestureStateMachine(
@@ -50,7 +56,18 @@ test("save gesture saves once for one or two clicks and builds once for triple c
     1400,
     timers.schedule,
     timers.cancel,
+    () => time,
   );
+
+  gesture.click();
+  time = 300;
+  gesture.click();
+  assert.deepEqual(timers.delays, [1400]);
+  time = 800;
+  gesture.click();
+  assert.equal(builds, 1);
+  assert.equal(saves, 0);
+  assert.equal(timers.pending, 0);
 
   gesture.click();
   timers.runNext();
@@ -63,28 +80,66 @@ test("save gesture saves once for one or two clicks and builds once for triple c
   gesture.click();
   gesture.click();
   gesture.click();
-  assert.equal(builds, 1);
+  assert.equal(builds, 2);
   assert.equal(saves, 2);
   gesture.click();
-  assert.equal(builds, 1);
+  assert.equal(builds, 2);
   timers.runNext();
-  assert.equal(builds, 1);
+  assert.equal(builds, 2);
 });
 
-test("three clicks outside the window never become a build", () => {
+test("clicks after the fixed deadline start a new round and never build", () => {
   const timers = fakeTimers();
+  let time = 0;
+  let saves = 0;
   let builds = 0;
-  const gesture = new SaveGestureStateMachine(() => {}, () => { builds += 1; }, 1400, timers.schedule, timers.cancel);
-  for (let index = 0; index < 3; index += 1) {
-    gesture.click();
-    timers.runNext();
-  }
+  const gesture = new SaveGestureStateMachine(() => { saves += 1; }, () => { builds += 1; }, 1400, timers.schedule, timers.cancel, () => time);
+  gesture.click();
+  time = 1300;
+  gesture.click();
+  time = 2600;
+  gesture.click();
   assert.equal(builds, 0);
+  assert.equal(saves, 1);
+  timers.runNext();
+  assert.equal(saves, 2);
+});
+
+test("flushPendingSave saves one pending single or double click and never flushes a build", () => {
+  const timers = fakeTimers();
+  let saves = 0;
+  let builds = 0;
+  const gesture = new SaveGestureStateMachine(() => { saves += 1; }, () => { builds += 1; }, 1400, timers.schedule, timers.cancel, () => 0);
+
+  gesture.click();
+  gesture.flushPendingSave();
+  gesture.flushPendingSave();
+  assert.equal(saves, 1);
+
+  gesture.click();
+  gesture.click();
+  gesture.flushPendingSave();
+  assert.equal(saves, 2);
+
+  gesture.click();
+  gesture.click();
+  gesture.click();
+  gesture.flushPendingSave();
+  assert.equal(builds, 1);
+  assert.equal(saves, 2);
 });
 
 test("version derivation and comparison use three integer segments", () => {
+  assert.equal(CHROME_VERSION_COMPONENT_MAX, 65535);
+  for (const version of ["0.0.1", "5.4.4", "5.4.65535", "65535.65535.65535"]) {
+    assert.deepEqual(parseVersion(version), version.split(".").map(Number));
+  }
+  for (const version of ["5.4.65536", "65536.0.1", "1.65536.1", "999999999999.1.1", "-1.2.3"]) {
+    assert.equal(parseVersion(version), null, version);
+  }
   assert.equal(deriveNetworkVersion("5.3.4"), "5.3.3");
   assert.equal(deriveNetworkVersion("5.4.4"), "5.4.3");
+  assert.equal(deriveNetworkVersion("5.4.65535"), "5.4.65534");
   assert.equal(deriveNetworkVersion("6.0.1"), "6.0.0");
   assert.equal(compareVersions("5.10.0", "5.9.99"), 1);
   assert.equal(assertLocalNetworkPair("5.4.4", "5.4.3"), true);
@@ -93,8 +148,9 @@ test("version derivation and comparison use three integer segments", () => {
   assert.throws(() => deriveNetworkVersion("v5.3.4"), /目标版本格式无效/);
 });
 
-test("self-build fallback uses the complete fixed runtime layout", async () => {
+test("self-build and release artifact checks use the same runtime file source", async () => {
   const { EXPECTED_ARTIFACT_FILES } = await import("../scripts/release-artifact-check.mjs");
+  const { SELF_BUILD_STATIC_FILES } = await loadModule("../src/shared/self-build-files.ts");
   assert.deepEqual([...SELF_BUILD_STATIC_FILES].sort(), [...EXPECTED_ARTIFACT_FILES].sort());
 });
 
@@ -128,23 +184,33 @@ test("self builder assembles and self-verifies a complete derived ZIP", () => {
   assert.deepEqual([...entries["credential-core.wasm"]], [0, 97, 115, 109, 1, 0, 0, 0, 9]);
 });
 
-test("self builder can upgrade a legacy runtime without its file manifest", async () => {
+test("self builder fails closed when self-build-files.json is missing", async () => {
   const originalChrome = globalThis.chrome;
   globalThis.chrome = { runtime: {
-    sendMessage: async (message) => ({
-      ok: !message.path.endsWith("self-build-files.json"),
-      error: "无法读取 self-build-files.json",
-    }),
+    getManifest: () => ({ version: "5.3.3" }),
+    sendMessage: async () => ({ ok: false, error: "无法读取 self-build-files.json" }),
   } };
   try {
-    const manifest = await builder.readSelfBuildFilesManifest();
-    assert.equal(manifest.version, 1);
-    assert.ok(manifest.files.includes("self-build-files.json"));
-    assert.ok(manifest.files.includes("credential-core.wasm"));
-    assert.equal(manifest.files.length, 16);
+    await assert.rejects(() => builder.buildSelfDerivedBuild("5.3.4"), /无法读取 self-build-files\.json/);
   } finally {
     globalThis.chrome = originalChrome;
   }
+});
+
+test("derived manifest preserves every top-level field except version and version_name", () => {
+  const original = {
+    manifest_version: 3,
+    version: "5.3.3",
+    version_name: "build-old",
+    key: "public-key",
+    name: "UniPass",
+    permissions: ["storage"],
+    background: { service_worker: "background/service-worker.js", type: "module" },
+    nested: { enabled: true },
+  };
+  const derived = { ...original, version: "5.3.4", version_name: "self-260911-0010" };
+  assert.doesNotThrow(() => builder.assertDerivedManifestEquivalent(original, derived));
+  assert.throws(() => builder.assertDerivedManifestEquivalent(original, { ...derived, permissions: [] }), /关键字段发生变化/);
 });
 
 test("self builder rejects unchanged/lower versions and extra runtime files", () => {
