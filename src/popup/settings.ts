@@ -372,7 +372,7 @@ export class SettingsController {
       return;
     }
     const unlockReady = this.advancedModeUnlock.isUnlockReady;
-    this.restoreBaseline.textContent = unlockReady ? "解锁高级模式" : "确定";
+    this.restoreBaseline.textContent = unlockReady ? "解锁高级模式" : "恢复默认";
     this.restoreBaseline.disabled = this.saveControlsDisabled || (!unlockReady && !this.override.value.trim() && !this.webdavUrl.value.trim());
   }
 

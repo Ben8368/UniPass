@@ -49,11 +49,12 @@
 .version-override { display: grid; gap: 5px; color: var(--text-1); font-size: 10px; font-weight: 700; }
 .version-override input { width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text-0); font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px; }
 .version-override input:focus { border-color: rgba(65, 211, 155, .44); outline: none; box-shadow: 0 0 0 2px rgba(65, 211, 155, .10); }
-.settings-actions { display: flex; gap: 7px; align-items: center; }
-.settings-reset { height: 32px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--fill); color: var(--text-1); font-size: 10px; font-weight: 650; }
+.settings-actions { display: flex; gap: 8px; align-items: center; }
+.settings-actions > button { display: inline-flex; height: 34px; min-height: 34px; align-items: center; justify-content: center; margin: 0; }
+.settings-reset { height: 34px; padding: 0 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--fill); color: var(--text-1); font-size: 10px; font-weight: 650; }
 .settings-reset:hover { border-color: rgba(65, 211, 155, .32); background: var(--fill-hover); color: var(--text-strong); }
 .settings-save {
-  display: inline-flex; height: 32px; align-items: center; justify-content: center; gap: 6px; margin-top: 3px; border: 1px solid rgba(65, 211, 155, .28); border-radius: 6px; background: var(--green-strong); color: #06110d; font-size: 10.5px; font-weight: 750;
+  min-width: 84px; padding: 0 14px; gap: 6px; border: 1px solid rgba(65, 211, 155, .42); border-radius: 6px; background: var(--green-strong); color: #06110d; font-size: 10.5px; font-weight: 750;
 }
 .settings-save svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-save:hover { background: #4bdca5; }

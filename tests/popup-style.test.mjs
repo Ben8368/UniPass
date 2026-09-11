@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { formatBuildTime } from "../build.mjs";
 
 const liquidGlassCss = await readFile(new URL("../src/popup/liquid-glass.css", import.meta.url), "utf8");
+const componentsCss = await readFile(new URL("../src/popup/components.css", import.meta.url), "utf8");
 const popupHtml = await readFile(new URL("../src/popup/popup.html", import.meta.url), "utf8");
 const settingsSource = await readFile(new URL("../src/popup/settings.ts", import.meta.url), "utf8");
 
@@ -17,10 +18,23 @@ test("version settings places the build time beside the local version", () => {
 
 test("WebDAV actions keep their positions while hiding build settings", () => {
   assert.match(popupHtml, /id="legacyBuildSettings" hidden[^>]*aria-hidden="true"/);
-  assert.match(popupHtml, /id="versionSave"[^>]*>测试<\/button>/);
-  assert.match(popupHtml, /id="restorePluginVersionBaseline"[^>]*disabled[^>]*>确定<\/button>/);
+  assert.match(popupHtml, /id="versionSave"[^>]*>保存设置<\/button>/);
+  assert.match(popupHtml, /id="restorePluginVersionBaseline"[^>]*disabled[^>]*>恢复默认<\/button>/);
   assert.match(popupHtml, /id="selfBuildDialogTitle">生成本地升级构建<\/h2>/);
-  assert.match(settingsSource, /this\.restoreBaseline\.textContent = unlockReady \? "解锁高级模式" : "确定"/);
+  assert.match(settingsSource, /this\.restoreBaseline\.textContent = unlockReady \? "解锁高级模式" : "恢复默认"/);
+});
+
+test("WebDAV actions use a clear primary-first order and shared alignment", () => {
+  assert.match(
+    popupHtml,
+    /id="versionSave"[^>]*>保存设置<\/button>\s*<button id="openVaultManager"[^>]*>打开 Vault 管理<\/button>\s*<button id="restorePluginVersionBaseline"/s,
+  );
+  assert.match(
+    componentsCss,
+    /\.settings-actions > button\s*\{[^}]*height:\s*34px;[^}]*min-height:\s*34px;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*margin:\s*0;/s,
+  );
+  assert.doesNotMatch(componentsCss, /\.settings-save\s*\{[^}]*margin-top:\s*3px/s);
+  assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
 });
 
 test("settings dialog exposes an HTTPS-only WebDAV address field", () => {
