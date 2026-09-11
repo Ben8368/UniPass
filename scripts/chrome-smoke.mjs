@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { access, readFile, rm } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import puppeteer from "puppeteer-core";
 import { inspectHardenedMetadata } from "./release-artifact-check.mjs";
 
@@ -10,6 +10,7 @@ const smokeArguments = process.argv.slice(2);
 const hardened = smokeArguments.includes("--hardened");
 const distArgument = smokeArguments.find((argument) => argument !== "--hardened");
 const dist = resolve(root, distArgument ?? process.env.CHROME_SMOKE_DIST ?? "dist");
+const downloadDirectory = join(tmpdir(), `unipass-chrome-smoke-download-${process.pid}-${Date.now()}`);
 if (hardened) {
   const metadataErrors = await inspectHardenedMetadata(resolve(root, "artifacts/hardened"), dist);
   if (metadataErrors.length) {
@@ -22,7 +23,7 @@ const userDataDir = join(tmpdir(), `unipass-chrome-smoke-${process.pid}-${Date.n
 const errors = [];
 const browser = await puppeteer.launch({
   executablePath: chromePath,
-  headless: false,
+  headless: process.env.CHROME_SMOKE_HEADLESS === "true" ? "new" : false,
   userDataDir,
   defaultViewport: { width: 1280, height: 900 },
   ignoreDefaultArgs: ["--disable-extensions"],
@@ -60,6 +61,7 @@ try {
 
   const initialWorker = await waitForWorker(serviceWorkerTarget);
   await assertWasmLoads(initialWorker);
+  await assertSelfBuildFlow(popup, manifest.version, downloadDirectory);
 
   if (process.env.CHROME_SMOKE_SKIP_RESTART !== "true") {
     assert.equal(await popup.evaluate(() => typeof chrome.runtime.reload), "function");
@@ -90,6 +92,45 @@ try {
 } finally {
   await browser.close();
   await rm(userDataDir, { recursive: true, force: true });
+  await rm(downloadDirectory, { recursive: true, force: true });
+}
+
+async function assertSelfBuildFlow(popup, currentVersion, downloadPath) {
+  const [major, minor, patch] = currentVersion.split(".").map(Number);
+  const targetVersion = `${major}.${minor}.${patch + 1}`;
+  await mkdir(downloadPath, { recursive: true });
+  const client = await popup.createCDPSession();
+  await client.send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath });
+  await popup.click("#pluginVersionSettingsButton");
+  await popup.waitForSelector("#versionSettingsDialog:not(.hidden)");
+  await popup.$eval("#pluginVersionOverride", (input, value) => {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, targetVersion);
+  await popup.click("#versionSave");
+  await popup.click("#versionSave");
+  await popup.click("#versionSave");
+  await popup.waitForSelector("#selfBuildDialog:not(.hidden)");
+  assert.equal(await popup.$eval("#selfBuildTargetVersion", (element) => element.textContent), targetVersion);
+  await popup.click("#generateSelfBuild");
+  const archive = join(downloadPath, `UniPass-${targetVersion}.zip`);
+  await waitForFile(archive);
+  const message = await popup.$eval("#selfBuildMessage", (element) => element.textContent);
+  assert.match(message, new RegExp(`已生成 UniPass-${targetVersion}\\.zip`));
+}
+
+async function waitForFile(path, { timeout = 15_000 } = {}) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      const files = await readdir(dirname(path));
+      if (files.includes(path.split(/[\\/]/).pop())) return;
+    } catch {
+      // The download directory may not exist until Chrome accepts the click.
+    }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+  }
+  throw new Error(`等待 Self Build ZIP 下载超时：${path}`);
 }
 
 async function assertWasmLoads(worker) {

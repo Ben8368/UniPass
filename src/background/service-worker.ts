@@ -21,6 +21,7 @@ import {
 } from "./jupiter-keepalive";
 import { clearUniPassLoginForTab, completeUniPassLogin, processUniPassLoginTab, startUniPassLogin } from "./unipass-login";
 import { fillFromOverlay, fillFromPopup, openApp, pageContextFor, pageThemeFor, togglePageOverlay } from "./page-overlay";
+import { readSelfBuildFile } from "./self-build-files";
 import { withUserScope } from "./user-scope-guard";
 import type { BackgroundRequest, BackgroundResponse } from "../shared/types";
 
@@ -90,6 +91,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return pluginVersionSettings();
     case "setPluginVersionOverride":
       return setPluginVersionOverride(message.version);
+    case "readSelfBuildFile":
+      return readSelfBuildFile(message.path);
     case "accountCatalog":
       return withUserScope(message.userScope, refreshAccountCatalog);
     case "listApps":

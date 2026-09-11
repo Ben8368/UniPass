@@ -16,11 +16,13 @@
 - API、解密或目录同步失败必须显式失败；未知错误不得被缓存成“空密码”，部分目录不得覆盖上次完整目录。
 - UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
 - 用户作用域优先使用服务端稳定 ID（`id`、`userId` 或 `user_id`）；缺失时只可回退服务端登录名 `username`，再回退邮箱 `email`。显示名、昵称和默认值绝不作为身份键。三者均缺失时不执行 UniPass 目录、应用或凭据请求，Jupiter 保活不可开启；已启用保活在检测到用户切换后会停止并清除扩展会话 token。
-- UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。
+- UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。网络版号优先取经校验的 `chrome.storage.local` 手动 override，否则只读取本地 `runtime-config.json`，不使用本地 manifest 版本作为网络版号。
 - UniPass AES-ECB-PKCS7 解密与 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换位于随扩展本地打包的 `credential-core.wasm`。Service Worker 通过 `chrome.runtime.getURL` 只加载一次本地核心，重启后按需重建；不下载或执行远程代码。WASM 的输入、密钥材料、轮密钥、摘要、plaintext 和临时输出在完成后显式清零；ABI allocation registry 区分 `Input`/`Output`、最多保留 64 个 live allocation，只有匹配登记的 pointer/length 才能释放，crypto input 只能使用 `Input`。非法 pointer/length、double free 和上限耗尽均 fail closed。`c_v` 只返回状态，`c_k` 只返回 Jupiter 请求所需的 transformed password；只有 Reveal/Fill 的既有功能才把原始明文交给 JS。
 - `Jupiter transformedPassword` 是 credential-equivalent secret：虽然它不是原始密码，但同样不得写入 `localStorage`、`chrome.storage.local`、日志、缓存、telemetry 或错误文本。它只在一次用户主动开启的 Jupiter 保活请求中存在于 Service Worker 的局部变量、请求 body 和短暂消息对象中；请求结束或异常时必须在 `finally` 中清空 username 与 transformed password 引用，且不得保存历史或返回给 Popup/页面。
 - Reveal/Fill 的明文仍是既有产品能力，不因 hardening 删除；Service Worker、Popup 消息和 Content Script 只保留完成当前操作所需的最小引用。Content Script 填充完成后立即清空消息中的 username/password 字段；页面离开、Popup 关闭、账号切换、再次 Reveal 和 60 秒 TTL 到期均清除 Popup 内存字段。
 - 发布构建使用标准 minification 且不生成 sourcemap；最小 CSP 增加 `wasm-unsafe-eval` 以实例化本地 WASM。普通 `verify` 与 hardened `verify:hardened` 都是正式门禁；hardened 默认要求固定版本 Binaryen `wasm-opt`，只有显式 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。最终 `dist/` 审计只接受运行文件，构建报告与 `integrity.json` 位于 `artifacts/hardened/`，并验证 WASM magic/version、可实例化性、imports/exports 白名单、完整 raw AES key、Base64/hex key、Jupiter 固定协议文本和项目 `src/*.rs` path 不出现在运行产物中。WASM 与材料重构只提高静态分析成本；客户端仍必须持有协议材料，不能作为对终端用户保密的安全边界，TD-004 仅在外部后端权限与接口契约可用时重新评估。
+
+- Self Derived Build 是 Popup 内的静态打包器：只按构建生成的 `self-build-files.json` fetch 当前 runtime 文件，禁止读取 `chrome.storage`、`localStorage`、cookies、凭据、token、会话或用户输入数据（目标版号除外）。生成前后均 fail closed 审计 manifest 版本/key、WASM magic、runtime config、完整文件集合和 WASM byte-for-byte 一致性；不申请 `downloads` 权限，使用用户点击触发的 Blob 下载。它不会重新编译 Rust/WASM、生成新的 hardened crypto strategy 或 AES material fragmentation。
 
 ## 权限与主机
 
@@ -35,7 +37,7 @@
 - UniPass、上述飞书授权页与 Jupiter 是当前仅允许的扩展运行时外部主机；Chrome 官方更新接口只由本地 Node 审计脚本访问，不属于扩展运行时权限。
 - 页面浮层只向 HTTPS 页面公开扩展内置的三个品牌图标资源，用于 Shadow DOM 内的 Logo 展示；不公开脚本、样式、WASM、凭据或其他运行资源。`credential-core.wasm` 仅由扩展 Service Worker 的本地 URL 加载。
 - 私人本地构建的 manifest `key` 固定为商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID；该值不是私钥，不授予商店发布或 CRX 签名权限。因同一 ID 可能与商店版争用 Profile 状态，必须在独立 Profile 完成人工安装验收。
-- 默认 UniPass 请求的 `X-Browser-Plugin-Version` 使用当前构建嵌入的 `STORE_PLUGIN_VERSION`（商店基线），绝不使用本地 `chrome.runtime.getManifest().version`。用户可手动设置经过三段数字校验的覆盖值；它只存为非敏感配置并只影响该请求头，清空后恢复基线。该覆盖不改变本地替身版与商店基线高一个补丁号的发布约束；开发/验证仍在线核验并随商店版更新这对值，扩展运行时不查询商店。
+- 默认 UniPass 请求的 `X-Browser-Plugin-Version` 使用当前构建的 `runtime-config.json` 网络基线，绝不使用本地 `chrome.runtime.getManifest().version`。用户可手动设置经过三段数字校验的覆盖值；它只存为非敏感配置并只影响该请求头，清空后恢复基线。该覆盖不改变本地替身版与商店基线高一个补丁号的发布约束；开发/验证仍在线核验并随商店版更新这对值，扩展运行时不查询商店。Self Derived Build 不受实时商店查询阻断，其网络版号只由目标本地版号的同主次 `patch - 1` 推导。
 
 新增权限或域名前必须说明最小必要范围、数据内容、触发条件、失败/关闭路径，并更新本文件、README 和红绿灯报告。
 

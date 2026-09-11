@@ -5,10 +5,10 @@ import {
 } from "../background/credential-core";
 import { normalizeTargetUrl } from "./url";
 import { fetchJsonWithTimeout } from "./fetch";
+import { RUNTIME_CONFIG_FILE, parseRuntimeConfig, type RuntimeConfig } from "./runtime-config";
 import {
   normalizePluginVersion,
   PLUGIN_VERSION_OVERRIDE_STORAGE_KEY,
-  STORE_PLUGIN_VERSION,
 } from "./plugin-version";
 import type {
   AccountCatalogEntry,
@@ -60,12 +60,13 @@ export async function currentUser(): Promise<CurrentUser> {
 
 export async function pluginVersionSettings(): Promise<PluginVersionSettings> {
   const override = await readPluginVersionOverride();
+  const runtimeConfig = await readRuntimeConfig();
   return {
     localBuildVersion: chrome.runtime.getManifest().version,
-    networkVersion: override ?? STORE_PLUGIN_VERSION,
-    storeBaselineVersion: STORE_PLUGIN_VERSION,
+    networkVersion: override ?? runtimeConfig.networkPluginVersion,
+    storeBaselineVersion: runtimeConfig.networkPluginVersion,
     override: override ?? "",
-    source: override ? "manual" : "store-baseline",
+    source: override ? "manual" : "built-in",
   };
 }
 
@@ -212,12 +213,31 @@ async function request<T>(path: string): Promise<T> {
 }
 
 async function resolvePluginVersion(): Promise<string> {
-  return (await readPluginVersionOverride()) ?? STORE_PLUGIN_VERSION;
+  return (await readPluginVersionOverride()) ?? (await readRuntimeConfig()).networkPluginVersion;
 }
 
 async function readPluginVersionOverride(): Promise<string | null> {
   const stored = await chrome.storage.local.get(PLUGIN_VERSION_OVERRIDE_STORAGE_KEY);
   return normalizePluginVersion(stored[PLUGIN_VERSION_OVERRIDE_STORAGE_KEY]);
+}
+
+let runtimeConfigPromise: Promise<RuntimeConfig> | null = null;
+
+async function readRuntimeConfig(): Promise<RuntimeConfig> {
+  if (!runtimeConfigPromise) {
+    runtimeConfigPromise = fetch(chrome.runtime.getURL(RUNTIME_CONFIG_FILE), { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("无法读取 runtime-config.json");
+        const parsed = parseRuntimeConfig(await response.json());
+        if (!parsed) throw new Error("runtime-config.json 格式无效");
+        return parsed;
+      })
+      .catch((error) => {
+        runtimeConfigPromise = null;
+        throw error;
+      });
+  }
+  return runtimeConfigPromise;
 }
 
 

@@ -6,6 +6,7 @@
   "scripts": {
     "audit:static": "node scripts/traffic-light-check.mjs",
     "audit:artifact": "node scripts/release-artifact-check.mjs",
+    "audit:dependencies": "npm audit --audit-level=high",
     "build:wasm": "node scripts/build-wasm.mjs",
     "build": "npm run audit:static && node build.mjs",
     "build:hardened": "npm run audit:static && node scripts/build-hardened.mjs",
@@ -25,9 +26,11 @@
     "audit:hardened": "node scripts/hardened-artifact-check.mjs",
     "verify:hardened": "npm run build:hardened && npm run audit:hardened && npm run verify:hardened:diversity && npm run smoke:chrome:hardened",
     "verify:release": "npm run verify && npm run verify:wasm-reproducible && npm run smoke:chrome && npm run verify:hardened",
-    "verify": "npm run docs:governance:check && npm run audit:static && npm run verify:rust && npm test && npm run typecheck && npm run build"
+    "verify": "npm run docs:governance:check && npm run audit:dependencies && npm run audit:static && npm run verify:rust && npm test && npm run typecheck && npm run build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "fflate": "0.8.3"
+  },
   "devDependencies": {
     "@types/chrome": "^0.2.9",
     "esbuild": "^0.28.2",

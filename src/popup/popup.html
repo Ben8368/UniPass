@@ -125,17 +125,39 @@
           </div>
           <form id="versionForm" class="settings-form">
             <a class="plugin-store-link" href="https://chromewebstore.google.com/detail/unipass/gjphikebcceegfolnbfncepfmjnhdkam" target="_blank" rel="noopener noreferrer">商店插件版本<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></a>
-            <p class="settings-help">默认提交商店基线。本地开发未及时跟进商店版时，可手动指定网络提交版本；清空后恢复基线。</p>
-            <div class="version-status"><span>本地构建</span><div class="version-value"><strong id="localBuildPluginVersion">检查中</strong><span id="localBuildTime" class="version-build-time">检查中</span></div><small>浏览器扩展管理页显示的版本 · 构建时间 YYMMDD-HHMM</small></div>
+            <p class="settings-help">默认提交构建内置网络基线。本地开发未及时跟进商店版时，可手动指定网络提交版本；清空后恢复基线。</p>
+            <div class="version-status"><span>本地构建</span><div class="version-value"><strong id="localBuildPluginVersion">检查中</strong><span id="localBuildTime" class="version-build-time">检查中</span></div><small>浏览器扩展管理页显示的版本 · version_name 构建描述</small></div>
             <div class="version-status"><span>网络提交</span><strong id="networkPluginVersion">检查中</strong><small id="networkPluginVersionSource">所有 UniPass 请求的 <code>X-Browser-Plugin-Version</code></small></div>
             <label class="version-override" for="pluginVersionOverride">手动网络版本
               <input id="pluginVersionOverride" type="text" inputmode="numeric" autocomplete="off" placeholder="留空则使用商店基线" aria-describedby="networkPluginVersionSource" />
             </label>
             <div class="settings-actions">
-              <button class="settings-save" type="submit">保存</button>
+              <button id="versionSave" class="settings-save" type="submit">保存</button>
               <button id="restorePluginVersionBaseline" class="settings-reset" type="button">恢复商店基线</button>
             </div>
           </form>
+        </section>
+      </div>
+
+      <div id="selfBuildDialog" class="dialog-backdrop hidden" role="presentation">
+        <section class="version-dialog self-build-dialog" role="dialog" aria-modal="true" aria-labelledby="selfBuildDialogTitle">
+          <div class="dialog-heading">
+            <div><span class="eyebrow">SELF DERIVED BUILD</span><h2 id="selfBuildDialogTitle">生成本地升级构建</h2></div>
+            <button id="closeSelfBuild" class="icon-button" type="button" title="关闭" aria-label="关闭">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+          <div class="settings-form self-build-form">
+            <p id="selfBuildKind" class="self-build-kind">构建类型：自派生构建</p>
+            <div class="version-status"><span>当前本地版本</span><strong id="selfBuildCurrentVersion"></strong></div>
+            <div class="version-status"><span>目标本地版本</span><strong id="selfBuildTargetVersion"></strong></div>
+            <div class="version-status"><span>目标网络版本</span><strong id="selfBuildTargetNetworkVersion"></strong></div>
+            <p id="selfBuildMessage" class="self-build-message"></p>
+            <div class="settings-actions">
+              <button id="cancelSelfBuild" class="settings-reset" type="button">取消</button>
+              <button id="generateSelfBuild" class="settings-save" type="button">生成构建物</button>
+            </div>
+          </div>
         </section>
       </div>
 

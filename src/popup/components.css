@@ -57,6 +57,13 @@
 }
 .settings-save svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-save:hover { background: #4bdca5; }
+.settings-save:disabled,
+.settings-reset:disabled { cursor: wait; opacity: .58; }
+.self-build-dialog { width: min(100%, 370px); }
+.self-build-form { gap: 8px; }
+.self-build-kind { margin: 0; color: var(--green-text); font-size: 10px; font-weight: 750; }
+.self-build-message { min-height: 30px; margin: 0; color: var(--text-2); font-size: 9.5px; line-height: 1.55; white-space: pre-line; }
+.self-build-form .settings-actions { justify-content: flex-end; }
 .search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

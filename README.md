@@ -36,9 +36,11 @@ npm install
 npm run verify
 ```
 
-credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调试使用 `npm run build`；实际本地安装必须使用 `npm run build:hardened` 或完整的 `npm run verify:hardened`。hardened 构建要求开发机提供 `wasm-opt`；缺失时默认失败，只有显式设置 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。构建报告和 `integrity.json` 写入 `artifacts/hardened/`，不会进入最终 `dist/`。`npm run verify` 和 `npm run verify:hardened` 是两条独立门禁；发布或发版前另运行 `npm run verify:wasm-reproducible`。上述运行时不要求最终用户安装 Rust、Node、Binaryen 或其他外部运行时。
+credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调试使用 `npm run build`；实际本地安装必须使用 `npm run build:hardened` 或完整的 `npm run verify:hardened`。hardened 构建要求开发机提供 `wasm-opt`；缺失时默认失败，只有显式设置 `UNIPASS_ALLOW_UNOPTIMIZED_WASM=1` 才允许调试降级。构建同时生成非敏感的 `runtime-config.json` 和 `self-build-files.json`；构建报告和 `integrity.json` 写入 `artifacts/hardened/`，不会进入最终 `dist/`。`npm run verify` 和 `npm run verify:hardened` 是两条独立门禁；发布或发版前另运行 `npm run verify:wasm-reproducible`。上述运行时不要求最终用户安装 Rust、Node、Binaryen 或其他外部运行时。
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
+
+设置页的普通单击/双击“保存”仍保存手动 `X-Browser-Plugin-Version` override。输入目标本地三段版本后，在 `1400ms` 内连续点击同一按钮三次，会先显示确认框；确认后生成 `UniPass-x.y.z.zip`。这是自派生构建：它复制当前已构建 runtime，改写 `manifest.version` 和 `runtime-config.json`，不重新编译 Rust/WASM，也不修改当前扩展。解压 ZIP 后目录可直接在 Chrome 中加载；覆盖目录后需手动重新加载扩展。
 
 ## 项目治理
 
@@ -49,7 +51,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[SECURITY.md](SECURITY.md)：扩展数据流和凭据/权限边界。
 - [CONTRIBUTING.md](CONTRIBUTING.md)：开发、验证与 PR 要求。
 
-`npm run verify` 是普通构建门禁，依次执行治理检查、静态红绿灯、测试、类型检查、标准压缩构建和最终产物审计。`npm run verify:hardened` 负责 hardened 构建、运行文件审计、外置构建元数据审计、多个 strategy/vector 验证和 hardened Chrome smoke。两者都必须通过；审计使用精确白名单，并阻断源码/source map、调试语句、常见私钥/API token 格式和未审计文件。静态黄灯不会伪装成失败，但必须在人工 `🚦 Audit Report` 中确认并按需登记技术债；红灯会阻断验证。
+`npm run verify` 是普通构建门禁，依次执行治理检查、npm dependency audit、静态红绿灯、Rust QA、测试、类型检查、标准压缩构建和最终产物审计。`npm run verify:hardened` 负责 hardened 构建、运行文件审计、外置构建元数据审计、多个 strategy/vector 验证和 hardened Chrome smoke。两者都必须通过；审计使用精确白名单，并阻断源码/source map、调试语句、常见私钥/API token 格式和未审计文件。静态黄灯不会伪装成失败，但必须在人工 `🚦 Audit Report` 中确认并按需登记技术债；红灯会阻断验证。
 
 WASM 本身保证 byte-for-byte 可复现；`dist` 文件内容由构建流程确定。Release ZIP 采用固定排序、固定时间和去除额外属性的 best-effort 确定性打包，但不宣称跨 zip 工具版本的完全 byte-for-byte reproducibility。自动化与人工 Chrome 清单见 [Chrome 验收清单](docs/CHROME-ACCEPTANCE.md)。
 
@@ -74,7 +76,7 @@ WASM 本身保证 byte-for-byte 可复现；`dist` 文件内容由构建流程�
 - 密码不写入 `chrome.storage`、日志或持久化文件。
 - 查看凭据 60 秒后自动从 Popup/页面浮层清除，关闭 Popup 或移除页面浮层时立即清除。
 - 自动填充只处理当前页面主文档中的可见输入框，不自动提交表单。
-- 每次验证通过 Google Chrome 官方更新接口核验 UniPass 商店 CRX 版本；查询失败、ID 不符、本地版本不是商店当前版的下一补丁版，或网络商店基线不等于当前商店版都会阻断。网络基线是每个构建嵌入的商店版本快照，而非永久固定值：例如商店从 `5.3.0` 变为 `5.4.0` 时，必须在同一次开发变更中改为默认网络 `5.4.0`、本地 `5.4.1`。Popup 可在开发中断或未及时跟进时手动指定三段数字网络版号；该临时覆盖不改变构建或发布门禁，清空后恢复商店基线。
+- 每次源码/CI 构建仍通过 Google Chrome 官方更新接口核验 UniPass 商店 CRX 版本；查询失败、ID 不符、本地版本不是商店当前版的下一补丁版，或网络商店基线不等于当前商店版都会阻断普通构建。网络基线由构建生成到 `runtime-config.json`，而非运行时使用本地 manifest 版本。Popup 可在开发中断或未及时跟进时手动指定三段数字网络版号；该临时覆盖不改变构建或发布门禁，清空后恢复 runtime 基线。Self Derived Build 只要求目标本地版本高于当前且 patch 至少为 `1`，不查询或依赖 Store Version。
 - 当前版本不监听 Cookie；若登录状态变化，重新点击扩展打开页面浮层即可刷新。浮层使用 closed Shadow DOM；打开时仅根据当前页面的渲染背景色与 `color-scheme` 自动选择浅色/暗色，不读取页面正文或页面存储；点击页面外部、按 Escape 或再次点击扩展会关闭浮层。
 - UniPass 离线时可点击顶部“一键登录”。前台浮层会显示登录中动画与状态；扩展在后台打开或复用登录页，依次点击“钛动科技”和固定 Tec-IAM 飞书授权页的“授权”，并在两分钟内确认 UniPass 会话，成功后自动刷新身份和当前页账号，同时关闭本次由扩展创建的后台登录标签；用户原有登录标签不会被关闭。账号选择、扫码、验证码、CAPTCHA 或授权内容变化时自动流程停止，需用户手动处理。
 - 当前版本不自动清空系统剪贴板。最小权限下无法安全确认剪贴板是否已被用户的新内容替换，强制清空可能误删用户内容。

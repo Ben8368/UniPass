@@ -1,3 +1,5 @@
+import { normalizeVersion } from "./version";
+
 /**
  * Version declared to UniPass by every runtime API request.
  *
@@ -10,8 +12,5 @@ export const STORE_PLUGIN_VERSION = "5.3.2";
 export const PLUGIN_VERSION_OVERRIDE_STORAGE_KEY = "unipassNetworkVersionOverride";
 
 export function normalizePluginVersion(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const version = value.trim();
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) return null;
-  return version;
+  return normalizeVersion(value);
 }

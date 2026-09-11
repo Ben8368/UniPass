@@ -43,6 +43,9 @@ globalThis.fetch = async (input, init) => {
   if (url === "chrome-extension://unipass/credential-core.wasm") {
     return new Response(credentialCore);
   }
+  if (url === "chrome-extension://unipass/runtime-config.json") {
+    return new Response(JSON.stringify({ version: 1, networkPluginVersion: "5.3.2" }));
+  }
   if (url.startsWith("https://clients2.google.com/")) {
     updateRequests += 1;
     return {
@@ -98,7 +101,7 @@ test("portal requests declare the store baseline rather than the locally loaded 
     networkVersion: "5.3.2",
     storeBaselineVersion: "5.3.2",
     override: "",
-    source: "store-baseline",
+    source: "built-in",
   });
   assert.equal(updateRequests, 0);
   assert.equal(portalRequests, 4);
@@ -114,7 +117,7 @@ test("a validated manual network version override is persisted and can be cleare
   await assert.rejects(api.setPluginVersionOverride("not-a-version"), /三段数字版号/);
   const restored = await api.setPluginVersionOverride("");
   assert.equal(restored.networkVersion, "5.3.2");
-  assert.equal(restored.source, "store-baseline");
+  assert.equal(restored.source, "built-in");
 });
 
 test("credential availability distinguishes empty and usable passwords without returning either password", async () => {

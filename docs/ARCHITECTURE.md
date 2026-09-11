@@ -16,13 +16,13 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 离线状态下，Popup 的“一键登录”消息由 Service Worker 交给独立的 `unipass-login.ts` 状态机；它不经过通用 Content Script，也不接触凭据。
 
-构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，同时对 workspace、Cargo registry 和 toolchain 路径做 remap；esbuild 使用标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理。`npm run verify` 是普通门禁，`npm run verify:hardened` 是实际安装目录的独立门禁；后者要求 Binaryen `wasm-opt`（默认缺失即失败），使用 seed 选择有限的等价 reconstruction strategy，并把 `integrity.json`、strategy、hash、size 和 warning counts 写入 `artifacts/hardened/`。`dist/` 只保留运行文件。最终产物审计只允许固定文件清单，并验证 WASM magic/version、无 `name`/`producers` custom section、imports/exports 白名单、原始 key/协议文本、项目 `src/*.rs` path 和 JS 中的旧密码学特征；CI 与 Release 分别执行 normal 与 hardened job，hardened smoke 会先验证外置元数据。
+构建入口由 `build.mjs` 定义，先以固定 Rust `1.98.1` / `wasm32-unknown-unknown` 工具链构建并复制 `credential-core.wasm`，同时对 workspace、Cargo registry 和 toolchain 路径做 remap；esbuild 使用标准 minification、tree shaking、无 sourcemap 和 `debugger` 清理，并生成非敏感的 `runtime-config.json` 与 `self-build-files.json`。`npm run verify` 是普通门禁，`npm run verify:hardened` 是实际安装目录的独立门禁；后者要求 Binaryen `wasm-opt`（默认缺失即失败），使用 seed 选择有限的等价 reconstruction strategy，并把 `integrity.json`、strategy、hash、size 和 warning counts 写入 `artifacts/hardened/`。`dist/` 只保留运行文件。最终产物审计只允许固定文件清单，并验证 WASM magic/version、无 `name`/`producers` custom section、imports/exports 白名单、原始 key/协议文本、项目 `src/*.rs` path 和 JS 中的旧密码学特征；CI 与 Release 分别执行 normal 与 hardened job，hardened smoke 会先验证外置元数据。
 
 ## 模块职责
 
 | 模块 | 职责 | 禁止事项 |
 | --- | --- | --- |
-| `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、用户点击查看/复制/填入 | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码 |
+| `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、版本设置和用户点击查看/复制/填入；`self-builder.ts` 只读取静态扩展资源并导出 ZIP | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码；Self Builder 读取 storage 或凭据 |
 | `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话 | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
 | `src/content/` | 用户点击扩展后挂载页面浮层，或用户点击填入后在当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
@@ -37,7 +37,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ## 关键数据流
 
-- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题与版本信息）和 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、商店基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。默认基线来自构建时同步的 `STORE_PLUGIN_VERSION`；Popup 可临时覆盖请求头但不改变构建/发布约束，运行时也不查询商店。
+- Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题、版本设置和三击状态机）、`self-builder.ts`（静态文件自派生打包）以及 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、runtime config 网络基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。网络请求优先使用手动 override，否则读取并缓存 `runtime-config.json`。三击只在确认后通过 Service Worker 读取 `self-build-files.json` 列出的静态资源；兼容缺少该清单的旧构建时，仅回退到固定审计白名单，仍逐文件校验，随后修改内存中的 `manifest.json` 和 `runtime-config.json`，生成 ZIP 并回读校验；不查询商店、不修改当前扩展，也不把脚本/WASM 加入 `web_accessible_resources`。
 - 页面浮层的 `pageContext`、页面主题、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；页面主题检测仅读取当前 HTTPS 页面的渲染背景色与 `color-scheme`，不读取页面正文、Cookie、表单值或页面存储；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
 
 ### 当前页面账号

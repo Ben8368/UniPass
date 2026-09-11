@@ -1,7 +1,7 @@
-import { cp, rm, readFile } from "node:fs/promises";
+import { cp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
-import { assertReleaseArtifact } from "./scripts/release-artifact-check.mjs";
+import { assertReleaseArtifact, EXPECTED_ARTIFACT_FILES } from "./scripts/release-artifact-check.mjs";
 import { buildCredentialCore } from "./scripts/build-wasm.mjs";
 
 const root = resolve(import.meta.dirname);
@@ -47,7 +47,6 @@ export async function buildExtension({
     treeShaking: true,
     drop: ["debugger"],
     legalComments: "eof",
-    define: { __UNIPASS_BUILD_TIME__: JSON.stringify(buildTime) },
     logLevel: "info",
     loader: { ".html": "text", ".css": "text" },
   });
@@ -60,7 +59,19 @@ export async function buildExtension({
     await cp(resolve(root, source), resolve(out, target));
   }
 
-  const { mkdir } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(resolve(out, "manifest.json"), "utf8"));
+  manifest.version_name = `build-${buildTime}`;
+  await writeFile(resolve(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  const storeBaselineVersion = await readStoreBaselineVersion();
+  await writeFile(resolve(out, "runtime-config.json"), `${JSON.stringify({
+    version: 1,
+    networkPluginVersion: storeBaselineVersion,
+  }, null, 2)}\n`);
+  await writeFile(resolve(out, "self-build-files.json"), `${JSON.stringify({
+    version: 1,
+    files: [...EXPECTED_ARTIFACT_FILES].sort(),
+  }, null, 2)}\n`);
+
   await mkdir(resolve(out, "icons"), { recursive: true });
   for (const icon of ["icon16.png", "icon48.png", "icon128.png"]) {
     await cp(resolve(root, "public/icons", icon), resolve(out, "icons", icon));
@@ -69,6 +80,13 @@ export async function buildExtension({
   await audit(out);
   console.log(`Built extension into ${out}`);
   return { out, rawWasm, finalWasm, wasmTool };
+}
+
+async function readStoreBaselineVersion() {
+  const source = await readFile(resolve(root, "src/shared/plugin-version.ts"), "utf8");
+  const match = source.match(/STORE_PLUGIN_VERSION\s*=\s*["'](\d+\.\d+\.\d+)["']/);
+  if (!match) throw new Error("无法读取 STORE_PLUGIN_VERSION");
+  return match[1];
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {

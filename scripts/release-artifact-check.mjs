@@ -19,6 +19,8 @@ export const EXPECTED_ARTIFACT_FILES = Object.freeze([
   "popup.css",
   "popup.html",
   "popup.js",
+  "runtime-config.json",
+  "self-build-files.json",
   "theme.css",
 ]);
 export const EXPECTED_WASM_IMPORTS = Object.freeze([]);
@@ -122,7 +124,43 @@ export async function inspectReleaseArtifact(directory, { additionalFiles = [] }
     }
   }
 
+  errors.push(...await inspectRuntimeConfiguration(root, actualFiles));
+
   return [...new Set(errors)];
+}
+
+async function inspectRuntimeConfiguration(root, actualFiles) {
+  const errors = [];
+  try {
+    const runtimeConfig = JSON.parse(await readFile(resolve(root, "runtime-config.json"), "utf8"));
+    const configKeys = Object.keys(runtimeConfig ?? {}).sort();
+    if (JSON.stringify(configKeys) !== JSON.stringify(["networkPluginVersion", "version"])) {
+      errors.push("runtime-config.json 只能包含 version 和 networkPluginVersion");
+    }
+    if (runtimeConfig?.version !== 1 || !isPluginVersion(runtimeConfig?.networkPluginVersion)) {
+      errors.push("runtime-config.json 格式无效");
+    }
+  } catch (error) {
+    errors.push(`runtime-config.json 格式无效：${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    const selfBuildFiles = JSON.parse(await readFile(resolve(root, "self-build-files.json"), "utf8"));
+    const files = selfBuildFiles?.files;
+    const expected = [...EXPECTED_ARTIFACT_FILES].sort();
+    if (selfBuildFiles?.version !== 1 || !Array.isArray(files) || new Set(files).size !== files.length || JSON.stringify([...files].sort()) !== JSON.stringify(expected)) {
+      errors.push("self-build-files.json 文件集合不符合 artifact whitelist");
+    }
+    if (Array.isArray(files)) {
+      for (const file of files) if (!actualFiles.has(file)) errors.push(`self-build-files.json 列出缺失文件：${file}`);
+    }
+  } catch (error) {
+    errors.push(`self-build-files.json 格式无效：${error instanceof Error ? error.message : String(error)}`);
+  }
+  return errors;
+}
+
+function isPluginVersion(value) {
+  return typeof value === "string" && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value);
 }
 
 export async function inspectHardenedArtifact(directory, {

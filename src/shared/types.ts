@@ -46,6 +46,7 @@ export type BackgroundRequest =
   | { type: "completeUniPassLogin" }
   | { type: "getPluginVersionSettings" }
   | { type: "setPluginVersionOverride"; version: string }
+  | { type: "readSelfBuildFile"; path: string }
   | { type: "accountCatalog"; userScope: string }
   | { type: "listApps"; keyword: string; userScope: string }
   | { type: "accountsForApp"; appId: string | number; userScope: string }
@@ -64,7 +65,7 @@ export interface PluginVersionSettings {
   networkVersion: string;
   storeBaselineVersion: string;
   override: string;
-  source: "store-baseline" | "manual";
+  source: "built-in" | "manual";
 }
 
 export interface UniPassLoginStartResult {
