@@ -50,8 +50,7 @@ test("disabling keepalive waits for active tab syncs and syncs recheck enabled s
 test("Jupiter login responses validate and minimize session data", () => {
   assert.match(source, /typeof accessToken !== "string"/);
   assert.match(source, /accessToken, userInfo/);
-  assert.match(source, /key !== "accessToken"/);
-  assert.match(source, /password\|token\|secret\|authorization\|cookie\|credential\|code/);
+  assert.match(source, /sanitizeJupiterUserInfo/);
   assert.doesNotMatch(source, /\{\.\.\.loginData, userScope\}/);
 });
 

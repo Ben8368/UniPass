@@ -4,6 +4,7 @@ import { isStableUserScope } from "../shared/user-scope";
 import { isJupiterUrl } from "../shared/url";
 import type { JupiterKeepaliveSettings, UniPassAccount } from "../shared/types";
 import { assertCurrentUserScope, UserScopeMismatchError } from "./user-scope-guard";
+import { sanitizeJupiterUserInfo } from "./jupiter-session-data";
 
 const JUPITER_ORIGIN = "https://jupiter.tec-do.com";
 const JUPITER_LOGIN_URL = `${JUPITER_ORIGIN}/phoenix/v1.0/user/login`;
@@ -198,9 +199,7 @@ async function loginToJupiter(email: string, transformedPassword: string): Promi
   if (typeof accessToken !== "string" || !accessToken.trim() || accessToken.length > 8192) {
     throw new Error("木星登录未返回有效会话令牌");
   }
-  const userInfo = Object.fromEntries(
-    Object.entries(data).filter(([key]) => key !== "accessToken" && !/(?:password|token|secret|authorization|cookie|credential|code)/i.test(key)),
-  );
+  const userInfo = sanitizeJupiterUserInfo(data);
   return { accessToken, userInfo };
 }
 
