@@ -4,13 +4,12 @@ import {
   appUrlForApp,
   credentialForAccount,
   currentUser,
-  listApps,
   pluginVersionSettings,
   setPluginVersionOverride,
 } from "../shared/api";
 import { popupSessionUserFor } from "../shared/user-scope";
 import { isJupiterUrl } from "../shared/url";
-import { clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
+import { appsWithAvailableCredentials, clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import {
   getJupiterKeepaliveSettings,
   JUPITER_KEEPALIVE_ALARM,
@@ -109,7 +108,7 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
     case "accountCatalog":
       return withUserScope(message.userScope, refreshAccountCatalog);
     case "listApps":
-      return withUserScope(message.userScope, () => listApps(message.keyword));
+      return withUserScope(message.userScope, () => appsWithAvailableCredentials(message.keyword, message.userScope));
     case "accountsForApp":
       return withUserScope(message.userScope, () => accountsForApp(message.appId));
     case "appUrl":

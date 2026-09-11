@@ -54,6 +54,16 @@ test("application cards keep their icon and only view accounts in advanced mode"
   assert.match(catalogSource, /const open = button\("打开页面"\);[\s\S]*?open\.addEventListener\("click", \(\) => void this\.openAppPage\(app\)\)/);
 });
 
+test("application cards use the background availability aggregate and explain filtered states", () => {
+  assert.match(catalogSource, /send<AvailableAppsResult>\(\{ type: "listApps"/);
+  assert.match(catalogSource, /excludedEmptyCredentialApps/);
+  assert.match(catalogSource, /excludedVerificationFailureApps/);
+  assert.match(catalogSource, /excludedDirectoryFailureApps/);
+  assert.match(catalogSource, /没有可用密码，已隐藏/);
+  assert.match(catalogSource, /凭据暂时无法验证，已隐藏/);
+  assert.match(catalogSource, /账号目录同步失败，已隐藏/);
+});
+
 test("current-page account cards only show viewing in advanced mode before filling", () => {
   assert.match(catalogSource, /if \(this\.isAdvancedModeEnabled\(\)\) \{[\s\S]*?const view = button\("查看"\);[\s\S]*?actions\.append\(view\);[\s\S]*?\}\s*actions\.append\(fill\)/);
 });

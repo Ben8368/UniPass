@@ -115,6 +115,14 @@ export interface CredentialAvailabilityResult {
   error?: string;
 }
 
+export interface AvailableAppsResult {
+  apps: UniPassApp[];
+  totalApps: number;
+  excludedEmptyCredentialApps: number;
+  excludedVerificationFailureApps: number;
+  excludedDirectoryFailureApps: number;
+}
+
 export interface FillRequest {
   type: "fillCredentials";
   credential: Credential;

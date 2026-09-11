@@ -47,7 +47,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 2. Popup/页面浮层读取或接收当前 HTTPS 标签页上下文；木星单页应用仅在其已授权的同一 origin 内允许路由变化，其他应用仍要求 origin/path 匹配。
 3. Popup 从本地目录缓存匹配应用 origin/path；过期时请求 Service Worker 完整同步。
 4. Service Worker 校验用户作用域后只返回账号展示信息；部分失败会显式标记，不能覆盖完整缓存。
-5. Popup 仅针对匹配账号请求凭据可用性；后台返回三态，不返回密码。
+5. Popup 当前页账号和应用列表均只请求凭据可用性；后台返回三态，不返回密码。应用列表由 Service Worker 逐应用读取账号 ID 后过滤，仅返回至少含一个 `available` 账号的应用，并以汇总计数区分空密码、凭据验证失败和账号目录失败。
 6. Normal Fill 消息只包含 `accountId`、目标 URL、用户作用域和 Popup 的 `tabId`（浮层由 sender 标签页确定）；Service Worker 在后台获取 `credentialForAccount(accountId)`，账号标识优先使用 `/app/app_config` 的后台响应，缺失时只从后台重新取得的可信账号目录解析，不接受 Popup 任意字符串。随后经 HTTPS/origin/path/active-tab/document 校验填入 Content Script，不向 Popup 返回 password。
 7. Advanced 解锁完成后，Popup/浮层先请求 `enableAdvancedMode`，再使用返回的一次性内存 token 建立 `unipass-advanced-mode` Port。Service Worker 只有在握手 token、扩展 sender 和 `documentId` 均匹配时才登记 capability；Port disconnect、Popup `pagehide`、浮层移除或 Service Worker 重启均 fail closed。
 8. `revealCredential` 与 Fill 完全分开：Service Worker 先执行 `withUserScope` 和 `requireAdvancedCapability(sender)`，再只解密所选账号并返回 `{ username, password }` 给当前 Advanced UI。Credential panel、Reveal 和 Copy Password 都依赖该返回值；Normal UI 永远不预取 password。

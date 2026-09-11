@@ -5,7 +5,7 @@
 
 ## 当前决策
 
-- Normal/Advanced 都完整展示账号和备注；账号级可用性检查已接入，但当前应用列表仍可能展示包含空密码账号的应用，列入 TD-006。Normal 允许使用账号密码 Fill，但 plaintext password 不返回 Popup/浮层；Advanced 通过 ephemeral capability 额外允许 Reveal、Credential panel 和 Copy Password。
+- Normal/Advanced 都完整展示账号和备注；账号级可用性检查和应用级过滤均由 Service Worker 执行，应用列表只展示至少含一个可用账号的应用，并区分空密码、凭据验证失败和账号目录失败。Normal 允许使用账号密码 Fill，但 plaintext password 不返回 Popup/浮层；Advanced 通过 ephemeral capability 额外允许 Reveal、Credential panel 和 Copy Password。
 - 填充仅允许 HTTPS 且需匹配应用 origin/path；Content Script 按用户操作临时注入，不自动提交。
 - UniPass 离线状态的一键登录由用户点击触发，只在一个标签页、两分钟窗口内操作精确的门户登录页和固定 Tec-IAM 飞书 OAuth 授权页；不读取或保存 Cookie、授权码和飞书页面数据，非预期身份验证由用户处理。
 - 本地 manifest 为商店版的下一补丁版，阻止浏览器用商店扩展覆盖；UniPass 网络请求默认发送随产物生成的 `runtime-config.json` 网络基线（当前 `5.3.3`），源码/CI 构建仍在线核验商店关系。商店版变更时必须同步网络基线，并把本地构建更新为其下一补丁版；用户可临时手动覆盖三段数字请求版号，且不影响发布门禁或本地 `5.3.4`。
@@ -17,7 +17,7 @@
 
 ## 近期优先级
 
-1. 修复 TD-006 的空密码账号/应用展示问题；完成用户 scope 隔离、Service Worker/WASM 重启和 Self Derived Build 独立 Profile 验收；Jupiter 适配按计划逐步取消，客户端解密方案维持现状。
+1. 完成用户 scope 隔离、Service Worker/WASM 重启和 Self Derived Build 独立 Profile 验收；Jupiter 适配按计划逐步取消，客户端解密方案维持现状。
 
 ## 按需入口
 

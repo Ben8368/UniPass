@@ -1,4 +1,4 @@
-import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, PageContext, UniPassAccount, UniPassApp } from "../shared/types";
+import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, AvailableAppsResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, PageContext, UniPassAccount, UniPassApp } from "../shared/types";
 import { appUrlMatches, isHttpsUrl } from "../shared/url";
 import { userScopeFor } from "../shared/user-scope";
 import { send } from "./bridge";
@@ -72,7 +72,11 @@ export class CatalogController {
   async loadApps(keyword = ""): Promise<void> {
     this.apps.innerHTML = loading("正在加载应用");
     this.showAppList();
-    try { await this.renderApps(await send<UniPassApp[]>({ type: "listApps", keyword, userScope: this.requireUserScope() })); }
+    try {
+      const result = await send<AvailableAppsResult>({ type: "listApps", keyword, userScope: this.requireUserScope() });
+      this.reportAppFiltering(result);
+      await this.renderApps(result);
+    }
     catch (error) { this.apps.innerHTML = empty(errorText(error)); }
   }
 
@@ -119,9 +123,24 @@ export class CatalogController {
     });
   }
 
-  private async renderApps(apps: UniPassApp[]): Promise<void> {
+  private reportAppFiltering(result: AvailableAppsResult): void {
+    const notices: string[] = [];
+    if (result.excludedEmptyCredentialApps) notices.push(`${result.excludedEmptyCredentialApps} 个应用没有可用密码，已隐藏`);
+    if (result.excludedVerificationFailureApps) notices.push(`${result.excludedVerificationFailureApps} 个应用的凭据暂时无法验证，已隐藏`);
+    if (result.excludedDirectoryFailureApps) notices.push(`${result.excludedDirectoryFailureApps} 个应用账号目录同步失败，已隐藏`);
+    if (notices.length) {
+      const hasFailure = result.excludedVerificationFailureApps > 0 || result.excludedDirectoryFailureApps > 0;
+      this.reportStatus(notices.join("；"), hasFailure);
+    }
+  }
+
+  private async renderApps(result: AvailableAppsResult): Promise<void> {
+    const { apps } = result;
     this.apps.replaceChildren();
-    if (!apps.length) { this.apps.innerHTML = empty("未找到应用"); return; }
+    if (!apps.length) {
+      this.apps.innerHTML = empty(result.totalApps ? "没有可用账号" : "未找到应用");
+      return;
+    }
     const keepalive = await send<JupiterKeepaliveSettings>({ type: "getJupiterKeepalive", userScope: this.requireUserScope() });
     for (const app of apps) {
       const title = app.name || app.appName || `应用 ${app.id}`;

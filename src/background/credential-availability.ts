@@ -1,5 +1,6 @@
-import { credentialAvailableForAccount } from "../shared/api";
+import { accountsForApp, credentialAvailableForAccount, listApps } from "../shared/api";
 import type {
+  AvailableAppsResult,
   CredentialAvailabilityResult,
   CredentialAvailabilityStatus,
 } from "../shared/types";
@@ -55,6 +56,44 @@ export async function credentialAvailability(
 
   if (cacheChanged) await chrome.storage.session.set({ [CACHE_KEY]: cache });
   return results;
+}
+
+export async function appsWithAvailableCredentials(
+  keyword: string,
+  userScope: string,
+): Promise<AvailableAppsResult> {
+  const apps = await listApps(keyword);
+  const inspected = await mapWithConcurrency(apps, CONCURRENCY, async (app) => {
+    let accounts;
+    try {
+      accounts = (await accountsForApp(app.id)).accounts;
+    } catch {
+      return { app, result: "directory-failure" as const };
+    }
+
+    const accountIds = accounts
+      .map((account) => account.id ?? account.accountId ?? account.appAccountUserId)
+      .filter((accountId): accountId is string | number => accountId != null);
+    if (!accountIds.length) return { app, result: "empty" as const };
+
+    let availability: CredentialAvailabilityResult[];
+    try {
+      availability = await credentialAvailability(accountIds, userScope);
+    } catch {
+      return { app, result: "verification-failure" as const };
+    }
+    if (availability.some((entry) => entry.status === "available")) return { app, result: "available" as const };
+    if (availability.some((entry) => entry.status === "error")) return { app, result: "verification-failure" as const };
+    return { app, result: "empty" as const };
+  });
+
+  return {
+    apps: inspected.filter((entry) => entry.result === "available").map((entry) => entry.app),
+    totalApps: apps.length,
+    excludedEmptyCredentialApps: inspected.filter((entry) => entry.result === "empty").length,
+    excludedVerificationFailureApps: inspected.filter((entry) => entry.result === "verification-failure").length,
+    excludedDirectoryFailureApps: inspected.filter((entry) => entry.result === "directory-failure").length,
+  };
 }
 
 export function credentialAvailabilityCacheKey(userScope: string, accountId: string | number): string {
