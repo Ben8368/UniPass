@@ -1,4 +1,4 @@
-import type { VaultProfile } from "../shared/vault";
+import type { VaultConnection, VaultProfile } from "../shared/vault";
 import { normalizeWebDavUrl } from "../shared/url";
 import { send } from "./bridge";
 import { errorText, get } from "./dom";
@@ -12,9 +12,13 @@ export class WebDavSettingsController {
   private readonly endpoint = get<HTMLInputElement>("webdavUrl");
   private readonly username = get<HTMLInputElement>("webdavUsername");
   private readonly appPassword = get<HTMLInputElement>("webdavPassword");
+  private readonly vaultKeyField = get("webdavVaultKeyField");
+  private readonly vaultKey = get<HTMLInputElement>("webdavVaultKey");
   private readonly test = get<HTMLButtonElement>("testWebDav");
   private readonly save = get<HTMLButtonElement>("saveWebDav");
   private readonly status = get<HTMLParagraphElement>("webdavStatus");
+  private readonly recovery = get("webdavRecoveryKey");
+  private readonly recoveryKey = get<HTMLInputElement>("webdavRecoveryKeyValue");
   private profiles: VaultProfile[] = [];
   private busy = false;
   private operation: "test" | "save" | null = null;
@@ -41,18 +45,30 @@ export class WebDavSettingsController {
 
   setDisabled(disabled: boolean): void {
     this.busy = disabled;
-    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.test, this.save]) control.disabled = disabled;
+    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.test, this.save]) control.disabled = disabled;
+  }
+
+  clearSensitiveState(): void {
+    this.appPassword.value = "";
+    this.vaultKey.value = "";
+    this.recoveryKey.value = "";
+    this.recovery.hidden = true;
   }
 
   private applySelectedProfile(): void {
     const selected = this.profiles.find((profile) => profile.id === this.profile.value);
-    const creating = !selected;
-    this.fields.hidden = !creating;
-    this.actions.hidden = !creating;
+    const reconnecting = Boolean(selected);
+    this.fields.hidden = false;
+    this.actions.hidden = false;
+    this.vaultKeyField.hidden = !reconnecting;
+    this.recoveryKey.value = "";
+    this.recovery.hidden = true;
     this.name.value = selected?.name ?? "";
     this.endpoint.value = selected?.endpoint ?? "";
     this.username.value = "";
     this.appPassword.value = "";
+    this.vaultKey.value = "";
+    this.save.textContent = reconnecting ? "重新连接" : "保存并连接";
     this.showStatus("");
   }
 
@@ -63,6 +79,7 @@ export class WebDavSettingsController {
       endpoint: normalizeWebDavUrl(this.endpoint.value),
       username: this.username.value.trim(),
       appPassword: this.appPassword.value,
+      vaultKey: this.vaultKey.value.trim() || undefined,
     };
   }
 
@@ -90,22 +107,23 @@ export class WebDavSettingsController {
   private async saveVault(): Promise<void> {
     if (this.busy) return;
     this.setBusy(true, "save");
-    this.showStatus("正在保存并连接 WebDAV 密码库…");
+    this.showStatus(this.profile.value ? "正在重新连接 WebDAV 密码库…" : "正在保存并连接 WebDAV 密码库…");
     let saved = false;
     try {
       const input = this.input();
       await this.requestOrigin(input.endpoint);
-      const profile = await send<VaultProfile>({ type: "saveWebDavVault", ...input });
+      const connection = await send<VaultConnection>({ type: "saveWebDavVault", ...input });
       saved = true;
       await this.open();
-      this.profile.value = profile.id;
+      this.profile.value = connection.profile.id;
       this.applySelectedProfile();
       window.dispatchEvent(new Event("unipass-vault-connected"));
-      this.showStatus("WebDAV 密码库已保存并连接");
+      if (connection.recoveryKey) this.showRecoveryKey(connection.recoveryKey);
+      this.showStatus(connection.recoveryKey ? "WebDAV 密码库已保存并连接。请保存下方 Vault Key" : "WebDAV 密码库已重新连接");
     } catch (error) {
       this.showStatus(errorText(error), true);
     } finally {
-      if (saved) this.appPassword.value = "";
+      if (saved) { this.appPassword.value = ""; this.vaultKey.value = ""; }
       this.setBusy(false);
     }
   }
@@ -113,9 +131,9 @@ export class WebDavSettingsController {
   private setBusy(busy: boolean, operation: "test" | "save" | null = null): void {
     this.busy = busy;
     this.operation = busy ? operation : null;
-    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.test, this.save]) control.disabled = busy;
+    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.test, this.save]) control.disabled = busy;
     this.test.textContent = this.operation === "test" ? "测试中…" : "测试连接";
-    this.save.textContent = this.operation === "save" ? "保存中…" : "保存并连接";
+    this.save.textContent = this.operation === "save" ? "保存中…" : (this.profile.value ? "重新连接" : "保存并连接");
   }
 
   private showStatus(text: string, isError = false): void {
@@ -123,5 +141,10 @@ export class WebDavSettingsController {
     this.status.textContent = text;
     this.status.classList.toggle("error", isError);
     if (text) this.reportStatus(text, isError);
+  }
+
+  private showRecoveryKey(value: string): void {
+    this.recoveryKey.value = value;
+    this.recovery.hidden = false;
   }
 }

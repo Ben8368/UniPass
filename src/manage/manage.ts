@@ -1,7 +1,7 @@
 import { send } from "../popup/bridge";
 import { normalizeWebDavUrl, webDavPermissionOrigin } from "../shared/url";
 import type { AccountCatalogResult } from "../shared/types";
-import type { VaultAccount, VaultApp, VaultProfile } from "../shared/vault";
+import type { VaultAccount, VaultApp, VaultConnection, VaultProfile } from "../shared/vault";
 
 const profilesElement = document.querySelector<HTMLDivElement>("#profiles")!;
 const profilesEmpty = document.querySelector<HTMLDivElement>("#profilesEmpty")!;
@@ -54,9 +54,13 @@ async function saveVault(): Promise<void> {
   try {
     const input = vaultInput();
     await requestOrigin(input.endpoint);
-    const profile = await send<VaultProfile>({ type: "saveWebDavVault", vaultId: selectedVaultId || undefined, ...input });
-    selectedVaultId = profile.id;
+    const connection = await send<VaultConnection>({ type: "saveWebDavVault", vaultId: selectedVaultId || undefined, ...input });
+    selectedVaultId = connection.profile.id;
     saved = true;
+    if (connection.recoveryKey) {
+      setValue("recoveryKey", connection.recoveryKey);
+      document.querySelector<HTMLElement>("#recoveryKeyNotice")!.hidden = false;
+    }
     setStatus("WebDAV Vault 已保存");
     await load();
   } catch (error) { setStatus(errorText(error), true); }
@@ -70,7 +74,7 @@ async function requestOrigin(endpoint: string): Promise<void> {
 
 function vaultInput() {
   const endpoint = normalizeWebDavUrl(value("endpoint"));
-  return { name: value("vaultName"), endpoint, username: value("username"), appPassword: rawValue("appPassword") };
+  return { name: value("vaultName"), endpoint, username: value("username"), appPassword: rawValue("appPassword"), vaultKey: value("vaultKey") || undefined };
 }
 
 async function saveApp(): Promise<void> {

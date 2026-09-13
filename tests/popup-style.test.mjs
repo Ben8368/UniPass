@@ -44,16 +44,24 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
   assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
 });
 
-test("an existing WebDAV profile hides connection fields and actions until creating a vault", () => {
-  assert.match(webdavSettingsSource, /const creating = !selected;/);
-  assert.match(webdavSettingsSource, /this\.fields\.hidden = !creating;/);
-  assert.match(webdavSettingsSource, /this\.actions\.hidden = !creating;/);
+test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {
+  assert.match(webdavSettingsSource, /const reconnecting = Boolean\(selected\);/);
+  assert.match(webdavSettingsSource, /this\.fields\.hidden = false;/);
+  assert.match(webdavSettingsSource, /this\.actions\.hidden = false;/);
+  assert.match(webdavSettingsSource, /this\.vaultKeyField\.hidden = !reconnecting;/);
+  assert.match(popupHtml, /id="webdavVaultKey" type="password"/);
+  assert.match(popupHtml, /id="webdavRecoveryKey"[^>]*hidden/);
+  assert.match(webdavSettingsSource, /showRecoveryKey\(connection\.recoveryKey\)/);
+  assert.match(webdavSettingsSource, /clearSensitiveState\(\): void \{[\s\S]*this\.appPassword\.value = "";[\s\S]*this\.vaultKey\.value = "";[\s\S]*this\.recoveryKey\.value = "";[\s\S]*this\.recovery\.hidden = true;/);
+  assert.match(settingsSource, /private close\(\): void \{\s*this\.webdavSettings\.clearSensitiveState\(\);/);
+  assert.match(settingsSource, /dispose\(\): void \{\s*this\.disposed = true;\s*this\.webdavSettings\.clearSensitiveState\(\);/);
   assert.match(webdavSettingsSource, /this\.showStatus\("正在测试 WebDAV 连接…"\);/);
-  assert.match(webdavSettingsSource, /this\.showStatus\("正在保存并连接 WebDAV 密码库…"\);/);
+  assert.match(webdavSettingsSource, /正在重新连接 WebDAV 密码库/);
   assert.match(webdavSettingsSource, /this\.test\.textContent = this\.operation === "test" \? "测试中…" : "测试连接";/);
   assert.doesNotMatch(webdavSettingsSource, /saveGesture|advancedModeUnlock/);
   assert.match(settingsSource, /this\.saveButton\.addEventListener\("click", \(event\) => \{ event\.preventDefault\(\); this\.handleSaveClick\(\); \}\);/);
   assert.match(componentsCss, /\.webdav-status\s*\{[^}]*display:\s*flex/s);
+  assert.match(componentsCss, /\.webdav-status\[hidden\][^{]*\{[^}]*display:\s*none !important/s);
   assert.match(componentsCss, /#webdavConnectionFields\s*\{[^}]*display:\s*grid/s);
 });
 

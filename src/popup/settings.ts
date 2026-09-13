@@ -125,6 +125,7 @@ export class SettingsController {
 
   dispose(): void {
     this.disposed = true;
+    this.webdavSettings.clearSensitiveState();
     this.advancedPort?.disconnect();
     this.advancedPort = null;
     this.advancedModeActive = false;
@@ -188,6 +189,7 @@ export class SettingsController {
   }
 
   private close(): void {
+    this.webdavSettings.clearSensitiveState();
     this.dialog.classList.add("hidden");
     this.settingsButton.setAttribute("aria-expanded", "false");
     this.settingsButton.focus();

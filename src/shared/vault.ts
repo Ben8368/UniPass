@@ -27,6 +27,15 @@ export interface VaultProfile {
   endpoint?: string;
 }
 
+/**
+ * The recovery key is returned only immediately after creating a new Vault.
+ * Callers must keep it in memory only and clear it when their UI closes.
+ */
+export interface VaultConnection {
+  profile: VaultProfile;
+  recoveryKey?: string;
+}
+
 export interface VaultApp {
   id: string;
   vaultId: string;

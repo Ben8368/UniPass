@@ -67,7 +67,7 @@ export type BackgroundRequest =
   | { type: "listVaultProfiles" }
   | { type: "requestWebDavPermission"; endpoint: string }
   | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string }
-  | { type: "saveWebDavVault"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string }
+  | { type: "saveWebDavVault"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string; vaultKey?: string }
   | { type: "removeVault"; vaultId: string }
   | { type: "vaultCatalog" }
   | { type: "createVaultApp"; vaultId: string; app: Omit<VaultApp, "id" | "vaultId"> }

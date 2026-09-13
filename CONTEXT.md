@@ -13,8 +13,8 @@
 - UniPass AES-ECB-PKCS7 解密及 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换已迁入随扩展本地打包的 Rust `credential-core.wasm`；availability 在 WASM 内只返回状态，Jupiter keepalive 从 UniPass ciphertext 直接得到 transformed password，JS 不再接触原始 Jupiter 明文。普通构建固定 `stable-v1` 材料，hardened 构建由 `UNIPASS_HARDEN_SEED` 生成 3～5 个 fragment、重排和轻量算术重构；JS/WASM 仍完全自包含。该措施只提高静态分析成本，动态调试仍可能取得运行时材料或明文；继续使用客户端解密是当前产品计划。
 - Rust 构建统一启用 workspace、Cargo registry 与 toolchain path remap；hardened 构建默认要求 Binaryen `wasm-opt`，缺失即 fail closed，报告与 integrity 仅写入 `artifacts/hardened/`。普通 WASM 保持 byte-for-byte reproducibility；hardened seed 还选择 4 种有限等价 reconstruction strategy 之一。
 - 保留只读 `legacy-unipass`，新增每个 `VaultProfile` 一个 WebDAV backend；Core/Crypto/Backend 独立，禁止双写和 Legacy 迁移，Cloudflare/GitHub 仅留接口。
-- WebDAV 连接配置收进扩展齿轮二级页：用户可在此输入 HTTPS 地址、用户名和 App Password、测试后保存；当前页面无匹配账号时可直接创建当前域名的 WebDAV 账号。认证与 key 只存 session，重启后重连。对象分离，ETag 冲突 fail closed。
-- 最近客观验证：2026-09-12 `npm run verify`、`npm run verify:hardened` 通过；共 101 项 Node/WASM 测试，依赖审计 0 漏洞，普通/derived/hardened Chrome smoke 通过。真实 WebDAV 服务器、权限拒绝和 Legacy+WebDAV 页面联测仍未人工验收。
+- WebDAV 连接配置收进扩展齿轮二级页：用户可在此输入 HTTPS 地址、用户名和 App Password、测试后保存；当前页面无匹配账号时可直接创建当前域名的 WebDAV 账号。认证与 key 只存 session；新建时只显示一次恢复用 Vault Key，重启后用户以该 Key 重新连接，缺失时 fail closed。对象分离，ETag 冲突 fail closed。
+- 最近客观验证：2026-09-13 `npm run verify` 通过；共 108 项 Node/WASM 测试，依赖审计 0 漏洞，TypeScript、Rust QA、标准构建和产物审计通过。CI Chrome smoke 已改为从页面上下文触发隐藏的兼容控件；本机 Chrome 启动在 macOS 环境中提前关闭，尚未完成真实 WebDAV、权限拒绝、Legacy+WebDAV 页面联测和本机 Chrome smoke 验收。
 - 私人本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
 ## 近期优先级

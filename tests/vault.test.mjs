@@ -58,3 +58,34 @@ test("Vault Core keeps credential objects out of directory catalog reads and enf
   await assert.rejects(core.credential({ vaultId: "vault-b", accountId: account.id }), /Vault 引用不匹配/);
   assert.deepEqual((await core.credential({ vaultId: "vault-a", accountId: account.id })).username, "fixture-user");
 });
+
+test("an existing Vault without a session key refuses reconnect without changing its profile", async () => {
+  const originalChrome = globalThis.chrome;
+  const originalFetch = globalThis.fetch;
+  const profile = { id: "vault-existing", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/dav/" };
+  const localWrites = [];
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get() { return { "unipass-vault-profiles": [profile] }; },
+        async set(value) { localWrites.push(value); },
+      },
+      session: {
+        async get() { return {}; },
+        async set() {},
+      },
+    },
+  };
+  globalThis.fetch = async (_input, init) => new Response("", { status: init.method === "MKCOL" ? 405 : 207 });
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    await assert.rejects(
+      vaultService.saveWebDavVault({ vaultId: profile.id, name: profile.name, endpoint: profile.endpoint, username: "fixture-user", appPassword: "fixture-only-app-password" }),
+      /缺少 Vault Key/,
+    );
+    assert.deepEqual(localWrites, []);
+  } finally {
+    globalThis.chrome = originalChrome;
+    globalThis.fetch = originalFetch;
+  }
+});

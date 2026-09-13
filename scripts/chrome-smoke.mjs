@@ -111,13 +111,7 @@ async function assertSelfBuildFlow(popup, currentVersion, downloadPath, extensio
   await client.send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath });
   await popup.click("#pluginVersionSettingsButton");
   await popup.waitForSelector("#versionSettingsDialog:not(.hidden)");
-  await popup.$eval("#pluginVersionOverride", (input, value) => {
-    input.value = value;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, targetVersion);
-  await popup.click("#versionSave");
-  await popup.click("#versionSave");
-  await popup.click("#versionSave");
+  await triggerSelfBuildCompatibilityGesture(popup, targetVersion);
   await popup.waitForSelector("#selfBuildDialog:not(.hidden)");
   assert.equal(await popup.$eval("#selfBuildCurrentVersion", (element) => element.textContent), currentVersion);
   assert.equal(await popup.$eval("#selfBuildTargetVersion", (element) => element.textContent), targetVersion);
@@ -202,17 +196,27 @@ async function assertSecondGenerationPrompt(popup, currentVersion) {
   const nextNetworkVersion = currentVersion;
   await popup.click("#pluginVersionSettingsButton");
   await popup.waitForSelector("#versionSettingsDialog:not(.hidden)");
-  await popup.$eval("#pluginVersionOverride", (input, value) => {
-    input.value = value;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, nextVersion);
-  await popup.click("#versionSave");
-  await popup.click("#versionSave");
-  await popup.click("#versionSave");
+  await triggerSelfBuildCompatibilityGesture(popup, nextVersion);
   await popup.waitForSelector("#selfBuildDialog:not(.hidden)");
   assert.equal(await popup.$eval("#selfBuildCurrentVersion", (element) => element.textContent), currentVersion);
   assert.equal(await popup.$eval("#selfBuildTargetVersion", (element) => element.textContent), nextVersion);
   assert.equal(await popup.$eval("#selfBuildTargetNetworkVersion", (element) => element.textContent), nextNetworkVersion);
+}
+
+async function triggerSelfBuildCompatibilityGesture(popup, value) {
+  // Version controls are intentionally hidden in the production UI. Exercise
+  // their compatibility gesture from the page context, where programmatic
+  // activation does not rely on a visible hit target.
+  await popup.evaluate((targetVersion) => {
+    const input = document.querySelector("#pluginVersionOverride");
+    const save = document.querySelector("#versionSave");
+    if (!(input instanceof HTMLInputElement) || !(save instanceof HTMLButtonElement)) throw new Error("Missing self-build compatibility controls");
+    input.value = targetVersion;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    save.click();
+    save.click();
+    save.click();
+  }, value);
 }
 
 function attachPageErrors(page, errors) {

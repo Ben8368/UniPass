@@ -2,7 +2,7 @@ import { credentialForAccount, credentialAvailableForAccount } from "../../share
 import { importVaultKey, exportVaultKey, generateVaultKey } from "../../shared/vault-crypto";
 import { normalizeWebDavUrl } from "../../shared/url";
 import type { AccountListResult, UniPassAccount } from "../../shared/types";
-import type { AccountRef, VaultAccount, VaultApp, VaultCatalog, VaultCredential, VaultProfile } from "../../shared/vault";
+import type { AccountRef, VaultAccount, VaultApp, VaultCatalog, VaultConnection, VaultCredential, VaultProfile } from "../../shared/vault";
 import { WebDavBackend } from "./webdav-backend";
 import { VaultCore } from "./vault-core";
 
@@ -22,6 +22,7 @@ export interface WebDavVaultInput {
   endpoint: string;
   username: string;
   appPassword: string;
+  vaultKey?: string;
 }
 
 export interface WebDavVaultCatalogResult {
@@ -40,7 +41,7 @@ export async function testWebDavConnection(input: WebDavVaultInput): Promise<voi
   await backend.connect();
 }
 
-export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultProfile> {
+export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultConnection> {
   const endpoint = normalizeWebDavUrl(input.endpoint);
   const name = input.name.trim();
   const username = input.username.trim();
@@ -53,14 +54,19 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultPro
   const vaultId = existing?.id ?? crypto.randomUUID();
   const secrets = await readSecrets();
   let vaultKey = existing ? secrets[vaultId]?.vaultKey : undefined;
-  if (existing && !vaultKey) throw new Error("当前浏览器会话缺少 Vault Key，请重新添加 Vault");
-  if (!vaultKey) vaultKey = await exportVaultKey(await generateVaultKey());
+  if (!vaultKey) vaultKey = input.vaultKey?.trim();
+  if (existing && !vaultKey) throw new Error("当前浏览器会话缺少 Vault Key。请粘贴创建该 Vault 时保存的 Vault Key 后重新连接");
+  let recoveryKey: string | undefined;
+  if (!vaultKey) {
+    vaultKey = await exportVaultKey(await generateVaultKey());
+    recoveryKey = vaultKey;
+  }
   const profile: VaultProfile = { id: vaultId, name, backend: "webdav", enabled: true, endpoint };
   const core = new VaultCore(vaultId, new WebDavBackend(endpoint, username, input.appPassword), await importVaultKey(vaultKey));
   await core.initialize();
   await chrome.storage.local.set({ [PROFILES_KEY]: [...profiles.filter((candidate) => candidate.id !== vaultId), profile] });
   await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: { ...secrets, [vaultId]: { username, appPassword: input.appPassword, vaultKey } satisfies SessionSecret } });
-  return profile;
+  return { profile, ...(recoveryKey && { recoveryKey }) };
 }
 
 export async function removeVault(vaultId: string): Promise<void> {

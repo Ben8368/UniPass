@@ -65,6 +65,8 @@ input:focus, select:focus { border-color: var(--blue); outline: 3px solid #7088f
 .site-target-heading span { color: var(--subtle); font-size: 12px; }
 .site-target-inputs { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px 18px; }
 .security-note { display: flex; grid-column: 1 / -1; gap: 10px; padding: 12px 14px; border-radius: 10px; color: var(--muted); background: #7088ff12; font-size: 13px; }
+.security-note[hidden] { display: none; }
+.security-note input { margin-top: 7px; min-height: 36px; font-size: 12px; }
 .security-note strong { flex: 0 0 auto; color: var(--blue-soft); }
 .actions { display: flex; grid-column: 1 / -1; gap: 10px; flex-wrap: wrap; margin-top: 2px; padding-top: 2px; }
 button { min-height: 42px; border: 1px solid #ffffff2b; border-radius: 10px; padding: 9px 15px; color: inherit; background: #ffffff0d; font: inherit; font-weight: 650; cursor: pointer; }

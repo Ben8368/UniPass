@@ -14,3 +14,10 @@ test("Chrome smoke uses Puppeteer's extension loader and platform discovery", ()
   assert.match(source, /CHROME_BIN/);
   assert.match(source, /findChromeFromWindowsRegistry/);
 });
+
+test("Chrome smoke activates hidden self-build compatibility controls from page context", () => {
+  assert.match(source, /async function triggerSelfBuildCompatibilityGesture\(popup, value\)/);
+  assert.match(source, /await popup\.evaluate\(\(targetVersion\) => \{/);
+  assert.match(source, /save\.click\(\);\s*save\.click\(\);\s*save\.click\(\);/s);
+  assert.doesNotMatch(source, /await popup\.click\("#versionSave"\)/);
+});
