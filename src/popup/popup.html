@@ -124,12 +124,12 @@
             </button>
           </div>
           <form id="webdavForm" class="settings-form webdav-form">
-            <p class="settings-help">在这里连接密码库。地址、用户名和 App Password 只用于当前浏览器会话，不会写入本地配置。</p>
+            <p class="settings-help">地址、用户名和 App Password 仅用于本次浏览器会话，不会写入本地。</p>
             <label class="version-override" for="webdavVaultProfile">选择密码库
               <select id="webdavVaultProfile"><option value="">新建密码库</option></select>
             </label>
             <div id="webdavConnectionFields">
-              <label id="webdavVaultNameField" class="version-override" for="webdavVaultName">密码库名称
+              <label id="webdavVaultNameField" class="version-override" for="webdavVaultName">新密码库名称
                 <input id="webdavVaultName" type="text" autocomplete="off" placeholder="例如：我的 NAS 密码库" />
               </label>
               <label class="version-override" for="webdavUrl">WebDAV 地址
@@ -144,7 +144,7 @@
               <label id="webdavVaultKeyField" class="version-override" for="webdavVaultKey" hidden>Vault Key
                 <input id="webdavVaultKey" type="password" autocomplete="off" placeholder="仅在重新连接时粘贴已保存的 Vault Key" aria-describedby="webdavConnectionHelp" />
               </label>
-              <p id="webdavConnectionHelp" class="settings-help">建议使用专用账号或 App Password；保存会先申请当前 WebDAV 主机权限并测试连接。</p>
+              <p id="webdavConnectionHelp" class="settings-help">保存时将申请该 WebDAV 主机权限并测试连接。</p>
             </div>
             <p id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden></p>
             <div id="webdavRecoveryKey" class="webdav-recovery-key" hidden>
@@ -155,6 +155,7 @@
             <div id="legacyBuildSettings" hidden aria-hidden="true"></div>
           </form>
           <div id="webdavActions" class="settings-actions webdav-actions">
+            <button id="removeWebDavVault" class="settings-danger" type="button" hidden>删除密码库</button>
             <button id="testWebDav" class="settings-reset" type="button">测试连接</button>
             <button id="saveWebDav" class="settings-save" type="submit" form="webdavForm">保存并连接</button>
           </div>

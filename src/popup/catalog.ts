@@ -43,7 +43,7 @@ export class CatalogController {
 
   bind(): void {
     this.refresh.addEventListener("click", () => void this.refreshCurrentPage());
-    window.addEventListener("unipass-vault-connected", () => void this.refreshCurrentPage());
+    window.addEventListener("unipass-vault-changed", () => void this.refreshCurrentPage());
     get<HTMLFormElement>("searchForm").addEventListener("submit", (event) => { event.preventDefault(); void this.loadApps(get<HTMLInputElement>("searchInput").value); });
     this.back.addEventListener("click", () => this.showAppList());
   }

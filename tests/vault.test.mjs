@@ -89,3 +89,38 @@ test("an existing Vault without a session key refuses reconnect without changing
     globalThis.fetch = originalFetch;
   }
 });
+
+test("removing a Vault clears only extension state and its unused host permission", async () => {
+  const originalChrome = globalThis.chrome;
+  const originalFetch = globalThis.fetch;
+  const profile = { id: "vault-remove", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/dav/" };
+  const localWrites = [];
+  const sessionWrites = [];
+  const permissionRemovals = [];
+  let networkCalls = 0;
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get() { return { "unipass-vault-profiles": [profile] }; },
+        async set(value) { localWrites.push(value); },
+      },
+      session: {
+        async get() { return { "unipass-vault-session-secrets": { [profile.id]: { username: "fixture-user", appPassword: "fixture-only-app-password", vaultKey: "fixture-key" } } }; },
+        async set(value) { sessionWrites.push(value); },
+      },
+    },
+    permissions: { async remove(value) { permissionRemovals.push(value); return true; } },
+  };
+  globalThis.fetch = async () => { networkCalls += 1; throw new Error("Vault removal must not call WebDAV"); };
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    await vaultService.removeVault(profile.id);
+    assert.deepEqual(localWrites, [{ "unipass-vault-profiles": [] }]);
+    assert.deepEqual(sessionWrites, [{ "unipass-vault-session-secrets": {} }]);
+    assert.deepEqual(permissionRemovals, [{ origins: ["https://nas.example/*"] }]);
+    assert.equal(networkCalls, 0);
+  } finally {
+    globalThis.chrome = originalChrome;
+    globalThis.fetch = originalFetch;
+  }
+});
