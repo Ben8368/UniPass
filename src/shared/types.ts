@@ -48,10 +48,9 @@ export type BackgroundRequest =
   | { type: "pageContext" }
   | { type: "pageTheme" }
   | { type: "openApp"; appId: string | number; vaultId?: string; userScope: string }
-  | { type: "fillFromOverlay"; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope: string }
-  | { type: "fillFromPopup"; tabId: number; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope: string }
+  | { type: "fillFromOverlay"; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope?: string }
+  | { type: "fillFromPopup"; tabId: number; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope?: string }
   | { type: "enableAdvancedMode" }
-  | { type: "openVaultManager" }
   | { type: "startUniPassLogin" }
   | { type: "completeUniPassLogin" }
   | { type: "getPluginVersionSettings" }
@@ -66,6 +65,7 @@ export type BackgroundRequest =
   | { type: "getJupiterKeepalive"; userScope: string }
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }
   | { type: "listVaultProfiles" }
+  | { type: "requestWebDavPermission"; endpoint: string }
   | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string }
   | { type: "saveWebDavVault"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string }
   | { type: "removeVault"; vaultId: string }

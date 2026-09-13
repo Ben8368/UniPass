@@ -54,11 +54,16 @@ form, fieldset { min-inline-size: 0; }
 fieldset { border: 0; padding: 0; margin: 0; }
 fieldset:disabled { opacity: .48; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
-label { display: grid; gap: 6px; color: #d1d7e8; font-weight: 600; }
+label { display: grid; align-self: start; align-content: start; grid-auto-rows: max-content; gap: 6px; color: #d1d7e8; font-weight: 600; }
 input, select { width: 100%; min-height: 44px; border: 1px solid #ffffff2b; border-radius: 10px; padding: 10px 12px; color: inherit; background: var(--field); font: inherit; }
 input::placeholder { color: #788198; }
 input:focus, select:focus { border-color: var(--blue); outline: 3px solid #7088ff33; }
 .field-help { color: var(--subtle); font-size: 12px; font-weight: 400; line-height: 1.4; overflow-wrap: anywhere; }
+.site-name-field, .site-target-fields { grid-column: 1 / -1; }
+.site-target-fields { display: grid; gap: 12px; padding: 15px; border: 1px solid #ffffff16; border-radius: 12px; background: #ffffff05; }
+.site-target-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: #d1d7e8; }
+.site-target-heading span { color: var(--subtle); font-size: 12px; }
+.site-target-inputs { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px 18px; }
 .security-note { display: flex; grid-column: 1 / -1; gap: 10px; padding: 12px 14px; border-radius: 10px; color: var(--muted); background: #7088ff12; font-size: 13px; }
 .security-note strong { flex: 0 0 auto; color: var(--blue-soft); }
 .actions { display: flex; grid-column: 1 / -1; gap: 10px; flex-wrap: wrap; margin-top: 2px; padding-top: 2px; }
@@ -83,5 +88,7 @@ button.danger { color: var(--danger); }
   .steps { grid-template-columns: 1fr; }
   .step { padding: 10px 14px; }
   .form-grid { grid-template-columns: 1fr; }
+  .site-target-inputs { grid-template-columns: 1fr; }
+  .site-target-heading { align-items: start; flex-direction: column; gap: 3px; }
   .security-note, .actions { grid-column: auto; }
 }

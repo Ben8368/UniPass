@@ -48,7 +48,7 @@ export function initializePopup(environment: PopupEnvironment = {}): PopupHandle
   catalog = new CatalogController(
     setStatus,
     (id) => credentials.reveal(id),
-    (tabId, id, appUrl) => credentials.fill(tabId, id, appUrl),
+    (tabId, id, appUrl, accountRef) => credentials.fill(tabId, id, appUrl, accountRef),
     environment.pageContext,
     environment.openApp,
     environment.storage,

@@ -1,8 +1,9 @@
 import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, AvailableAppsResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, PageContext, UniPassAccount, UniPassApp } from "../shared/types";
-import type { AccountRef } from "../shared/vault";
+import type { AccountRef, VaultAccount, VaultApp } from "../shared/vault";
 import { appUrlMatches, isHttpsUrl, vaultTargetMatches } from "../shared/url";
 import { userScopeFor } from "../shared/user-scope";
 import { send } from "./bridge";
+import { CurrentPageAccountEditor } from "./current-page-account";
 import { accountIcon, button, empty, errorText, get, loading, textElement } from "./dom";
 import type { DomStorage } from "./dom";
 
@@ -19,21 +20,30 @@ export class CatalogController {
   private readonly back = get<HTMLButtonElement>("backToApps");
   private readonly refresh = get<HTMLButtonElement>("refreshCatalog");
   private readonly pageHost = get("pageHost");
+  private readonly currentPageEditor: CurrentPageAccountEditor;
   private storageKey: string | null = null;
   private userScope: string | null = null;
 
   constructor(
     private readonly reportStatus: (text: string, isError?: boolean) => void,
     private readonly reveal: (accountId: string | number) => Promise<void>,
-    private readonly fill: (tabId: number | undefined, accountId: string | number, appUrl?: string) => Promise<void>,
+    private readonly fill: (tabId: number | undefined, accountId: string | number, appUrl?: string, accountRef?: AccountRef) => Promise<void>,
     private readonly getPageContext?: () => Promise<PageContext>,
     private readonly openApp?: (appId: string | number, userScope: string, vaultId?: string) => Promise<void>,
     private readonly storage: DomStorage = window.localStorage,
     private readonly isAdvancedModeEnabled: () => boolean = () => false,
-  ) {}
+  ) {
+    this.currentPageEditor = new CurrentPageAccountEditor(
+      this.currentAccounts,
+      reportStatus,
+      () => this.refreshCurrentPage(),
+      () => window.dispatchEvent(new Event("unipass-open-webdav-settings")),
+    );
+  }
 
   bind(): void {
     this.refresh.addEventListener("click", () => void this.refreshCurrentPage());
+    window.addEventListener("unipass-vault-connected", () => void this.refreshCurrentPage());
     get<HTMLFormElement>("searchForm").addEventListener("submit", (event) => { event.preventDefault(); void this.loadApps(get<HTMLInputElement>("searchInput").value); });
     this.back.addEventListener("click", () => this.showAppList());
   }
@@ -62,9 +72,12 @@ export class CatalogController {
       if (!tab?.tabId || !tab.url || !isHttpsUrl(tab.url)) throw new Error("为保护凭据安全，仅支持 HTTPS 页面填充");
       this.pageHost.textContent = new URL(tab.url).hostname;
       let catalog = override ?? this.loadCached();
-      if (!override && (!catalog || Date.now() - catalog.syncedAt > TTL_MS)) catalog = await this.sync();
+      if (!catalog && !this.userScope) catalog = await this.loadVaultCatalog();
+      if (!override && this.userScope && (!catalog || Date.now() - catalog.syncedAt > TTL_MS)) catalog = await this.sync();
       if (!catalog) throw new Error("账号目录不可用，请重新同步");
-      await this.renderAccounts(this.currentAccounts, this.accountsForUrl(catalog.entries, tab.url), tab.tabId, tab.url);
+      const accounts = this.accountsForUrl(catalog.entries, tab.url);
+      if (!accounts.length) await this.currentPageEditor.render(tab, catalog.entries);
+      else await this.renderAccounts(this.currentAccounts, accounts, tab.tabId, tab.url);
     } catch (error) {
       this.currentAccounts.innerHTML = empty(errorText(error));
     }
@@ -82,7 +95,7 @@ export class CatalogController {
   }
 
   private async refreshCurrentPage(): Promise<void> {
-    try { await this.loadCurrentPage(await this.sync()); }
+    try { await this.loadCurrentPage(this.userScope ? await this.sync() : undefined); }
     catch (error) { this.currentAccounts.innerHTML = empty(errorText(error)); }
   }
 
@@ -112,6 +125,22 @@ export class CatalogController {
       this.reportStatus(`有 ${result.failures.length} 个应用同步失败，${previous ? "继续使用上次完整目录" : "本次结果不会缓存"}`, true);
       return previous ?? { syncedAt: 0, entries: result.entries };
     } finally { this.refresh.disabled = false; }
+  }
+
+  private async loadVaultCatalog(): Promise<CachedCatalog> {
+    const result = await send<{ entries: Array<{ app: VaultApp; accounts: VaultAccount[] }>; failures: Array<{ vaultId: string; error: string }> }>({ type: "vaultCatalog" });
+    if (result.failures.length) throw new Error(result.failures.map((failure) => failure.error).join("；"));
+    return {
+      syncedAt: Date.now(),
+      entries: result.entries.map(({ app, accounts }) => ({
+        appId: app.id,
+        appName: app.name,
+        appUrl: app.targets[0] ? `https://${app.targets[0].host}${app.targets[0].pathPrefix || "/"}` : "",
+        accounts: accounts.map((account) => ({ id: account.id, account: account.username, remark: account.remark, vaultId: account.vaultId, appId: account.appId, accountRef: { vaultId: account.vaultId, accountId: account.id } })),
+        vaultId: app.vaultId,
+        targets: app.targets,
+      })),
+    };
   }
 
   private accountsForUrl(entries: AccountCatalogEntry[], url: string): UniPassAccount[] {
@@ -202,9 +231,10 @@ export class CatalogController {
   private async renderAccounts(container: HTMLElement, accounts: UniPassAccount[], tabId?: number, appUrl?: string): Promise<void> {
     const candidates = accounts.filter((account) => (account.id ?? account.accountId ?? account.appAccountUserId) != null);
     if (!candidates.length) { container.innerHTML = empty("没有可用账号"); return; }
-    if (!this.userScope) throw new Error("尚未登录 UniPass");
     const refs = candidates.map((account) => this.accountRefFor(account));
-    const results = await send<CredentialAvailabilityResult[]>({ type: "credentialAvailability", accountIds: candidates.map((account) => (account.id ?? account.accountId ?? account.appAccountUserId) as string | number), accountRefs: refs, userScope: this.userScope });
+    const vaultOnly = refs.every((ref) => ref.vaultId !== "legacy-unipass");
+    if (!this.userScope && !vaultOnly) throw new Error("尚未登录 UniPass");
+    const results = await send<CredentialAvailabilityResult[]>({ type: "credentialAvailability", accountIds: candidates.map((account) => (account.id ?? account.accountId ?? account.appAccountUserId) as string | number), accountRefs: refs, userScope: this.userScope ?? "" });
     const availability = new Map(results.map((result) => [`${result.accountRef?.vaultId ?? "legacy-unipass"}:${String(result.accountRef?.accountId ?? result.accountId)}`, result]));
     const available = candidates.filter((account) => { const id = account.id ?? account.accountId ?? account.appAccountUserId; return id != null && availability.get(`${this.accountRefFor(account).vaultId}:${String(id)}`)?.status === "available"; });
     const failures = results.filter((result) => result.status === "error");
@@ -223,7 +253,7 @@ export class CatalogController {
       copy.title = "复制完整账号";
       copy.addEventListener("click", () => void this.copyUsername(username));
       actions.append(copy);
-      const fill = button("填入", "primary"); fill.disabled = tabId == null || !appUrl; fill.title = fill.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面"; fill.addEventListener("click", () => void this.fill(tabId, id, appUrl));
+      const fill = button("填入", "primary"); fill.disabled = tabId == null || !appUrl; fill.title = fill.disabled ? "请先打开该应用的 HTTPS 页面" : "填入当前页面"; fill.addEventListener("click", () => void this.fill(tabId, id, appUrl, ref));
       if (this.isAdvancedModeEnabled()) {
         const view = button("查看");
         view.addEventListener("click", () => void this.reveal(id));

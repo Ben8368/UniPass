@@ -24,11 +24,13 @@ test("WebDAV actions keep their positions while hiding build settings", () => {
   assert.match(settingsSource, /this\.restoreBaseline\.textContent = unlockReady \? "解锁高级模式" : "恢复默认"/);
 });
 
-test("WebDAV actions use a clear primary-first order and shared alignment", () => {
+test("WebDAV settings keep connection actions inside the secondary panel", () => {
   assert.match(
     popupHtml,
-    /id="versionSave"[^>]*>保存设置<\/button>\s*<button id="openVaultManager"[^>]*>打开 Vault 管理<\/button>\s*<button id="restorePluginVersionBaseline"/s,
+    /id="webdavVaultName"[\s\S]*id="webdavUrl"[\s\S]*id="webdavUsername"[\s\S]*id="webdavPassword"/s,
   );
+  assert.match(popupHtml, /id="testWebDav"[^>]*>测试连接<\/button>\s*<button id="saveWebDav"[^>]*>保存并连接<\/button>/s);
+  assert.doesNotMatch(popupHtml, /id="openVaultManager"/);
   assert.match(
     componentsCss,
     /\.settings-actions > button\s*\{[^}]*height:\s*34px;[^}]*min-height:\s*34px;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*margin:\s*0;/s,
@@ -37,15 +39,15 @@ test("WebDAV actions use a clear primary-first order and shared alignment", () =
   assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
 });
 
-test("settings dialog exposes an HTTPS-only WebDAV address field", () => {
-  assert.match(popupHtml, /<span class="eyebrow">WEBDAV<\/span><h2 id="versionDialogTitle">WebDAV 地址设置<\/h2>/);
+test("settings dialog exposes a session-only HTTPS WebDAV connection", () => {
+  assert.match(popupHtml, /<span class="eyebrow">WEBDAV VAULT<\/span><h2 id="versionDialogTitle">密码库设置<\/h2>/);
   assert.match(popupHtml, /id="webdavUrl" type="url"[^>]*placeholder="https:\/\/nas\.example\.com\/dav\//);
-  assert.match(popupHtml, /当前仅保存地址，不会上传密码或发起连接/);
+  assert.match(popupHtml, /只用于当前浏览器会话，不会写入本地配置/);
   assert.match(
     settingsSource,
     /url\.protocol !== "https:".*WebDAV 仅支持 HTTPS 地址/s,
   );
-  assert.match(settingsSource, /WEBDAV_URL_STORAGE_KEY = "unipass-webdav-url"/);
+  assert.doesNotMatch(settingsSource, /WEBDAV_URL_STORAGE_KEY|openVaultManager/);
 });
 
 test("dark online session badge removes its fill on hover", () => {

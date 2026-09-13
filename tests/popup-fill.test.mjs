@@ -7,13 +7,16 @@ const catalogSource = await readFile(new URL("../src/popup/catalog.ts", import.m
 const workerSource = await readFile(new URL("../src/background/service-worker.ts", import.meta.url), "utf8");
 const overlaySource = await readFile(new URL("../src/background/page-overlay.ts", import.meta.url), "utf8");
 const settingsSource = await readFile(new URL("../src/popup/settings.ts", import.meta.url), "utf8");
+const webdavSettingsSource = await readFile(new URL("../src/popup/webdav-settings.ts", import.meta.url), "utf8");
+const currentPageAccountSource = await readFile(new URL("../src/popup/current-page-account.ts", import.meta.url), "utf8");
 
 test("Popup delegates credential filling to the Service Worker", () => {
   assert.match(popupSource, /type: "fillFromPopup"/);
   assert.doesNotMatch(popupSource, /fallbackUsername/);
   assert.doesNotMatch(popupSource, /response\.password/);
   assert.doesNotMatch(popupSource, /chrome\.scripting\.executeScript/);
-  assert.match(workerSource, /case "fillFromPopup":\s+return withUserScope\(message\.userScope, \(\) => fillFromPopup\(message\)\)/);
+  assert.match(workerSource, /case "fillFromPopup":\s+return requiresUniPassScope\(message\) \? withUserScope\(message\.userScope \?\? "", \(\) => fillFromPopup\(message\)\) : fillFromPopup\(message\)/);
+  assert.match(workerSource, /function requiresUniPassScope[\s\S]*?message\.accountRef\.vaultId === "legacy-unipass"/);
   assert.match(overlaySource, /export async function fillFromPopup/);
   assert.match(overlaySource, /credential = await credentialForAccount\(message\.accountId\)/);
 });
@@ -22,11 +25,11 @@ test("Service Worker rechecks the user scope before filling a credential", () =>
   assert.match(overlaySource, /import \{ assertCurrentUserScope \} from "\.\/user-scope-guard"/);
   assert.match(
     overlaySource,
-    /credential = await credentialForAccount\([\s\S]*?await assertCurrentUserScope\(message\.userScope\)[\s\S]*?executeScript/,
+    /credential = await credentialForAccount\([\s\S]*?if \(requiresScope\) await assertCurrentUserScope\(message\.userScope \?\? ""\)[\s\S]*?executeScript/,
   );
   assert.match(
     overlaySource,
-    /if \(!injection\?\.documentId\)[\s\S]*?await assertCurrentUserScope\(message\.userScope\)[\s\S]*?sendMessage/,
+    /if \(!injection\?\.documentId\)[\s\S]*?if \(requiresScope\) await assertCurrentUserScope\(message\.userScope \?\? ""\)[\s\S]*?sendMessage/,
   );
 });
 
@@ -46,10 +49,23 @@ test("Popup Advanced mode is ephemeral and uses a handshaken Port", () => {
   assert.doesNotMatch(settingsSource, /chrome\.storage|localStorage.*advanced|advanced.*localStorage/i);
 });
 
-test("settings opens the Vault manager through the Service Worker in every UI context", () => {
-  assert.match(settingsSource, /type: "openVaultManager"/);
-  assert.doesNotMatch(settingsSource, /chrome\.tabs\.create/);
-  assert.match(workerSource, /case "openVaultManager":\s+return chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\("manage\.html"\) \}\)/);
+test("settings connects WebDAV inside the extension UI without opening a management tab", () => {
+  assert.match(settingsSource, /new WebDavSettingsController\(reportStatus\)/);
+  assert.doesNotMatch(settingsSource, /openVaultManager|chrome\.tabs\.create/);
+  assert.match(webdavSettingsSource, /type: "requestWebDavPermission"/);
+  assert.match(webdavSettingsSource, /type: "testWebDavConnection"/);
+  assert.match(webdavSettingsSource, /type: "saveWebDavVault"/);
+  assert.match(workerSource, /sender\.id !== chrome\.runtime\.id/);
+  assert.match(workerSource, /case "requestWebDavPermission":[\s\S]*chrome\.permissions\.request/);
+  assert.doesNotMatch(workerSource, /case "openVaultManager"/);
+});
+
+test("an empty current page offers an inline WebDAV account form", () => {
+  assert.match(catalogSource, /if \(!accounts\.length\) await this\.currentPageEditor\.render\(tab, catalog\.entries\)/);
+  assert.match(currentPageAccountSource, /这个页面还没有保存账号/);
+  assert.match(currentPageAccountSource, /type: "createVaultApp"/);
+  assert.match(currentPageAccountSource, /type: "createVaultAccount"/);
+  assert.match(currentPageAccountSource, /vaultTargetMatches\(target, url\)/);
 });
 
 test("application cards keep their icon and only view accounts in advanced mode", () => {

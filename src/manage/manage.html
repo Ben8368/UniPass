@@ -44,12 +44,17 @@
       <section class="card">
         <div class="section-heading"><span class="step-label">第 2 步</span><h2>添加网站</h2><p>告诉 UniPass 账号属于哪个网站。只填写登录网站的域名和可选路径。</p></div>
         <form id="appForm">
-          <fieldset id="appFields" class="form-grid" disabled>
+          <fieldset id="appFields" class="form-grid site-form" disabled>
             <legend class="sr-only">网站信息</legend>
             <input id="appId" type="hidden" />
-            <label>网站名称<input id="appName" required autocomplete="off" placeholder="例如：公司邮箱" /></label>
-            <label>HTTPS 主机<input id="appHost" required placeholder="example.com" autocomplete="off" /><span class="field-help">只填写域名，不要加 https://。</span></label>
-            <label>路径前缀（可选）<input id="appPath" placeholder="/login" autocomplete="off" /><span class="field-help">只有同一网站的特定路径需要区分时才填写。</span></label>
+            <label class="site-name-field">网站名称<input id="appName" required autocomplete="off" placeholder="例如：公司邮箱" /><span class="field-help">用于在 UniPass 中识别这个网站，之后可以随时修改。</span></label>
+            <div class="site-target-fields" role="group" aria-labelledby="siteTargetLabel">
+              <div class="site-target-heading"><strong id="siteTargetLabel">登录地址</strong><span>用于判断在哪些页面显示和填入账号。</span></div>
+              <div class="site-target-inputs">
+                <label>HTTPS 主机<input id="appHost" required placeholder="example.com" autocomplete="off" aria-describedby="appHostHelp" /><span id="appHostHelp" class="field-help">只填写域名，不要加 https://。</span></label>
+                <label>路径前缀（可选）<input id="appPath" placeholder="/login" autocomplete="off" aria-describedby="appPathHelp" /><span id="appPathHelp" class="field-help">只有同一网站的登录路径不同才填写。</span></label>
+              </div>
+            </div>
             <div class="actions"><button class="primary" type="submit">保存网站</button><button id="deleteApp" class="danger" type="button" disabled>删除网站</button></div>
           </fieldset>
         </form>

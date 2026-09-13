@@ -27,7 +27,7 @@ import {
   vaultCatalog,
 } from "./vault/vault-service";
 import { popupSessionUserFor } from "../shared/user-scope";
-import { isJupiterUrl } from "../shared/url";
+import { isJupiterUrl, webDavPermissionOrigin } from "../shared/url";
 import { appsWithAvailableCredentials, clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import {
   getJupiterKeepaliveSettings,
@@ -113,12 +113,10 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       });
     case "enableAdvancedMode":
       return Promise.resolve(advancedCapabilities.prepare(sender));
-    case "openVaultManager":
-      return chrome.tabs.create({ url: chrome.runtime.getURL("manage.html") }).then(() => undefined);
     case "fillFromOverlay":
-      return withUserScope(message.userScope, () => fillFromOverlay(sender, message));
+      return requiresUniPassScope(message) ? withUserScope(message.userScope ?? "", () => fillFromOverlay(sender, message)) : fillFromOverlay(sender, message);
     case "fillFromPopup":
-      return withUserScope(message.userScope, () => fillFromPopup(message));
+      return requiresUniPassScope(message) ? withUserScope(message.userScope ?? "", () => fillFromPopup(message)) : fillFromPopup(message);
     case "startUniPassLogin":
       return startUniPassLogin();
     case "completeUniPassLogin":
@@ -148,7 +146,7 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
     case "appUrl":
       return withUserScope(message.userScope, () => message.vaultId ? vaultAppUrl(message.vaultId, String(message.appId)) : appUrlForApp(message.appId));
     case "credentialAvailability":
-      return withUserScope(message.userScope, async () => {
+      return (!message.accountRefs?.length || message.accountRefs.some((accountRef) => accountRef.vaultId === "legacy-unipass")) ? withUserScope(message.userScope, async () => {
         if (!message.accountRefs?.length) return credentialAvailability(message.accountIds, message.userScope);
         const legacyRefs = message.accountRefs.filter((accountRef) => accountRef.vaultId === "legacy-unipass");
         const legacy = await credentialAvailability(legacyRefs.map((accountRef) => accountRef.accountId), message.userScope);
@@ -158,7 +156,11 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
           status: await credentialAvailableForRef(accountRef).then((available) => available ? "available" as const : "empty" as const).catch(() => "error" as const),
         })));
         return [...legacy, ...extra];
-      });
+      }) : Promise.all(message.accountRefs.map(async (accountRef) => ({
+        accountId: accountRef.accountId,
+        accountRef,
+        status: await credentialAvailableForRef(accountRef).then((available) => available ? "available" as const : "empty" as const).catch(() => "error" as const),
+      })));
     case "revealCredential":
       return withUserScope(message.userScope, async () => {
         advancedCapabilities.require(sender);
@@ -170,6 +172,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return withUserScope(message.userScope, () => setJupiterKeepalive(message.userScope, message.enabled, message.appId, message.accountId, message.username));
     case "listVaultProfiles":
       return requireVaultManager(sender, listVaultProfiles);
+    case "requestWebDavPermission":
+      return requireVaultManager(sender, () => chrome.permissions.request({ origins: [webDavPermissionOrigin(message.endpoint)] }));
     case "testWebDavConnection":
       return requireVaultManager(sender, () => testWebDavConnection(message));
     case "saveWebDavVault":
@@ -198,8 +202,12 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
 }
 
 function requireVaultManager<T>(sender: chrome.runtime.MessageSender, operation: () => Promise<T>): Promise<T> {
-  if (!sender.url || !sender.url.endsWith("/manage.html")) return Promise.reject(new Error("Vault 管理请求来源无效"));
+  if (sender.id !== chrome.runtime.id) return Promise.reject(new Error("Vault 管理请求来源无效"));
   return operation();
+}
+
+function requiresUniPassScope(message: Extract<BackgroundRequest, { type: "fillFromOverlay" | "fillFromPopup" }>): boolean {
+  return !message.accountRef || message.accountRef.vaultId === "legacy-unipass";
 }
 
 async function refreshAccountCatalog(): Promise<Awaited<ReturnType<typeof accountCatalog>>> {

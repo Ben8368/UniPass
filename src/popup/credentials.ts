@@ -49,9 +49,9 @@ export class CredentialController {
     if (this.fillFromOverlay) {
       try {
         const userScope = this.getUserScope();
-        if (!userScope) throw new Error("尚未登录 UniPass");
         const resolved = resolveAccountRef(accountId, accountRef);
-        const result = await send<FillResult>({ type: "fillFromOverlay", accountId: resolved.accountId, accountRef: resolved.ref, expectedAppUrl, userScope });
+        if (!userScope && (!resolved.ref || resolved.ref.vaultId === "legacy-unipass")) throw new Error("尚未登录 UniPass");
+        const result = await send<FillResult>({ type: "fillFromOverlay", accountId: resolved.accountId, accountRef: resolved.ref, expectedAppUrl, userScope: userScope ?? "" });
         if (!result?.ok) throw new Error(result?.error || "填充失败");
         this.reportStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");
       } catch (error) {
@@ -62,15 +62,15 @@ export class CredentialController {
     try {
       this.reportStatus("正在填入当前页面");
       const userScope = this.getUserScope();
-      if (!userScope) throw new Error("尚未登录 UniPass");
       const resolved = resolveAccountRef(accountId, accountRef);
+      if (!userScope && (!resolved.ref || resolved.ref.vaultId === "legacy-unipass")) throw new Error("尚未登录 UniPass");
       const result = await send<FillResult>({
         type: "fillFromPopup",
         tabId,
         accountId: resolved.accountId,
         accountRef: resolved.ref,
         expectedAppUrl,
-        userScope,
+        userScope: userScope ?? "",
       });
       if (!result?.ok) throw new Error(result?.error || "填充失败");
       this.reportStatus(result.usernameFilled ? "账号和密码已填入，未自动提交" : "密码已填入；未找到账号输入框");

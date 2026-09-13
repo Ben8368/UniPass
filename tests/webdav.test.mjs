@@ -26,8 +26,13 @@ test("management flow handles a denied optional host permission without saving",
   assert.match(manageHtml, /id="endpoint" required type="text" inputmode="url"/);
   assert.match(manageHtml, /<h1>设置密码库<\/h1>/);
   assert.match(manageHtml, /第 1 步.*连接 WebDAV/s);
-  assert.match(manageHtml, /id="appFields" class="form-grid" disabled/);
+  assert.match(manageHtml, /id="appFields" class="form-grid site-form" disabled/);
   assert.match(manageHtml, /id="accountFields" class="form-grid" disabled/);
+  assert.match(manageHtml, /class="site-name-field">网站名称[\s\S]*用于在 UniPass 中识别这个网站/);
+  assert.match(manageHtml, /class="site-target-fields" role="group" aria-labelledby="siteTargetLabel"/);
+  assert.match(manageHtml, /id="appHost"[\s\S]*aria-describedby="appHostHelp"/);
+  assert.match(manageCss, /label\s*\{[^}]*align-self:\s*start;[^}]*align-content:\s*start;[^}]*grid-auto-rows:\s*max-content/s);
+  assert.match(manageCss, /\.site-target-inputs\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.3fr\) minmax\(0, 1fr\)/s);
   assert.match(manageCss, /form \+ \.empty-state\s*\{[^}]*margin-top:\s*18px/s);
   assert.match(manageCss, /\.field-help\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(manageSource, /appFields\.disabled = !enabled/);

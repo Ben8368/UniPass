@@ -55,6 +55,7 @@ async function fillIntoTab(
   if (!tab.active || !tab.url || !isHttpsUrl(tab.url) || !appUrlMatches(message.expectedAppUrl, tab.url)) {
     return { ok: false, usernameFilled: false, passwordFilled: false, error: "当前标签页已切换或不属于该应用，已取消填充" };
   }
+  const requiresScope = !message.accountRef || message.accountRef.vaultId === "legacy-unipass";
   let credential: { username: string; password: string } | null = null;
   try {
     if (message.accountRef) credential = await credentialForRef(message.accountRef);
@@ -62,14 +63,14 @@ async function fillIntoTab(
     // Filling is a non-rollbackable side effect. Re-check after the credential
     // request and again immediately before the injection so a session switch
     // cannot be detected only after the old user's password was written.
-    await assertCurrentUserScope(message.userScope);
+    if (requiresScope) await assertCurrentUserScope(message.userScope ?? "");
     const current = await chrome.tabs.get(tabId);
     if (!current.active || !current.url || !appUrlMatches(message.expectedAppUrl, current.url)) {
       return { ok: false, usernameFilled: false, passwordFilled: false, error: "获取凭据期间标签页已切换或离开该应用，已取消填充" };
     }
     const [injection] = await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content-script.js"] });
     if (!injection?.documentId) throw new Error("无法确认凭据填充页面");
-    await assertCurrentUserScope(message.userScope);
+    if (requiresScope) await assertCurrentUserScope(message.userScope ?? "");
     return await chrome.tabs.sendMessage<FillRequest, FillResult>(tabId, {
       type: "fillCredentials",
       credential,

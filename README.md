@@ -26,7 +26,7 @@
 - `https://portal.unipass.top/*`：调用 UniPass API，并使用浏览器已有的 UniPass 登录会话。
 - `https://accounts.feishu.cn/*`：仅在用户点击“一键登录”后，对固定 Tec-IAM OAuth 客户端和回调地址点击“授权”；不读取飞书账号数据或授权码。
 - `https://jupiter.tec-do.com/*`：仅在用户主动开启木星保活后登录并同步会话。
-- `optional_host_permissions: https://*/*`：仅在用户在 Vault 管理页主动测试/保存 WebDAV URL 时申请对应的 `https://host/*`；不会申请常驻全站访问。
+- `optional_host_permissions: https://*/*`：仅在用户在扩展齿轮的密码库设置中主动测试/保存 WebDAV URL 时申请对应的 `https://host/*`；不会申请常驻全站访问。
 
 扩展不申请 `cookies`、`privacy`、`webNavigation`、`contextMenus`、`declarativeNetRequest` 或 `<all_urls>`，也不注册常驻 Content Script。
 
@@ -41,7 +41,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
-设置页提供 WebDAV 地址入口，独立的“打开 Vault 管理”页面负责连接测试、Vault 保存和 Application/Account/Credential CRUD。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
+齿轮中的“密码库设置”直接完成 WebDAV 地址、用户名、App Password 的测试和保存，不会新开标签页。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。当前 HTTPS 页面没有匹配账号时，可直接选择已连接 Vault 并保存账号与密码；扩展会使用当前域名创建或复用网站记录。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
 
 ## 项目治理
 

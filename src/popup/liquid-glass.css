@@ -364,7 +364,10 @@ main { background: transparent; }
 }
 
 :root .field-row input,
-:root .version-override input {
+:root .version-override input,
+:root .version-override select,
+:root .current-page-add-form input,
+:root .current-page-add-form select {
   border-color: var(--glass-line-soft);
   border-radius: 12px;
   background: rgba(255, 255, 255, .035);
