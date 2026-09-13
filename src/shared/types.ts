@@ -51,6 +51,7 @@ export type BackgroundRequest =
   | { type: "fillFromOverlay"; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope: string }
   | { type: "fillFromPopup"; tabId: number; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope: string }
   | { type: "enableAdvancedMode" }
+  | { type: "openVaultManager" }
   | { type: "startUniPassLogin" }
   | { type: "completeUniPassLogin" }
   | { type: "getPluginVersionSettings" }

@@ -11,6 +11,8 @@ async function load(entry) {
 
 const { WebDavBackend } = await load("src/background/vault/webdav-backend.ts");
 const { normalizeWebDavUrl, webDavPermissionOrigin } = await load("src/shared/url.ts");
+const manageHtml = await readFile(new URL("../src/manage/manage.html", import.meta.url), "utf8");
+const manageCss = await readFile(new URL("../src/manage/manage.css", import.meta.url), "utf8");
 const manageSource = await readFile(new URL("../src/manage/manage.ts", import.meta.url), "utf8");
 
 test("WebDAV URLs are HTTPS-only and permission is narrowed to one origin", () => {
@@ -21,6 +23,15 @@ test("WebDAV URLs are HTTPS-only and permission is narrowed to one origin", () =
 });
 
 test("management flow handles a denied optional host permission without saving", () => {
+  assert.match(manageHtml, /id="endpoint" required type="text" inputmode="url"/);
+  assert.match(manageHtml, /<h1>设置密码库<\/h1>/);
+  assert.match(manageHtml, /第 1 步.*连接 WebDAV/s);
+  assert.match(manageHtml, /id="appFields" class="form-grid" disabled/);
+  assert.match(manageHtml, /id="accountFields" class="form-grid" disabled/);
+  assert.match(manageCss, /form \+ \.empty-state\s*\{[^}]*margin-top:\s*18px/s);
+  assert.match(manageCss, /\.field-help\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(manageSource, /appFields\.disabled = !enabled/);
+  assert.match(manageSource, /accountFields\.disabled = !enabled/);
   assert.match(manageSource, /chrome\.permissions\.request/);
   assert.match(manageSource, /未授予 WebDAV 主机权限，已取消操作/);
 });

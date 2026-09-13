@@ -4,9 +4,14 @@ import type { AccountCatalogResult } from "../shared/types";
 import type { VaultAccount, VaultApp, VaultProfile } from "../shared/vault";
 
 const profilesElement = document.querySelector<HTMLDivElement>("#profiles")!;
+const profilesEmpty = document.querySelector<HTMLDivElement>("#profilesEmpty")!;
 const appsElement = document.querySelector<HTMLDivElement>("#apps")!;
+const appsEmpty = document.querySelector<HTMLDivElement>("#appsEmpty")!;
 const accountsElement = document.querySelector<HTMLDivElement>("#accounts")!;
+const accountsEmpty = document.querySelector<HTMLDivElement>("#accountsEmpty")!;
 const accountApp = document.querySelector<HTMLSelectElement>("#accountApp")!;
+const appFields = document.querySelector<HTMLFieldSetElement>("#appFields")!;
+const accountFields = document.querySelector<HTMLFieldSetElement>("#accountFields")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 let profiles: VaultProfile[] = [];
 let selectedVaultId = "";
@@ -27,6 +32,7 @@ async function load(): Promise<void> {
     profiles = await send<VaultProfile[]>({ type: "listVaultProfiles" });
     selectedVaultId = profiles.some((profile) => profile.id === selectedVaultId) ? selectedVaultId : profiles[0]?.id ?? "";
     renderProfiles();
+    setVaultDependentControls(Boolean(selectedVaultId));
     const result = selectedVaultId ? await send<{ entries: Array<{ app: VaultApp; accounts: VaultAccount[] }>; failures: Array<{ vaultId: string; error: string }> }>({ type: "vaultCatalog" }) : { entries: [], failures: [] };
     catalog = result.entries.filter((entry) => entry.app.vaultId === selectedVaultId).map((entry) => ({ appId: entry.app.id, appName: entry.app.name, appUrl: entry.app.targets[0] ? `https://${entry.app.targets[0].host}${entry.app.targets[0].pathPrefix || "/"}` : "", accounts: entry.accounts.map((account) => ({ id: account.id, account: account.username, remark: account.remark, vaultId: account.vaultId, appId: account.appId, accountRef: { vaultId: account.vaultId, accountId: account.id } })) }));
     if (result.failures.length) setStatus(result.failures.map((failure) => failure.error).join("；"), true);
@@ -98,8 +104,9 @@ async function removeSelectedVault(): Promise<void> { if (!selectedVaultId) retu
 async function deleteSelectedApp(): Promise<void> { const id = value("appId"); if (!id) return; try { await send<void>({ type: "deleteVaultApp", vaultId: selectedVaultId, appId: id }); resetApp(); await load(); } catch (error) { setStatus(errorText(error), true); } }
 async function deleteSelectedAccount(): Promise<void> { const id = value("accountId"); if (!id) return; try { await send<void>({ type: "deleteVaultAccount", vaultId: selectedVaultId, accountId: id }); resetAccount(); await load(); } catch (error) { setStatus(errorText(error), true); } }
 
-function renderProfiles(): void { profilesElement.replaceChildren(...profiles.map((profile) => { const row = document.createElement("button"); row.className = "row"; row.type = "button"; row.innerHTML = `<span>${escapeHtml(profile.name)}<small>${escapeHtml(profile.endpoint || "")}</small></span><span>${profile.id === selectedVaultId ? "当前" : "选择"}</span>`; row.addEventListener("click", () => { selectedVaultId = profile.id; void load(); }); return row; })); document.querySelector<HTMLButtonElement>("#removeVault")!.disabled = !selectedVaultId; }
-function renderCatalog(): void { const apps = catalog.map((entry) => entry); appsElement.replaceChildren(...apps.map((entry) => row(entry.appName, entry.appUrl, () => selectApp(entry)))); accountApp.replaceChildren(...apps.map((entry) => { const option = document.createElement("option"); option.value = String(entry.appId); option.textContent = entry.appName; return option; })); const accounts = apps.flatMap((entry) => entry.accounts); accountsElement.replaceChildren(...accounts.map((account) => row(account.account || "未命名", account.remark || entryName(apps, account.appId), () => selectAccount(account)))); }
+function renderProfiles(): void { profilesElement.replaceChildren(...profiles.map((profile) => { const row = document.createElement("button"); row.className = "row"; row.type = "button"; row.innerHTML = `<span>${escapeHtml(profile.name)}<small>${escapeHtml(profile.endpoint || "")}</small></span><span>${profile.id === selectedVaultId ? "当前" : "选择"}</span>`; row.addEventListener("click", () => { selectedVaultId = profile.id; void load(); }); return row; })); profilesElement.hidden = profiles.length === 0; profilesEmpty.hidden = profiles.length > 0; document.querySelector<HTMLButtonElement>("#removeVault")!.disabled = !selectedVaultId; }
+function renderCatalog(): void { const apps = catalog.map((entry) => entry); appsElement.replaceChildren(...apps.map((entry) => row(entry.appName, entry.appUrl, () => selectApp(entry)))); appsElement.hidden = apps.length === 0; appsEmpty.hidden = apps.length > 0; accountApp.replaceChildren(...apps.map((entry) => { const option = document.createElement("option"); option.value = String(entry.appId); option.textContent = entry.appName; return option; })); const accounts = apps.flatMap((entry) => entry.accounts); accountsElement.replaceChildren(...accounts.map((account) => row(account.account || "未命名", account.remark || entryName(apps, account.appId), () => selectAccount(account)))); accountsElement.hidden = accounts.length === 0; accountsEmpty.hidden = accounts.length > 0; }
+function setVaultDependentControls(enabled: boolean): void { appFields.disabled = !enabled; accountFields.disabled = !enabled; if (!enabled) { appsEmpty.textContent = "保存第 1 步的密码库后，就可以在这里添加第一个网站。"; accountsEmpty.textContent = "先添加一个网站，再在这里保存账号。"; } else if (!catalog.length) { appsEmpty.textContent = "还没有添加网站，请先填写上面的表单。"; accountsEmpty.textContent = "添加第一个网站后，就可以在这里保存账号。"; } }
 function selectApp(entry: AccountCatalogResult["entries"][number]): void { setValue("appId", String(entry.appId)); setValue("appName", entry.appName); const url = new URL(entry.appUrl); setValue("appHost", url.hostname); setValue("appPath", url.pathname === "/" ? "" : url.pathname); document.querySelector<HTMLButtonElement>("#deleteApp")!.disabled = false; }
 function selectAccount(account: AccountCatalogResult["entries"][number]["accounts"][number]): void { setValue("accountId", String(account.id ?? "")); setValue("accountUsername", account.account || account.email || ""); setValue("accountRemark", account.remark || ""); accountApp.value = String(account.appId || ""); document.querySelector<HTMLButtonElement>("#deleteAccount")!.disabled = false; }
 function resetApp(): void { ["appId", "appName", "appHost", "appPath"].forEach((id) => setValue(id, "")); document.querySelector<HTMLButtonElement>("#deleteApp")!.disabled = true; }

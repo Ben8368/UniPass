@@ -92,7 +92,9 @@ export class SettingsController {
     this.closeButton.addEventListener("click", () => this.close());
     this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); this.resetSaveClicks(); void this.saveOverride(); });
     this.saveButton.addEventListener("click", (event) => { event.preventDefault(); this.handleSaveClick(); });
-    this.openVaultManager.addEventListener("click", () => void chrome.tabs.create({ url: chrome.runtime.getURL("manage.html") }));
+    this.openVaultManager.addEventListener("click", () => {
+      void send<void>({ type: "openVaultManager" }).catch((error: unknown) => this.reportStatus(errorText(error), true));
+    });
     this.webdavUrl.addEventListener("input", () => this.updateRestoreButton());
     this.override.addEventListener("input", () => this.updateRestoreButton());
     this.restoreBaseline.addEventListener("click", () => {

@@ -46,6 +46,12 @@ test("Popup Advanced mode is ephemeral and uses a handshaken Port", () => {
   assert.doesNotMatch(settingsSource, /chrome\.storage|localStorage.*advanced|advanced.*localStorage/i);
 });
 
+test("settings opens the Vault manager through the Service Worker in every UI context", () => {
+  assert.match(settingsSource, /type: "openVaultManager"/);
+  assert.doesNotMatch(settingsSource, /chrome\.tabs\.create/);
+  assert.match(workerSource, /case "openVaultManager":\s+return chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\("manage\.html"\) \}\)/);
+});
+
 test("application cards keep their icon and only view accounts in advanced mode", () => {
   assert.match(catalogSource, /root\.className = "item app-item"/);
   assert.match(catalogSource, /root\.append\(this\.appIcon\(title, app\), main, actions\)/);

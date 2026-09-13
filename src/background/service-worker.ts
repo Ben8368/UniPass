@@ -113,6 +113,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       });
     case "enableAdvancedMode":
       return Promise.resolve(advancedCapabilities.prepare(sender));
+    case "openVaultManager":
+      return chrome.tabs.create({ url: chrome.runtime.getURL("manage.html") }).then(() => undefined);
     case "fillFromOverlay":
       return withUserScope(message.userScope, () => fillFromOverlay(sender, message));
     case "fillFromPopup":
