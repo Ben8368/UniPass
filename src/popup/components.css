@@ -40,6 +40,8 @@
 }
 .dialog-heading h2 { margin: 0; color: var(--text-0); font-size: 15px; font-weight: 700; }
 .settings-help { margin: 0; color: var(--text-2); font-size: 9.5px; line-height: 1.55; }
+.webdav-status { display: flex; align-items: center; min-height: 20px; margin: 0; padding: 5px 8px; border: 1px solid rgba(65, 211, 155, .28); border-radius: 6px; background: rgba(65, 211, 155, .08); color: var(--green-strong); font-size: 9.5px; font-weight: 700; line-height: 1.4; }
+.webdav-status.error { border-color: rgba(232, 92, 92, .34); background: rgba(232, 92, 92, .08); color: var(--danger-text); }
 .version-status { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: baseline; padding-top: 5px; color: var(--text-2); font-size: 9.5px; }
 .version-status strong { color: var(--green-text); font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
 .version-value { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
@@ -49,6 +51,7 @@
 .version-override { display: grid; gap: 5px; color: var(--text-1); font-size: 10px; font-weight: 700; }
 .version-override input, .version-override select { width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text-0); font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px; }
 .version-override input:focus, .version-override select:focus { border-color: rgba(65, 211, 155, .44); outline: none; box-shadow: 0 0 0 2px rgba(65, 211, 155, .10); }
+#webdavConnectionFields { display: grid; gap: 9px; }
 .settings-actions { display: flex; gap: 8px; align-items: center; }
 .settings-actions > button { display: inline-flex; height: 34px; min-height: 34px; align-items: center; justify-content: center; margin: 0; }
 .webdav-actions { justify-content: flex-end; margin-top: 9px; }

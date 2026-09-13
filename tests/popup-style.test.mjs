@@ -7,6 +7,7 @@ const liquidGlassCss = await readFile(new URL("../src/popup/liquid-glass.css", i
 const componentsCss = await readFile(new URL("../src/popup/components.css", import.meta.url), "utf8");
 const popupHtml = await readFile(new URL("../src/popup/popup.html", import.meta.url), "utf8");
 const settingsSource = await readFile(new URL("../src/popup/settings.ts", import.meta.url), "utf8");
+const webdavSettingsSource = await readFile(new URL("../src/popup/webdav-settings.ts", import.meta.url), "utf8");
 
 test("build time uses the compact YYMMDD-HHMM format", () => {
   assert.equal(formatBuildTime(new Date(2026, 8, 10, 21, 12)), "260910-2112");
@@ -30,6 +31,10 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
     /id="webdavVaultName"[\s\S]*id="webdavUrl"[\s\S]*id="webdavUsername"[\s\S]*id="webdavPassword"/s,
   );
   assert.match(popupHtml, /id="testWebDav"[^>]*>测试连接<\/button>\s*<button id="saveWebDav"[^>]*>保存并连接<\/button>/s);
+  assert.match(popupHtml, /id="webdavConnectionFields"[\s\S]*id="webdavVaultNameField"[^>]*>密码库名称[\s\S]*id="webdavVaultName"/s);
+  assert.match(popupHtml, /id="webdavActions" class="settings-actions webdav-actions"/);
+  assert.match(popupHtml, /<\/div>\s*<p id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden><\/p>/s);
+  assert.match(popupHtml, /id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden/);
   assert.doesNotMatch(popupHtml, /id="openVaultManager"/);
   assert.match(
     componentsCss,
@@ -37,6 +42,19 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
   );
   assert.doesNotMatch(componentsCss, /\.settings-save\s*\{[^}]*margin-top:\s*3px/s);
   assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
+});
+
+test("an existing WebDAV profile hides connection fields and actions until creating a vault", () => {
+  assert.match(webdavSettingsSource, /const creating = !selected;/);
+  assert.match(webdavSettingsSource, /this\.fields\.hidden = !creating;/);
+  assert.match(webdavSettingsSource, /this\.actions\.hidden = !creating;/);
+  assert.match(webdavSettingsSource, /this\.showStatus\("正在测试 WebDAV 连接…"\);/);
+  assert.match(webdavSettingsSource, /this\.showStatus\("正在保存并连接 WebDAV 密码库…"\);/);
+  assert.match(webdavSettingsSource, /this\.test\.textContent = this\.operation === "test" \? "测试中…" : "测试连接";/);
+  assert.doesNotMatch(webdavSettingsSource, /saveGesture|advancedModeUnlock/);
+  assert.match(settingsSource, /this\.saveButton\.addEventListener\("click", \(event\) => \{ event\.preventDefault\(\); this\.handleSaveClick\(\); \}\);/);
+  assert.match(componentsCss, /\.webdav-status\s*\{[^}]*display:\s*flex/s);
+  assert.match(componentsCss, /#webdavConnectionFields\s*\{[^}]*display:\s*grid/s);
 });
 
 test("settings dialog exposes a session-only HTTPS WebDAV connection", () => {
