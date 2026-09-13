@@ -34,6 +34,25 @@ test("management flow handles a denied optional host permission without saving",
   assert.match(manageSource, /accountFields\.disabled = !enabled/);
   assert.match(manageSource, /chrome\.permissions\.request/);
   assert.match(manageSource, /未授予 WebDAV 主机权限，已取消操作/);
+  assert.match(manageHtml, /<p id="status" class="status" role="status" aria-live="polite" hidden><\/p>/);
+  assert.match(manageHtml, /<div class="actions">[\s\S]*<p id="status"/);
+  assert.match(manageCss, /\.status\s*\{[^}]*display:\s*inline-flex/s);
+  const testVaultBody = manageSource.match(/async function testVault\(\): Promise<void> \{([\s\S]*?)\n\}\n\nasync function saveVault/)?.[1] || "";
+  assert.match(testVaultBody, /setStatus\("WebDAV 连接和目录权限检查通过"\);/);
+  assert.doesNotMatch(testVaultBody, /finally \{ setValue\("appPassword", ""\); \}/);
+  assert.match(manageSource, /async function saveVault\(\): Promise<void>[\s\S]*?finally \{ if \(saved\) setValue\("appPassword", ""\); \}/);
+  assert.match(manageSource, /appPassword: rawValue\("appPassword"\)/);
+});
+
+test("WebDAV authentication failures identify the server-side 401 without exposing credentials", async () => {
+  const calls = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    return new Response("", { status: 401 });
+  };
+  const backend = new WebDavBackend("https://nas.example/dav", "dav-user", "fixture-only-app-password");
+  await assert.rejects(backend.connect(), /HTTP 401/);
+  assert.equal(calls[0].init.headers.Authorization.includes("fixture-only"), false);
 });
 
 test("WebDAV backend uses ETag preconditions and never puts plaintext in the request body", async () => {
@@ -51,6 +70,9 @@ test("WebDAV backend uses ETag preconditions and never puts plaintext in the req
   };
   const backend = new WebDavBackend("https://nas.example/dav", "dav-user", "fixture-only-app-password");
   await backend.connect();
+  const manifest = await backend.getManifest();
+  assert.equal(manifest.id, "manifest");
+  assert.equal(calls.find((call) => call.init.method === "GET").url, "https://nas.example/dav/objects/manifest.json");
   const listed = await backend.list();
   assert.deepEqual(listed, [{ id: "app_1234567890123456", revision: '"old"' }]);
   const stored = await backend.get("app_1234567890123456");

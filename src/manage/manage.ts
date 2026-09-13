@@ -47,19 +47,20 @@ async function testVault(): Promise<void> {
     await send<void>({ type: "testWebDavConnection", ...input });
     setStatus("WebDAV 连接和目录权限检查通过");
   } catch (error) { setStatus(errorText(error), true); }
-  finally { setValue("appPassword", ""); }
 }
 
 async function saveVault(): Promise<void> {
+  let saved = false;
   try {
     const input = vaultInput();
     await requestOrigin(input.endpoint);
     const profile = await send<VaultProfile>({ type: "saveWebDavVault", vaultId: selectedVaultId || undefined, ...input });
     selectedVaultId = profile.id;
+    saved = true;
     setStatus("WebDAV Vault 已保存");
     await load();
   } catch (error) { setStatus(errorText(error), true); }
-  finally { setValue("appPassword", ""); }
+  finally { if (saved) setValue("appPassword", ""); }
 }
 
 async function requestOrigin(endpoint: string): Promise<void> {
@@ -69,7 +70,7 @@ async function requestOrigin(endpoint: string): Promise<void> {
 
 function vaultInput() {
   const endpoint = normalizeWebDavUrl(value("endpoint"));
-  return { name: value("vaultName"), endpoint, username: value("username"), appPassword: value("appPassword") };
+  return { name: value("vaultName"), endpoint, username: value("username"), appPassword: rawValue("appPassword") };
 }
 
 async function saveApp(): Promise<void> {
@@ -115,7 +116,8 @@ function findAccount(id: string): VaultAccount | undefined { return catalog.flat
 function entryName(apps: AccountCatalogResult["entries"], appId: string | number | undefined): string { return apps.find((entry) => String(entry.appId) === String(appId))?.appName || "无备注"; }
 function row(title: string, meta: string, onClick: () => void): HTMLElement { const element = document.createElement("button"); element.type = "button"; element.className = "row"; const main = document.createElement("span"); main.textContent = title; const small = document.createElement("small"); small.textContent = meta; main.append(small); element.append(main); element.addEventListener("click", onClick); return element; }
 function value(id: string): string { return document.querySelector<HTMLInputElement>(`#${id}`)?.value.trim() || ""; }
+function rawValue(id: string): string { return document.querySelector<HTMLInputElement>(`#${id}`)?.value || ""; }
 function setValue(id: string, value: string): void { const element = document.querySelector<HTMLInputElement>(`#${id}`); if (element) element.value = value; }
-function setStatus(message: string, isError = false): void { status.textContent = message; status.classList.toggle("error", isError); }
+function setStatus(message: string, isError = false): void { status.hidden = false; status.textContent = message; status.classList.toggle("error", isError); }
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "操作失败"; }
 function escapeHtml(value: string): string { return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] || character)); }

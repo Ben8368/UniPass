@@ -38,7 +38,7 @@
           <label>WebDAV 用户名<input id="username" required autocomplete="username" /><span class="field-help">填写 WebDAV 服务专用账号。</span></label>
           <label>应用密码（App Password）<input id="appPassword" required type="password" autocomplete="new-password" /><span class="field-help">填写 WebDAV 应用密码，不是 NAS 管理员登录密码。</span></label>
           <div class="security-note"><strong>安全提示</strong><span>认证信息只在当前浏览器会话中使用；关闭浏览器后，重新连接时需要再次填写。</span></div>
-          <div class="actions"><button id="testVault" class="secondary" type="button">测试连接</button><button class="primary" type="submit">保存并继续</button><button id="removeVault" class="danger" type="button" disabled>删除密码库</button></div>
+          <div class="actions"><button id="testVault" class="secondary" type="button">测试连接</button><button class="primary" type="submit">保存并继续</button><button id="removeVault" class="danger" type="button" disabled>删除密码库</button><p id="status" class="status" role="status" aria-live="polite" hidden></p></div>
         </form>
       </section>
       <section class="card">
@@ -72,7 +72,6 @@
         <div id="accountsEmpty" class="empty-state">先添加一个网站，再在这里保存账号。</div>
         <div id="accounts" class="list"></div>
       </section>
-      <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
     <script type="module" src="manage.js"></script>
   </body>

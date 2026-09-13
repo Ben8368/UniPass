@@ -79,14 +79,14 @@ export class WebDavBackend implements VaultBackend {
   }
 
   private objectUrl(id: string): string {
-    if (!/^[A-Za-z0-9_-]{16,160}$/.test(id)) throw new Error("Vault 对象 ID 无效");
+    if (id !== "manifest" && !/^[A-Za-z0-9_-]{16,160}$/.test(id)) throw new Error("Vault 对象 ID 无效");
     return new URL(`${OBJECTS_DIRECTORY}${encodeURIComponent(id)}.json`, this.endpoint).toString();
   }
 
   private async request(method: string, input: string, headers: Record<string, string> = {}, body?: Uint8Array): Promise<Response> {
     const requestHeaders = { ...headers, Authorization: this.authorizationHeader(), Accept: "application/json, application/xml" };
     const response = await fetchWithTimeout(input, { method, headers: requestHeaders, body: body ? body.slice().buffer as ArrayBuffer : undefined });
-    if (response.status === 401) throw new Error("WebDAV 认证失败，请检查专用账号或 App Password");
+    if (response.status === 401) throw new Error("WebDAV 认证失败（HTTP 401），服务器拒绝了当前账号或密码；请确认地址是完整的 WebDAV 路径");
     if (response.status === 403) throw new Error("WebDAV 权限不足，请检查目标目录权限");
     return response;
   }

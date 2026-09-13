@@ -70,7 +70,8 @@ button.primary { border-color: #8ea0ff; color: #fff; background: var(--blue); }
 button.primary:hover:not(:disabled) { background: #8195ff; }
 button.secondary { background: #ffffff0d; }
 button.danger { color: var(--danger); }
-.status { min-height: 24px; margin: 6px 4px 0; color: #b9c5ff; }
+.status { display: inline-flex; flex: 1 1 360px; align-items: center; min-height: 42px; margin: 0; padding: 9px 13px; border: 1px solid #7088ff55; border-radius: 10px; color: #c5d0ff; background: #171c29f5; overflow-wrap: anywhere; }
+.status[hidden] { display: none; }
 .status.error { color: #ffb1ba; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
