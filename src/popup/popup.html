@@ -125,6 +125,7 @@
           </div>
           <form id="webdavForm" class="settings-form webdav-form">
             <p class="settings-help">地址、用户名和 App Password 仅用于本次浏览器会话，不会写入本地。</p>
+            <label class="version-override" for="webdavVaultMode">连接方式<select id="webdavVaultMode"><option value="create">创建新密码库</option><option value="existing">连接已有密码库</option><option value="reconnect">重新连接本地密码库</option></select></label>
             <label class="version-override" for="webdavVaultProfile">选择密码库
               <select id="webdavVaultProfile"><option value="">新建密码库</option></select>
             </label>
@@ -152,7 +153,18 @@
               <p>它不会写入本地配置；浏览器会话结束后，重新连接这个密码库需要它。</p>
               <input id="webdavRecoveryKeyValue" type="text" readonly aria-label="Vault Key" />
             </div>
-            <div id="legacyBuildSettings" hidden aria-hidden="true"></div>
+'            <div id="webdavLocalUnlock" class="webdav-recovery-key">
+              <strong>本地解锁（可选）</strong>
+              <p>仅将当前连接材料加密保存在本机；解锁密码不会保存。达到失败次数上限后需重新连接。</p>
+              <input id="webdavLocalUnlockPassword" type="password" autocomplete="new-password" placeholder="本地解锁密码" />
+              <div class="settings-actions">
+                <button id="enableWebDavLocalUnlock" class="settings-save" type="button">启用本地解锁</button>
+                <button id="unlockWebDavLocalUnlock" class="settings-reset" type="button">解锁</button>
+                <button id="lockWebDavVault" class="settings-reset" type="button">立即锁定</button>
+                <button id="disableWebDavLocalUnlock" class="settings-danger" type="button">停用</button>
+              </div>
+            </div>
+            <div id="legacyBuildSettings" hidden aria-hidden="true"></div>'
           </form>
           <div id="webdavActions" class="settings-actions webdav-actions">
             <button id="removeWebDavVault" class="settings-danger" type="button" hidden>删除密码库</button>

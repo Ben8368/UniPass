@@ -27,3 +27,30 @@ CI 和 Release 分别运行 normal 与 hardened job；normal job 运行 `npm run
 当前范围关闭：Jupiter 适配计划逐步取消，“Disable keepalive cleanup”不再作为当前交付门槛。
 
 自动化 smoke 通过不等于以上真实登录验收通过；未实际执行的项目必须保持未勾选，并在交付报告中标为 Manual / 未验收。
+## WebDAV Vault 多设备验收（本轮新增）
+
+以下步骤必须在真实 WebDAV/NAS 或 Nextcloud 上由维护者手工执行，自动测试不能替代。
+
+### Device A
+
+1. 在独立 Chrome Profile 加载同一份 `dist/`，选择“创建新密码库”。
+2. 输入 Vault Name、HTTPS WebDAV URL、WebDAV username 和 App Password；保存并连接。
+3. 将只显示一次的 Vault Key 保存到离线安全位置；新增 App、Account 和 password，确认当前页 Fill 成功。
+
+### Device B / clean profile
+
+1. 用全新 Chrome Profile 加载扩展，选择“连接已有密码库”，不要选择创建模式。
+2. 输入本地显示名称、相同 WebDAV URL、WebDAV App Password 和 Device A 的 Vault Key。
+3. 确认读取到 Device A 的 App/Account；确认 catalog、当前页 Fill，以及开启 Advanced capability 后 Reveal/Copy 可用。
+4. 使用错误 Vault Key 重试，确认失败、不新增本地 profile、远端无 PUT/覆盖。
+5. 删除远端 manifest 后分别验证：空 `objects/` 允许创建新 Vault；已有 `app_`、`account_` 或 `credential_` object 时创建被拒绝。
+
+### Conflict and coexistence
+
+- Device A/B 同时编辑同一 Account，确认后一方收到 conflict，而不是静默覆盖。
+- 在 UniPass 登出后，仍能使用已连接 WebDAV Vault 展示 Apps、当前页 Fill 和 Advanced Reveal/Copy；Legacy account 仍要求有效 userScope。
+- 验证权限拒绝、401/403、timeout、损坏 ciphertext 和不兼容 WebDAV 响应都显示为 error，不显示为 empty password。
+
+### Current status
+
+真实 NAS/Nextcloud 双设备、权限拒绝、冲突及本机 Chrome authenticated smoke 尚未在本轮实际执行；不得将 `npm run verify` 结果视为这些人工项目已通过。

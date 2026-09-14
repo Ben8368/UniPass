@@ -71,11 +71,11 @@ test("a disconnected Vault keeps its accounts protected behind an explicit recon
 });
 
 test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {
-  assert.match(webdavSettingsSource, /const reconnecting = Boolean\(selected\);/);
+  assert.match(webdavSettingsSource, /const reconnecting = this\.mode\.value === "reconnect" && Boolean\(selected\);/);
   assert.match(webdavSettingsSource, /this\.fields\.hidden = false;/);
   assert.match(webdavSettingsSource, /this\.actions\.hidden = false;/);
   assert.match(webdavSettingsSource, /this\.nameField\.hidden = reconnecting;/);
-  assert.match(webdavSettingsSource, /this\.vaultKeyField\.hidden = !reconnecting;/);
+  assert.match(webdavSettingsSource, /this\.vaultKeyField\.hidden = this\.mode\.value === "create";/);
   assert.match(webdavSettingsSource, /this\.remove\.hidden = !reconnecting;/);
   assert.match(webdavSettingsSource, /window\.confirm\(`删除“\$\{selected\.name\}”吗？这只会移除扩展中的连接信息，不会删除 WebDAV 服务器上的加密数据。`\)/);
   assert.match(webdavSettingsSource, /type: "removeVault", vaultId: selected\.id/);

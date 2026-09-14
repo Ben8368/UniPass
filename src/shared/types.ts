@@ -61,14 +61,18 @@ export type BackgroundRequest =
   | { type: "accountsForApp"; appId: string | number; vaultId?: string; userScope: string }
   | { type: "appUrl"; appId: string | number; vaultId?: string; userScope: string }
   | { type: "credentialAvailability"; accountIds: Array<string | number>; accountRefs?: AccountRef[]; userScope: string }
-  | { type: "revealCredential"; accountId: string | number; accountRef?: AccountRef; userScope: string }
+  | { type: "revealCredential"; accountId: string | number; accountRef?: AccountRef; userScope?: string }
   | { type: "getJupiterKeepalive"; userScope: string }
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }
   | { type: "listVaultProfiles" }
   | { type: "listVaultConnectionStates" }
+  | { type: "enableLocalUnlock"; vaultId: string; password: string }
+  | { type: "unlockVaultLocally"; vaultId: string; password: string }
+  | { type: "disableLocalUnlock"; vaultId: string }
+  | { type: "lockVault"; vaultId: string }
   | { type: "requestWebDavPermission"; endpoint: string }
-  | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string }
-  | { type: "saveWebDavVault"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string; vaultKey?: string }
+  | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string; mode?: "create" | "existing" | "reconnect"; vaultId?: string; vaultKey?: string }
+  | { type: "saveWebDavVault"; mode: "create" | "existing" | "reconnect"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string; vaultKey?: string }
   | { type: "removeVault"; vaultId: string }
   | { type: "vaultCatalog" }
   | { type: "createVaultApp"; vaultId: string; app: Omit<VaultApp, "id" | "vaultId"> }
@@ -77,7 +81,7 @@ export type BackgroundRequest =
   | { type: "createVaultAccount"; vaultId: string; account: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string } }
   | { type: "updateVaultAccount"; vaultId: string; account: VaultAccount }
   | { type: "deleteVaultAccount"; vaultId: string; accountId: string }
-  | { type: "updateVaultCredential"; vaultId: string; accountId: string; credential: Credential };
+  | { type: "updateVaultCredential"; vaultId: string; accountId: string; credential: { password: string } };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }

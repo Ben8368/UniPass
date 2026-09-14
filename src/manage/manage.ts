@@ -54,7 +54,7 @@ async function saveVault(): Promise<void> {
   try {
     const input = vaultInput();
     await requestOrigin(input.endpoint);
-    const connection = await send<VaultConnection>({ type: "saveWebDavVault", vaultId: selectedVaultId || undefined, ...input });
+    const connection = await send<VaultConnection>({ type: "saveWebDavVault", mode: selectedVaultId ? "reconnect" : "create", vaultId: selectedVaultId || undefined, ...input });
     selectedVaultId = connection.profile.id;
     saved = true;
     if (connection.recoveryKey) {
@@ -99,7 +99,7 @@ async function saveAccount(): Promise<void> {
       const existing = findAccount(id);
       if (!existing) throw new Error("账号不存在");
       await send<VaultAccount>({ type: "updateVaultAccount", vaultId: selectedVaultId, account: { ...existing, appId: accountApp.value, username: value("accountUsername"), remark: value("accountRemark") || undefined } });
-      if (value("accountPassword")) await send<void>({ type: "updateVaultCredential", vaultId: selectedVaultId, accountId: id, credential: { username: value("accountUsername"), password: value("accountPassword") } });
+      if (value("accountPassword")) await send<void>({ type: "updateVaultCredential", vaultId: selectedVaultId, accountId: id, credential: { password: value("accountPassword") } });
     }
     resetAccount(); setStatus("账号和凭据已保存"); await load();
   } catch (error) { setStatus(errorText(error), true); }

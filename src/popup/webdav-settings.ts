@@ -7,6 +7,7 @@ export class WebDavSettingsController {
   private readonly form = get<HTMLFormElement>("webdavForm");
   private readonly profile = get<HTMLSelectElement>("webdavVaultProfile");
   private readonly fields = get("webdavConnectionFields");
+  private readonly mode = get<HTMLSelectElement>("webdavVaultMode");
   private readonly actions = get("webdavActions");
   private readonly nameField = get("webdavVaultNameField");
   private readonly name = get<HTMLInputElement>("webdavVaultName");
@@ -21,6 +22,11 @@ export class WebDavSettingsController {
   private readonly status = get<HTMLParagraphElement>("webdavStatus");
   private readonly recovery = get("webdavRecoveryKey");
   private readonly recoveryKey = get<HTMLInputElement>("webdavRecoveryKeyValue");
+  private readonly localUnlockPassword = get<HTMLInputElement>("webdavLocalUnlockPassword");
+  private readonly enableLocalUnlock = get<HTMLButtonElement>("enableWebDavLocalUnlock");
+  private readonly unlockLocalUnlock = get<HTMLButtonElement>("unlockWebDavLocalUnlock");
+  private readonly lock = get<HTMLButtonElement>("lockWebDavVault");
+  private readonly disableLocalUnlock = get<HTMLButtonElement>("disableWebDavLocalUnlock");
   private profiles: VaultProfile[] = [];
   private busy = false;
   private operation: "test" | "save" | "remove" | null = null;
@@ -32,6 +38,11 @@ export class WebDavSettingsController {
     this.remove.addEventListener("click", () => void this.removeVault());
     this.test.addEventListener("click", () => void this.testConnection());
     this.profile.addEventListener("change", () => this.applySelectedProfile());
+    this.mode.addEventListener("change", () => this.applySelectedProfile());
+    this.enableLocalUnlock.addEventListener("click", () => void this.localUnlockAction("enable"));
+    this.unlockLocalUnlock.addEventListener("click", () => void this.localUnlockAction("unlock"));
+    this.lock.addEventListener("click", () => void this.localUnlockAction("lock"));
+    this.disableLocalUnlock.addEventListener("click", () => void this.localUnlockAction("disable"));
   }
 
   async open(vaultId?: string): Promise<void> {
@@ -39,7 +50,8 @@ export class WebDavSettingsController {
       this.showStatus("");
       this.profiles = await send<VaultProfile[]>({ type: "listVaultProfiles" });
       this.profile.replaceChildren(new Option("新建密码库", ""), ...this.profiles.map((profile) => new Option(profile.name, profile.id)));
-      this.profile.value = vaultId && this.profiles.some((profile) => profile.id === vaultId) ? vaultId : (this.profiles[0]?.id ?? "");
+      this.profile.value = vaultId && this.profiles.some((profile) => profile.id === vaultId) ? vaultId : "";
+      this.mode.value = vaultId ? "reconnect" : "create";
       this.applySelectedProfile();
     } catch (error) {
       this.reportStatus(errorText(error), true);
@@ -48,7 +60,7 @@ export class WebDavSettingsController {
 
   setDisabled(disabled: boolean): void {
     this.busy = disabled;
-    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.remove, this.test, this.save]) control.disabled = disabled;
+    for (const control of [this.profile, this.mode, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.localUnlockPassword, this.enableLocalUnlock, this.unlockLocalUnlock, this.lock, this.disableLocalUnlock, this.remove, this.test, this.save]) control.disabled = disabled;
   }
 
   clearSensitiveState(): void {
@@ -60,16 +72,16 @@ export class WebDavSettingsController {
 
   private applySelectedProfile(): void {
     const selected = this.profiles.find((profile) => profile.id === this.profile.value);
-    const reconnecting = Boolean(selected);
+    const reconnecting = this.mode.value === "reconnect" && Boolean(selected);
     this.fields.hidden = false;
     this.actions.hidden = false;
     this.nameField.hidden = reconnecting;
-    this.vaultKeyField.hidden = !reconnecting;
+    this.vaultKeyField.hidden = this.mode.value === "create";
     this.remove.hidden = !reconnecting;
     this.recoveryKey.value = "";
     this.recovery.hidden = true;
-    this.name.value = selected?.name ?? "";
-    this.endpoint.value = selected?.endpoint ?? "";
+    this.name.value = reconnecting ? (selected?.name ?? "") : "";
+    this.endpoint.value = reconnecting ? (selected?.endpoint ?? "") : "";
     this.username.value = "";
     this.appPassword.value = "";
     this.vaultKey.value = "";
@@ -79,7 +91,8 @@ export class WebDavSettingsController {
 
   private input() {
     return {
-      vaultId: this.profile.value || undefined,
+      mode: this.mode.value as "create" | "existing" | "reconnect",
+      vaultId: this.mode.value === "reconnect" ? this.profile.value || undefined : undefined,
       name: this.name.value.trim(),
       endpoint: normalizeWebDavUrl(this.endpoint.value),
       username: this.username.value.trim(),
@@ -112,7 +125,7 @@ export class WebDavSettingsController {
   private async saveVault(): Promise<void> {
     if (this.busy) return;
     this.setBusy(true, "save");
-    this.showStatus(this.profile.value ? "正在重新连接 WebDAV 密码库…" : "正在保存并连接 WebDAV 密码库…");
+    this.showStatus(this.mode.value === "reconnect" ? "正在重新连接 WebDAV 密码库…" : "正在连接 WebDAV 密码库…");
     let saved = false;
     try {
       const input = this.input();
@@ -133,8 +146,22 @@ export class WebDavSettingsController {
     }
   }
 
+  private async localUnlockAction(action: "enable" | "unlock" | "lock" | "disable"): Promise<void> {
+    const vaultId = this.profile.value;
+    if (!vaultId || this.busy) return;
+    try {
+      if (action === "enable") await send<void>({ type: "enableLocalUnlock", vaultId, password: this.localUnlockPassword.value });
+      else if (action === "unlock") await send<void>({ type: "unlockVaultLocally", vaultId, password: this.localUnlockPassword.value });
+      else if (action === "lock") await send<void>({ type: "lockVault", vaultId });
+      else await send<void>({ type: "disableLocalUnlock", vaultId });
+      this.localUnlockPassword.value = "";
+      this.showStatus(action === "enable" ? "本地解锁已启用" : action === "unlock" ? "Vault 已解锁" : action === "lock" ? "Vault 已锁定" : "本地解锁已停用");
+    } catch (error) { this.showStatus(errorText(error), true); }
+  }
+
   private async removeVault(): Promise<void> {
     const selected = this.profiles.find((profile) => profile.id === this.profile.value);
+    const reconnecting = this.mode.value === "reconnect" && Boolean(selected);
     if (this.busy || !selected) return;
     if (!window.confirm(`删除“${selected.name}”吗？这只会移除扩展中的连接信息，不会删除 WebDAV 服务器上的加密数据。`)) return;
     this.setBusy(true, "remove");
@@ -155,9 +182,9 @@ export class WebDavSettingsController {
   private setBusy(busy: boolean, operation: "test" | "save" | "remove" | null = null): void {
     this.busy = busy;
     this.operation = busy ? operation : null;
-    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.remove, this.test, this.save]) control.disabled = busy;
+    for (const control of [this.profile, this.mode, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.localUnlockPassword, this.enableLocalUnlock, this.unlockLocalUnlock, this.lock, this.disableLocalUnlock, this.remove, this.test, this.save]) control.disabled = busy;
     this.test.textContent = this.operation === "test" ? "测试中…" : "测试连接";
-    this.save.textContent = this.operation === "save" ? "保存中…" : (this.profile.value ? "重新连接" : "保存并连接");
+    this.save.textContent = this.operation === "save" ? "保存中…" : (this.mode.value === "reconnect" ? "重新连接" : "保存并连接");
     this.remove.textContent = this.operation === "remove" ? "删除中…" : "删除密码库";
   }
 

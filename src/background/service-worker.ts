@@ -8,7 +8,7 @@ import {
   setPluginVersionOverride,
 } from "../shared/api";
 import {
-  credentialAvailableForRef,
+  credentialAvailabilityForRef,
   credentialForRef,
   createVaultAccount,
   createVaultApp,
@@ -16,6 +16,10 @@ import {
   deleteVaultApp,
   listVaultProfiles,
   listVaultConnectionStates,
+  enableLocalUnlock,
+  unlockVaultLocally,
+  disableLocalUnlock,
+  lockVault,
   removeVault,
   saveWebDavVault,
   testWebDavConnection,
@@ -108,10 +112,7 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
     case "pageTheme":
       return pageThemeFor(sender);
     case "openApp":
-      return withUserScope(message.userScope, async () => {
-        if (message.vaultId) return chrome.tabs.create({ url: await vaultAppUrl(message.vaultId, String(message.appId)) });
-        return openApp(message.appId);
-      });
+      return message.vaultId ? vaultAppUrl(message.vaultId, String(message.appId)).then((url) => chrome.tabs.create({ url })) : withUserScope(message.userScope, () => openApp(message.appId));
     case "enableAdvancedMode":
       return Promise.resolve(advancedCapabilities.prepare(sender));
     case "fillFromOverlay":
@@ -129,10 +130,10 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
     case "readSelfBuildFile":
       return readSelfBuildFile(message.path);
     case "accountCatalog":
-      return withUserScope(message.userScope, refreshAccountCatalog);
+      return message.userScope ? withUserScope(message.userScope, refreshAccountCatalog) : refreshWebDavCatalog();
     case "listApps":
-      return withUserScope(message.userScope, async () => {
-        const legacy = await appsWithAvailableCredentials(message.keyword, message.userScope);
+      return (async () => {
+        const legacy = message.userScope ? await appsWithAvailableCredentials(message.keyword, message.userScope) : { apps: [], totalApps: 0, excludedEmptyCredentialApps: 0, excludedVerificationFailureApps: 0, excludedDirectoryFailureApps: 0 };
         const extra = (await vaultApps()).filter((app) => !message.keyword.trim() || app.name.toLowerCase().includes(message.keyword.trim().toLowerCase())).map((app) => ({
           id: app.id,
           name: app.name,
@@ -141,29 +142,22 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
           targets: app.targets,
         }));
         return { ...legacy, apps: [...legacy.apps, ...extra], totalApps: legacy.totalApps + extra.length };
-      });
+      })();
     case "accountsForApp":
-      return withUserScope(message.userScope, () => message.vaultId ? vaultAccounts(message.vaultId, String(message.appId)) : accountsForApp(message.appId));
+      return message.vaultId ? vaultAccounts(message.vaultId, String(message.appId)) : withUserScope(message.userScope, () => accountsForApp(message.appId));
     case "appUrl":
-      return withUserScope(message.userScope, () => message.vaultId ? vaultAppUrl(message.vaultId, String(message.appId)) : appUrlForApp(message.appId));
+      return message.vaultId ? vaultAppUrl(message.vaultId, String(message.appId)) : withUserScope(message.userScope, () => appUrlForApp(message.appId));
     case "credentialAvailability":
-      return (!message.accountRefs?.length || message.accountRefs.some((accountRef) => accountRef.vaultId === "legacy-unipass")) ? withUserScope(message.userScope, async () => {
-        if (!message.accountRefs?.length) return credentialAvailability(message.accountIds, message.userScope);
-        const legacyRefs = message.accountRefs.filter((accountRef) => accountRef.vaultId === "legacy-unipass");
-        const legacy = await credentialAvailability(legacyRefs.map((accountRef) => accountRef.accountId), message.userScope);
-        const extra = await Promise.all(message.accountRefs.filter((accountRef) => accountRef.vaultId !== "legacy-unipass").map(async (accountRef) => ({
-          accountId: accountRef.accountId,
-          accountRef,
-          status: await credentialAvailableForRef(accountRef).then((available) => available ? "available" as const : "empty" as const).catch(() => "error" as const),
-        })));
-        return [...legacy, ...extra];
-      }) : Promise.all(message.accountRefs.map(async (accountRef) => ({
-        accountId: accountRef.accountId,
-        accountRef,
-        status: await credentialAvailableForRef(accountRef).then((available) => available ? "available" as const : "empty" as const).catch(() => "error" as const),
-      })));
+      return (async () => {
+        const refs = message.accountRefs ?? message.accountIds.map((accountId) => ({ vaultId: "legacy-unipass", accountId: String(accountId) }));
+        const legacy = refs.filter((ref) => ref.vaultId === "legacy-unipass");
+        const extra = refs.filter((ref) => ref.vaultId !== "legacy-unipass");
+        const legacyResult = legacy.length ? await withUserScope(message.userScope, () => credentialAvailability(legacy.map((ref) => ref.accountId), message.userScope)) : [];
+        const extraResult = await Promise.all(extra.map(async (accountRef) => ({ accountId: accountRef.accountId, accountRef, status: await credentialAvailabilityForRef(accountRef).catch(() => "error" as const) })));
+        return [...legacyResult, ...extraResult];
+      })();
     case "revealCredential":
-      return withUserScope(message.userScope, async () => {
+      return message.accountRef && message.accountRef.vaultId !== "legacy-unipass" ? (async () => { advancedCapabilities.require(sender); return credentialForRef(message.accountRef!); })() : withUserScope(message.userScope ?? "", async () => {
         advancedCapabilities.require(sender);
         return message.accountRef ? credentialForRef(message.accountRef) : credentialForAccount(message.accountId);
       });
@@ -207,6 +201,11 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
 function requireVaultManager<T>(sender: chrome.runtime.MessageSender, operation: () => Promise<T>): Promise<T> {
   if (sender.id !== chrome.runtime.id) return Promise.reject(new Error("Vault 管理请求来源无效"));
   return operation();
+}
+
+async function refreshWebDavCatalog(): Promise<Awaited<ReturnType<typeof accountCatalog>>> {
+  const webdav = await vaultCatalog();
+  return { entries: webdav.entries.map(({ app, accounts }) => ({ appId: app.id, appName: app.name, appUrl: app.targets[0] ? `https://${app.targets[0].host}${app.targets[0].pathPrefix || "/"}` : "", accounts: accounts.map((account) => ({ id: account.id, account: account.username, remark: account.remark, vaultId: account.vaultId, appId: account.appId, accountRef: { vaultId: account.vaultId, accountId: account.id } })), vaultId: app.vaultId, targets: app.targets })), failures: webdav.failures.map((failure) => ({ appId: failure.vaultId, appName: "WebDAV Vault", error: failure.error, vaultId: failure.vaultId })), complete: webdav.failures.length === 0 };
 }
 
 function requiresUniPassScope(message: Extract<BackgroundRequest, { type: "fillFromOverlay" | "fillFromPopup" }>): boolean {

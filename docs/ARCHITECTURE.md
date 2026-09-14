@@ -60,9 +60,9 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ### Vault 数据流
 
-1. `VaultService` 为每个 WebDAV `VaultProfile` 创建一个 `VaultCore` 和一个 `WebDavBackend`；`vaultId + objectId` 构成业务引用，Legacy 使用固定 `legacy-unipass` vaultId。未来 Cloudflare/GitHub 只需实现同一 `VaultBackend`，不改变 Core、Crypto、URL matcher 或 Fill。
-2. `VaultCore` 将 App、Account、Credential 分成独立对象。PROPFIND 目录只加载 App/Account，Credential 只在用户操作或后台可用性检查时按需 GET；当前 URL 始终在本地用 `VaultTarget` 匹配，不发送到 WebDAV。
-3. `VaultCrypto` 在 Service Worker 内把对象序列化为 `EncryptedVaultObject` 后才交给 Backend。Backend 只见 ciphertext；WebDAV ETag 被作为 opaque revision，PUT/DELETE 使用条件请求，409/412 返回 `VaultConflictError`。
+1. `VaultService` 为每个 WebDAV `VaultProfile` 创建一个 `VaultCore` 和一个 `WebDavBackend`；`vaultId + objectId` 构成业务引用，Legacy 使用固定 `legacy-unipass` vaultId。创建新 Vault 与连接已有 Vault 是两个明确状态机：新设备通过 endpoint + WebDAV credential + Vault Key 读取远端加密 manifest，vaultId 始终来自 manifest，不重新生成。未来 Cloudflare/GitHub 只需实现同一 `VaultBackend`，不改变 Core、Crypto、URL matcher 或 Fill。
+2. `VaultCore` 将 App、Account、Credential 分成独立对象。`VaultAccount.username` 是 username 单一事实源，Credential object 只保存 password（读取兼容旧的可选 username 字段）。PROPFIND 目录只加载 App/Account，Credential 只在用户操作或后台可用性检查时按需 GET；当前 URL 始终在本地用 `VaultTarget` 匹配，不发送到 WebDAV。
+3. `VaultCrypto` 在 Service Worker 内把对象序列化为 `EncryptedVaultObject` 后才交给 Backend。Backend 只见 ciphertext；WebDAV ETag 被作为 opaque revision，PUT/DELETE 使用条件请求，409/412 返回 `VaultConflictError`。业务删除写入加密 tombstone：Account 删除先 tombstone Credential 再 tombstone Account；有活跃 Account 的 App 拒绝删除。WebDAV 多对象写不具备数据库事务保证，失败会明确暴露并保留可恢复状态。
 
 ### 密码学核心
 

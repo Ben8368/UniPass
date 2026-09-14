@@ -99,3 +99,34 @@ test("an empty WebDAV collection does not treat a fallback GET response as a man
   assert.equal(await backend.getManifest(), null);
   assert.equal(calls.some((call) => call.init.method === "GET"), false);
 });
+
+test("MKCOL 409 is not accepted unless PROPFIND verifies objects collection", async () => {
+  let objectChecks = 0;
+  globalThis.fetch = async (input, init) => {
+    if (init.method === "PROPFIND" && String(input).endsWith("/objects/")) {
+      objectChecks += 1;
+      return new Response("", { status: 404 });
+    }
+    if (init.method === "PROPFIND") return new Response("", { status: 207 });
+    if (init.method === "MKCOL") return new Response("", { status: 409 });
+    throw new Error(`unexpected ${init.method}`);
+  };
+  const backend = new WebDavBackend("https://nas.example/dav", "dav-user", "fixture-only-app-password");
+  await assert.rejects(backend.connect(), /WebDAV/);
+  assert.ok(objectChecks >= 2);
+});
+
+test("PROPFIND parser accepts arbitrary DAV namespace prefixes", async () => {
+  globalThis.fetch = async (_input, init) => {
+    if (init.method === "PROPFIND") return new Response("<ns1:multistatus xmlns:ns1='DAV:'><ns1:response><ns1:href>/dav/objects/app_1234567890123456.json</ns1:href><ns1:getetag>&quot;etag&quot;</ns1:getetag></ns1:response></ns1:multistatus>", { status: 207 });
+    throw new Error(`unexpected ${init.method}`);
+  };
+  const backend = new WebDavBackend("https://nas.example/dav", "dav-user", "fixture-only-app-password");
+  assert.deepEqual(await backend.list(), [{ id: "app_1234567890123456", revision: '"etag"' }]);
+});
+
+test("physical WebDAV delete requires compare-and-delete revision", async () => {
+  globalThis.fetch = async (_input, init) => new Response("", { status: 204 });
+  const backend = new WebDavBackend("https://nas.example/dav", "dav-user", "fixture-only-app-password");
+  await assert.rejects(backend.delete("app_1234567890123456", undefined), /expectedRevision/);
+});

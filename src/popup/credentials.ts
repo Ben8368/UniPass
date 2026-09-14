@@ -35,9 +35,9 @@ export class CredentialController {
       if (!this.isAdvancedModeEnabled()) throw new Error("当前上下文未启用高级模式");
       this.reportStatus("正在获取凭据");
       const userScope = this.getUserScope();
-      if (!userScope) throw new Error("尚未登录 UniPass");
       const resolved = resolveAccountRef(accountId, accountRef);
-      this.show(await send<Credential>({ type: "revealCredential", accountId: resolved.accountId, accountRef: resolved.ref, userScope }));
+      if (!userScope && (!resolved.ref || resolved.ref.vaultId === "legacy-unipass")) throw new Error("尚未登录 UniPass");
+      this.show(await send<Credential>({ type: "revealCredential", accountId: resolved.accountId, accountRef: resolved.ref, userScope: userScope ?? undefined }));
       this.reportStatus("高级模式已开启，密码只保留在当前界面内存中");
     } catch (error) {
       this.reportStatus(errorText(error), true);
