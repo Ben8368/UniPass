@@ -12,14 +12,14 @@
 - 设置页恢复默认后，在固定 `1400ms` 内连续两击保存会显示“解锁高级模式”。Popup/浮层完成 `enableAdvancedMode` 后以 `sender.documentId` 绑定 `unipass-advanced-mode` Port；断开、页面结束或 Service Worker 重启即撤销。Normal 仍完整显示账号并允许选择、打开应用和 Fill，未进入时只隐藏 Reveal UI。Self Build 的隐藏三击、版本范围、WASM/manifest 复用和 fail-closed 规则保持不变。
 - UniPass AES-ECB-PKCS7 解密及 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换已迁入随扩展本地打包的 Rust `credential-core.wasm`；availability 在 WASM 内只返回状态，Jupiter keepalive 从 UniPass ciphertext 直接得到 transformed password，JS 不再接触原始 Jupiter 明文。普通构建固定 `stable-v1` 材料，hardened 构建由 `UNIPASS_HARDEN_SEED` 生成 3～5 个 fragment、重排和轻量算术重构；JS/WASM 仍完全自包含。该措施只提高静态分析成本，动态调试仍可能取得运行时材料或明文；继续使用客户端解密是当前产品计划。
 - Rust 构建统一启用 workspace、Cargo registry 与 toolchain path remap；hardened 构建默认要求 Binaryen `wasm-opt`，缺失即 fail closed，报告与 integrity 仅写入 `artifacts/hardened/`。普通 WASM 保持 byte-for-byte reproducibility；hardened seed 还选择 4 种有限等价 reconstruction strategy 之一。
-- 保留只读 `legacy-unipass`，新增每个 `VaultProfile` 一个 WebDAV backend；Core/Crypto/Backend 独立，禁止双写和 Legacy 迁移，Cloudflare/GitHub 仅留接口。
+- Legacy UniPass 仍在使用；`credential-core` 新增职责冻结为 Legacy compatibility，新的 Vault AES-GCM 等能力不迁入 WASM；退役与 core 收缩见 [ADR 0003](docs/ADR/0003-crypto-boundary-and-legacy-retirement.md) / [TD-009](docs/TECH_DEBT.md)。`legacy-unipass` 与 WebDAV 分离，禁止双写。
 - WebDAV 后台状态机明确区分创建新 Vault、接入远端 Vault 和重新连接本地 profile；UI 选择器只列“添加密码库”和真实 profile，添加时以 Vault Key 是否填写区分新建/接入。新设备通过 endpoint + WebDAV credential + Vault Key 解密远端 manifest，vaultId 来自 manifest。认证与 key 只存 session；可选本地解锁仅保存加密封装，失败锁定并可显式清除。新建时只显示一次恢复用 Vault Key，缺失时 fail closed。对象分离，ETag 冲突 fail closed。
 - 验证：`npm test` 通过 126 项，TypeScript、Rust QA、标准构建和产物审计通过。新增跨设备 Vault、manifest fail-closed、username 单源、tombstone、availability error、MKCOL/XML 和本地解锁覆盖；真实 WebDAV、权限拒绝、Legacy+WebDAV 联测和 Chrome smoke 待验收。
 - 本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
 ## 近期优先级
 
-1. 完成用户 scope 隔离、Service Worker/WASM 重启和 Self Derived Build 独立 Profile 验收；Jupiter 适配按计划逐步取消，客户端解密方案维持现状。
+1. 完成 scope、SW/WASM 重启与 Self Build 验收；Jupiter 适配取消。
 
 ## 按需入口
 

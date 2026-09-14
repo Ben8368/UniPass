@@ -12,7 +12,7 @@
 
 ## 未偿还债务
 
-- 无。
+- TD-009 Legacy UniPass 退役与 credential-core 收缩（P2，未偿还）：Legacy 被正式判定可退役后，删除 Legacy UniPass/Jupiter 运行能力、`credential-core` 中仅为 Legacy 存在的实现和 ABI、无用途的 Rust crypto dependencies，并清理对应测试和 artifact 规则；检查并清理 WASM build/hardening/audit/release infrastructure；若项目不再需要 WASM，删除 WASM-specific CSP 和构建特殊路径；同步 `ARCHITECTURE.md`、`SECURITY.md`、`CONTEXT.md`，运行完整验证并完成适用的真实 Chrome 人工验收。详见 [ADR 0003](ADR/0003-crypto-boundary-and-legacy-retirement.md)。
 
 ## 已归档
 
