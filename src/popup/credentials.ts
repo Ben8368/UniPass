@@ -26,6 +26,7 @@ export class CredentialController {
   bind(): void {
     get<HTMLButtonElement>("copyUsername").addEventListener("click", () => void this.copy("username"));
     get<HTMLButtonElement>("copyPassword").addEventListener("click", () => void this.copy("password"));
+    get<HTMLButtonElement>("closeCredential").addEventListener("click", () => this.clear());
     this.showPassword.addEventListener("change", () => { this.password.type = this.showPassword.checked ? "text" : "password"; });
     window.addEventListener("pagehide", () => this.clear());
   }

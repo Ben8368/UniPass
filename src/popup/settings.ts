@@ -172,14 +172,15 @@ export class SettingsController {
   }
 
   private async open(vaultId?: string): Promise<void> {
-    this.dialog.classList.remove("hidden");
-    this.settingsButton.setAttribute("aria-expanded", "true");
     this.localBuildVersion.textContent = "检查中";
     const manifest = chrome.runtime.getManifest();
     this.localBuildTime.textContent = manifest.version_name || "无构建描述";
     this.networkVersion.textContent = "检查中";
     this.networkVersionSource.textContent = "";
     await this.webdavSettings.open(vaultId);
+    if (this.disposed) return;
+    this.dialog.classList.remove("hidden");
+    this.settingsButton.setAttribute("aria-expanded", "true");
     this.closeButton.focus();
     try {
       this.apply(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));

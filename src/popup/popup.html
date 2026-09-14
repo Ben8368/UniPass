@@ -79,10 +79,12 @@
               <span>应用目录</span>
               <small>选择应用以查看账号</small>
             </div>
-            <button id="backToApps" class="link-button hidden" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-              返回应用列表
-            </button>
+            <div id="appAccountsHeading" class="secondary-heading hidden">
+              <button id="backToApps" class="icon-button" type="button" title="返回应用列表" aria-label="返回应用列表">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <div><span class="eyebrow">已选应用</span><h2 id="selectedAppTitle">应用账号</h2></div>
+            </div>
             <div id="apps" class="list" aria-live="polite"></div>
             <div id="appAccounts" class="list hidden" aria-live="polite"></div>
           </section>
@@ -98,7 +100,12 @@
                   <p>仅保存在当前弹窗内存中</p>
                 </div>
               </div>
-              <span id="credentialCountdown" class="countdown"></span>
+              <div class="credential-controls">
+                <span id="credentialCountdown" class="countdown"></span>
+                <button id="closeCredential" class="icon-button" type="button" title="清除并关闭" aria-label="清除并关闭临时凭据">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+                </button>
+              </div>
             </div>
             <label for="credentialUsername">账号</label>
             <div class="field-row">
@@ -116,18 +123,19 @@
       </main>
 
       <div id="versionSettingsDialog" class="dialog-backdrop hidden" role="presentation">
-        <section class="version-dialog" role="dialog" aria-modal="true" aria-labelledby="versionDialogTitle">
+        <section class="version-dialog webdav-dialog" role="dialog" aria-modal="true" aria-labelledby="versionDialogTitle" aria-describedby="versionDialogDescription">
           <div class="dialog-heading">
-            <div><span class="eyebrow">WEBDAV VAULT</span><h2 id="versionDialogTitle">密码库设置</h2></div>
+            <div><span class="eyebrow">密码库</span><h2 id="versionDialogTitle">WebDAV 连接</h2><p id="versionDialogDescription">选择当前要完成的操作，只填写必需信息。</p></div>
             <button id="closeVersionSettings" class="icon-button" type="button" title="关闭" aria-label="关闭">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
           <form id="webdavForm" class="settings-form webdav-form">
-            <p class="settings-help">地址、用户名和 App Password 仅用于本次浏览器会话，不会写入本地。</p>
-            <label class="version-override" for="webdavVaultMode">连接方式<select id="webdavVaultMode"><option value="create">创建新密码库</option><option value="existing">连接已有密码库</option><option value="reconnect">重新连接本地密码库</option></select></label>
-            <label class="version-override" for="webdavVaultProfile">选择密码库
-              <select id="webdavVaultProfile"><option value="">新建密码库</option></select>
+            <label id="webdavVaultProfileField" class="version-override" for="webdavVaultProfile">选择密码库
+              <select id="webdavVaultProfile">
+                <option value="__create__">新建密码库</option>
+                <option value="__existing__">连接已有密码库</option>
+              </select>
             </label>
             <div id="webdavConnectionFields">
               <label id="webdavVaultNameField" class="version-override" for="webdavVaultName">新密码库名称
@@ -136,16 +144,19 @@
               <label class="version-override" for="webdavUrl">WebDAV 地址
                 <input id="webdavUrl" type="url" autocomplete="off" placeholder="https://nas.example.com/dav/" />
               </label>
-              <label class="version-override" for="webdavUsername">WebDAV 用户名
-                <input id="webdavUsername" type="text" autocomplete="username" placeholder="WebDAV 专用账号" />
+              <div class="webdav-auth-row">
+                <label class="version-override" for="webdavUsername">WebDAV 用户名
+                  <input id="webdavUsername" type="text" autocomplete="username" placeholder="专用账号" />
+                </label>
+                <label class="version-override" for="webdavPassword">App Password
+                  <input id="webdavPassword" type="password" autocomplete="new-password" placeholder="应用密码" aria-describedby="webdavConnectionHelp" />
+                </label>
+              </div>
+              <label id="webdavVaultKeyField" class="version-override" for="webdavVaultKey"><span>Vault Key</span>
+                <input id="webdavVaultKey" type="password" autocomplete="off" placeholder="粘贴创建时保存的 Vault Key" aria-describedby="webdavTaskHint webdavConnectionHelp" hidden />
+                <small id="webdavTaskHint" class="webdav-vault-key-help">创建新的加密密码库，完成后请立即保存 Vault Key。</small>
               </label>
-              <label class="version-override" for="webdavPassword">App Password
-                <input id="webdavPassword" type="password" autocomplete="new-password" placeholder="填写 WebDAV 应用密码" aria-describedby="webdavConnectionHelp" />
-              </label>
-              <label id="webdavVaultKeyField" class="version-override" for="webdavVaultKey" hidden>Vault Key
-                <input id="webdavVaultKey" type="password" autocomplete="off" placeholder="仅在重新连接时粘贴已保存的 Vault Key" aria-describedby="webdavConnectionHelp" />
-              </label>
-              <p id="webdavConnectionHelp" class="settings-help">保存时将申请该 WebDAV 主机权限并测试连接。</p>
+              <p id="webdavConnectionHelp" class="settings-help">认证信息仅用于本次浏览器会话，不会写入本地；连接时会申请主机权限并检查目录访问。</p>
             </div>
             <p id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden></p>
             <div id="webdavRecoveryKey" class="webdav-recovery-key" hidden>
@@ -153,23 +164,27 @@
               <p>它不会写入本地配置；浏览器会话结束后，重新连接这个密码库需要它。</p>
               <input id="webdavRecoveryKeyValue" type="text" readonly aria-label="Vault Key" />
             </div>
-'            <div id="webdavLocalUnlock" class="webdav-recovery-key">
-              <strong>本地解锁（可选）</strong>
-              <p>仅将当前连接材料加密保存在本机；解锁密码不会保存。达到失败次数上限后需重新连接。</p>
-              <input id="webdavLocalUnlockPassword" type="password" autocomplete="new-password" placeholder="本地解锁密码" />
-              <div class="settings-actions">
-                <button id="enableWebDavLocalUnlock" class="settings-save" type="button">启用本地解锁</button>
-                <button id="unlockWebDavLocalUnlock" class="settings-reset" type="button">解锁</button>
-                <button id="lockWebDavVault" class="settings-reset" type="button">立即锁定</button>
-                <button id="disableWebDavLocalUnlock" class="settings-danger" type="button">停用</button>
+            <details id="webdavLocalUnlock" class="webdav-local-unlock" hidden>
+              <summary><span>本地解锁</span><small>可选</small></summary>
+              <div class="webdav-local-unlock-body">
+                <p>用本地密码加密保存当前连接材料。解锁密码本身不会保存。</p>
+                <div class="local-unlock-primary">
+                  <input id="webdavLocalUnlockPassword" type="password" autocomplete="new-password" placeholder="输入本地解锁密码" aria-label="本地解锁密码" />
+                  <button id="unlockWebDavLocalUnlock" type="button">解锁</button>
+                </div>
+                <div class="local-unlock-management" aria-label="本地解锁管理">
+                  <button id="enableWebDavLocalUnlock" type="button">启用保存</button>
+                  <button id="lockWebDavVault" type="button">立即锁定</button>
+                  <button id="disableWebDavLocalUnlock" class="danger" type="button">停用保存</button>
+                </div>
               </div>
-            </div>
-            <div id="legacyBuildSettings" hidden aria-hidden="true"></div>'
+            </details>
+            <div id="legacyBuildSettings" hidden aria-hidden="true"></div>
           </form>
           <div id="webdavActions" class="settings-actions webdav-actions">
             <button id="removeWebDavVault" class="settings-danger" type="button" hidden>删除密码库</button>
-            <button id="testWebDav" class="settings-reset" type="button">测试连接</button>
-            <button id="saveWebDav" class="settings-save" type="submit" form="webdavForm">保存并连接</button>
+            <button id="testWebDav" class="settings-reset" type="button">仅测试</button>
+            <button id="saveWebDav" class="settings-save" type="submit" form="webdavForm">创建密码库</button>
           </div>
           <form id="versionForm" hidden aria-hidden="true">
             <input id="pluginVersionOverride" type="text" />
@@ -184,13 +199,13 @@
       <div id="selfBuildDialog" class="dialog-backdrop hidden" role="presentation">
         <section class="version-dialog self-build-dialog" role="dialog" aria-modal="true" aria-labelledby="selfBuildDialogTitle">
           <div class="dialog-heading">
-            <div><span class="eyebrow">SELF DERIVED BUILD</span><h2 id="selfBuildDialogTitle">生成本地升级构建</h2></div>
+            <div><span class="eyebrow">本地构建</span><h2 id="selfBuildDialogTitle">生成升级包</h2><p>基于当前扩展生成可重新加载的本地 ZIP。</p></div>
             <button id="closeSelfBuild" class="icon-button" type="button" title="关闭" aria-label="关闭">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
           <div class="settings-form self-build-form">
-            <p id="selfBuildKind" class="self-build-kind">构建类型：自派生构建</p>
+            <p id="selfBuildKind" class="self-build-kind">自派生构建</p>
             <div class="version-status"><span>当前本地版本</span><strong id="selfBuildCurrentVersion"></strong></div>
             <div class="version-status"><span>目标本地版本</span><strong id="selfBuildTargetVersion"></strong></div>
             <div class="version-status"><span>目标网络版本</span><strong id="selfBuildTargetNetworkVersion"></strong></div>

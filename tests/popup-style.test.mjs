@@ -22,7 +22,7 @@ test("WebDAV actions keep their positions while hiding build settings", () => {
   assert.match(popupHtml, /id="legacyBuildSettings" hidden[^>]*aria-hidden="true"/);
   assert.match(popupHtml, /id="versionSave"[^>]*>保存设置<\/button>/);
   assert.match(popupHtml, /id="restorePluginVersionBaseline"[^>]*disabled[^>]*>恢复默认<\/button>/);
-  assert.match(popupHtml, /id="selfBuildDialogTitle">生成本地升级构建<\/h2>/);
+  assert.match(popupHtml, /id="selfBuildDialogTitle">生成升级包<\/h2>/);
   assert.match(settingsSource, /this\.restoreBaseline\.textContent = unlockReady \? "解锁高级模式" : "恢复默认"/);
 });
 
@@ -31,8 +31,15 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
     popupHtml,
     /id="webdavVaultName"[\s\S]*id="webdavUrl"[\s\S]*id="webdavUsername"[\s\S]*id="webdavPassword"/s,
   );
-  assert.match(popupHtml, /id="removeWebDavVault" class="settings-danger" type="button" hidden>删除密码库<\/button>\s*<button id="testWebDav"[^>]*>测试连接<\/button>\s*<button id="saveWebDav"[^>]*>保存并连接<\/button>/s);
+  assert.match(popupHtml, /class="webdav-auth-row"[\s\S]*id="webdavUsername"[\s\S]*id="webdavPassword"/s);
+  assert.match(popupHtml, /id="webdavVaultKeyField"[\s\S]*<span>Vault Key<\/span>[\s\S]*id="webdavVaultKey"[\s\S]*id="webdavTaskHint"[^>]*>创建新的加密密码库，完成后请立即保存 Vault Key。/s);
+  assert.match(popupHtml, /id="removeWebDavVault" class="settings-danger" type="button" hidden>删除密码库<\/button>\s*<button id="testWebDav"[^>]*>仅测试<\/button>\s*<button id="saveWebDav"[^>]*>创建密码库<\/button>/s);
   assert.match(popupHtml, /id="webdavConnectionFields"[\s\S]*id="webdavVaultNameField"[^>]*>新密码库名称[\s\S]*id="webdavVaultName"/s);
+  assert.match(popupHtml, /for="webdavVaultProfile">选择密码库[\s\S]*新建密码库[\s\S]*连接已有密码库/s);
+  assert.doesNotMatch(popupHtml, /<optgroup/);
+  assert.doesNotMatch(popupHtml, /data-webdav-mode|id="webdavVaultMode"/);
+  assert.match(popupHtml, /id="webdavLocalUnlock" class="webdav-local-unlock" hidden/);
+  assert.match(popupHtml, /class="local-unlock-primary"[\s\S]*id="unlockWebDavLocalUnlock"[\s\S]*class="local-unlock-management"/s);
   assert.match(popupHtml, /id="webdavActions" class="settings-actions webdav-actions"/);
   assert.match(popupHtml, /<\/div>\s*<p id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden><\/p>/s);
   assert.match(popupHtml, /id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden/);
@@ -44,11 +51,11 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
   assert.doesNotMatch(componentsCss, /\.settings-save\s*\{[^}]*margin-top:\s*3px/s);
   assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
   assert.match(componentsCss, /\.version-override select \{[^}]*color-scheme:\s*dark/s);
-  assert.match(componentsCss, /\.version-override select option \{[^}]*background:\s*#101115;[^}]*color:\s*#f8fafc/s);
+  assert.match(componentsCss, /\.version-override select option \{[^}]*background:\s*#0f151b;[^}]*color:\s*#f4f8fb/s);
   assert.match(componentsCss, /:root\[data-theme="light"\] \.version-override select \{[^}]*color-scheme:\s*light/s);
   assert.match(componentsCss, /:root\[data-theme="light"\] \.version-override select option \{[^}]*background:\s*#ffffff;[^}]*color:\s*#172536/s);
+  assert.match(componentsCss, /\.webdav-auth-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/s);
 });
-
 test("current-page WebDAV empty state connects from the unchanged status badge", () => {
   assert.match(currentPageAccountSource, /current-page-add-heading/);
   assert.match(currentPageAccountSource, /current-page-add-icon/);
@@ -71,12 +78,16 @@ test("a disconnected Vault keeps its accounts protected behind an explicit recon
 });
 
 test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {
-  assert.match(webdavSettingsSource, /const reconnecting = this\.mode\.value === "reconnect" && Boolean\(selected\);/);
+  assert.match(webdavSettingsSource, /const reconnecting = mode === "reconnect" && Boolean\(selected\);/);
   assert.match(webdavSettingsSource, /this\.fields\.hidden = false;/);
   assert.match(webdavSettingsSource, /this\.actions\.hidden = false;/);
   assert.match(webdavSettingsSource, /this\.nameField\.hidden = reconnecting;/);
-  assert.match(webdavSettingsSource, /this\.vaultKeyField\.hidden = this\.mode\.value === "create";/);
+  assert.match(webdavSettingsSource, /this\.vaultKeyField\.hidden = false;\s*this\.vaultKey\.hidden = mode === "create";/);
   assert.match(webdavSettingsSource, /this\.remove\.hidden = !reconnecting;/);
+  assert.match(webdavSettingsSource, /new Option\(`本地 · \$\{profile\.name\}`, profile\.id\)/);
+  assert.match(webdavSettingsSource, /this\.profile\.value = selectedVaultId \|\| CREATE_PROFILE_VALUE;/);
+  assert.doesNotMatch(webdavSettingsSource, /document\.querySelectorAll|modeButtons/);
+  assert.match(settingsSource, /await this\.webdavSettings\.open\(vaultId\);\s*if \(this\.disposed\) return;\s*this\.dialog\.classList\.remove\("hidden"\);/);
   assert.match(webdavSettingsSource, /window\.confirm\(`删除“\$\{selected\.name\}”吗？这只会移除扩展中的连接信息，不会删除 WebDAV 服务器上的加密数据。`\)/);
   assert.match(webdavSettingsSource, /type: "removeVault", vaultId: selected\.id/);
   assert.match(popupHtml, /id="webdavVaultKey" type="password"/);
@@ -87,7 +98,7 @@ test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {
   assert.match(settingsSource, /dispose\(\): void \{\s*this\.disposed = true;\s*this\.webdavSettings\.clearSensitiveState\(\);/);
   assert.match(webdavSettingsSource, /this\.showStatus\("正在测试 WebDAV 连接…"\);/);
   assert.match(webdavSettingsSource, /正在重新连接 WebDAV 密码库/);
-  assert.match(webdavSettingsSource, /this\.test\.textContent = this\.operation === "test" \? "测试中…" : "测试连接";/);
+  assert.match(webdavSettingsSource, /this\.test\.textContent = this\.operation === "test" \? "测试中…" : "仅测试";/);
   assert.doesNotMatch(webdavSettingsSource, /saveGesture|advancedModeUnlock/);
   assert.match(settingsSource, /this\.saveButton\.addEventListener\("click", \(event\) => \{ event\.preventDefault\(\); this\.handleSaveClick\(\); \}\);/);
   assert.match(componentsCss, /\.webdav-status\s*\{[^}]*display:\s*flex/s);
@@ -96,11 +107,15 @@ test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {
   assert.match(componentsCss, /#webdavForm\s*\{[^}]*gap:\s*7px;[^}]*padding:\s*12px;/s);
   assert.match(componentsCss, /#webdavForm \.version-override input, #webdavForm \.version-override select\s*\{[^}]*height:\s*30px;/s);
   assert.match(componentsCss, /#webdavVaultNameField\[hidden\]\s*\{[^}]*display:\s*none !important;/s);
+  assert.doesNotMatch(componentsCss, /\.webdav-mode-switch/);
+  assert.match(componentsCss, /\.local-unlock-primary\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/s);
+  assert.match(componentsCss, /\.local-unlock-management button\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent/s);
+  assert.match(componentsCss, /\.webdav-local-unlock\s*\{[^}]*border:/s);
   assert.match(componentsCss, /\.webdav-actions \.settings-danger\[hidden\]\s*\{[^}]*display:\s*none !important;/s);
 });
 
 test("settings dialog exposes a session-only HTTPS WebDAV connection", () => {
-  assert.match(popupHtml, /<span class="eyebrow">WEBDAV VAULT<\/span><h2 id="versionDialogTitle">密码库设置<\/h2>/);
+  assert.match(popupHtml, /<span class="eyebrow">密码库<\/span><h2 id="versionDialogTitle">WebDAV 连接<\/h2>/);
   assert.match(popupHtml, /id="webdavUrl" type="url"[^>]*placeholder="https:\/\/nas\.example\.com\/dav\//);
   assert.match(popupHtml, /仅用于本次浏览器会话，不会写入本地/);
   assert.match(

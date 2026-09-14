@@ -17,6 +17,8 @@ export class CatalogController {
   private readonly apps = get("apps");
   private readonly appAccounts = get("appAccounts");
   private readonly heading = get("appsListHeading");
+  private readonly appAccountsHeading = get("appAccountsHeading");
+  private readonly selectedAppTitle = get("selectedAppTitle");
   private readonly back = get<HTMLButtonElement>("backToApps");
   private readonly refresh = get<HTMLButtonElement>("refreshCatalog");
   private readonly pageHost = get("pageHost");
@@ -238,7 +240,7 @@ export class CatalogController {
   }
 
   private async loadAppAccounts(app: UniPassApp): Promise<void> {
-    this.apps.classList.add("hidden"); this.heading.classList.add("hidden"); this.back.classList.remove("hidden"); this.appAccounts.classList.remove("hidden"); this.appAccounts.innerHTML = loading("正在加载账号");
+    this.apps.classList.add("hidden"); this.heading.classList.add("hidden"); this.appAccountsHeading.classList.remove("hidden"); this.selectedAppTitle.textContent = app.name || "应用账号"; this.appAccounts.classList.remove("hidden"); this.appAccounts.innerHTML = loading("正在加载账号");
     try { const result = await send<AccountListResult>({ type: "accountsForApp", appId: app.id, vaultId: app.vaultId, userScope: this.requireUserScope() }); const tab = await this.getTabContext(); const id = tab?.tabId != null && tab.url && appUrlMatches(result.appUrl, tab.url) ? tab.tabId : undefined; await this.renderAccounts(this.appAccounts, result.accounts, id, result.appUrl); }
     catch (error) { this.appAccounts.innerHTML = empty(errorText(error)); }
   }
@@ -305,7 +307,7 @@ export class CatalogController {
     return { tabId: tab.id, url: tab.url };
   }
 
-  private showAppList(): void { this.apps.classList.remove("hidden"); this.heading.classList.remove("hidden"); this.back.classList.add("hidden"); this.appAccounts.classList.add("hidden"); this.appAccounts.replaceChildren(); }
+  private showAppList(): void { this.apps.classList.remove("hidden"); this.heading.classList.remove("hidden"); this.appAccountsHeading.classList.add("hidden"); this.appAccounts.classList.add("hidden"); this.appAccounts.replaceChildren(); this.selectedAppTitle.textContent = "应用账号"; }
 }
 
 function normalizeAvailableAppsResult(value: unknown): AvailableAppsResult {

@@ -2,7 +2,7 @@
 
 ## 总览
 
-UniPass Minimal 是 Chrome Manifest V3 扩展，由三个运行上下文和共享模块组成：
+UniPass 是 Chrome Manifest V3 扩展，由三个运行上下文和共享模块组成：
 
 ```text
 Popup / 页面浮层（展示与用户操作）

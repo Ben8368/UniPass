@@ -13,18 +13,20 @@
   --blue: #7088ff;
   --blue-soft: #9eafff;
   --danger: #f0a8b2;
+  --green: #58d5ad;
+  --green-soft: #58d5ad18;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 0; background: radial-gradient(circle at 50% -20%, #27345d 0, var(--page-bg) 48rem); }
-.shell { width: min(880px, calc(100vw - 40px)); margin: 28px auto 64px; }
-header, .card, .steps { border: 1px solid var(--line); border-radius: 18px; background: #171c29f2; box-shadow: 0 18px 50px #0004; }
-.page-header { display: flex; justify-content: space-between; gap: 24px; align-items: start; padding: 28px; margin-bottom: 12px; }
+.shell { width: min(920px, calc(100vw - 40px)); margin: 32px auto 64px; }
+header, .card, .steps { border: 1px solid var(--line); border-radius: 16px; background: #171c29f2; box-shadow: 0 18px 50px #0004; }
+.page-header { display: flex; justify-content: space-between; gap: 24px; align-items: start; padding: 26px 28px; margin-bottom: 12px; }
 .header-copy { max-width: 640px; }
 .eyebrow { color: var(--blue-soft); font-size: 11px; letter-spacing: .17em; }
 h1, h2, p { margin-top: 0; }
 h1 { margin: 5px 0 6px; font-size: clamp(28px, 4vw, 38px); line-height: 1.15; letter-spacing: -.02em; }
-h2 { margin: 4px 0 6px; font-size: 24px; line-height: 1.2; }
+h2 { margin: 4px 0 6px; font-size: 22px; line-height: 1.2; }
 header p, .section-heading > p { color: var(--muted); margin-bottom: 0; }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden; margin-bottom: 18px; background: var(--line); }
 .step { display: flex; align-items: center; gap: 10px; padding: 13px 16px; background: var(--surface); }
@@ -32,8 +34,8 @@ header p, .section-heading > p { color: var(--muted); margin-bottom: 0; }
 .step-number { display: grid; place-items: center; width: 25px; height: 25px; flex: 0 0 25px; border: 1px solid #91a1ff66; border-radius: 50%; font-weight: 700; }
 .step strong, .step small { display: block; }
 .step small { color: var(--subtle); font-size: 12px; }
-.card { padding: 26px; margin-bottom: 18px; }
-.section-heading { margin-bottom: 20px; }
+.card { padding: 24px 26px; margin-bottom: 14px; }
+.section-heading { margin-bottom: 16px; }
 .step-label { display: block; margin-bottom: 3px; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
 .section-heading > p { max-width: 680px; }
 .help-details { margin: -4px 0 18px; border: 1px solid #ffffff18; border-radius: 10px; color: var(--muted); background: #ffffff08; }
@@ -53,7 +55,7 @@ code { color: #d3dcff; font: .95em ui-monospace, SFMono-Regular, Menlo, monospac
 form, fieldset { min-inline-size: 0; }
 fieldset { border: 0; padding: 0; margin: 0; }
 fieldset:disabled { opacity: .48; }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
 label { display: grid; align-self: start; align-content: start; grid-auto-rows: max-content; gap: 6px; color: #d1d7e8; font-weight: 600; }
 input, select { width: 100%; min-height: 44px; border: 1px solid #ffffff2b; border-radius: 10px; padding: 10px 12px; color: inherit; background: var(--field); font: inherit; }
 input::placeholder { color: #788198; }
@@ -68,7 +70,7 @@ input:focus, select:focus { border-color: var(--blue); outline: 3px solid #7088f
 .security-note[hidden] { display: none; }
 .security-note input { margin-top: 7px; min-height: 36px; font-size: 12px; }
 .security-note strong { flex: 0 0 auto; color: var(--blue-soft); }
-.actions { display: flex; grid-column: 1 / -1; gap: 10px; flex-wrap: wrap; margin-top: 2px; padding-top: 2px; }
+.actions { display: flex; grid-column: 1 / -1; gap: 9px; flex-wrap: wrap; align-items: center; margin-top: 2px; padding-top: 2px; }
 button { min-height: 42px; border: 1px solid #ffffff2b; border-radius: 10px; padding: 9px 15px; color: inherit; background: #ffffff0d; font: inherit; font-weight: 650; cursor: pointer; }
 button:hover:not(:disabled) { background: #ffffff18; }
 button:focus-visible { outline: 3px solid #91a1ff88; outline-offset: 2px; }

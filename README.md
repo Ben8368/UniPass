@@ -1,4 +1,4 @@
-# UniPass Minimal
+# UniPass
 
 这是对原 UniPass 扩展的最小权限 TypeScript 重构。
 本项目仅供私人本地开发使用。构建 manifest 固定为商店插件 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 ID。每次 `npm run verify` 都会从 Chrome 官方更新接口查询当前商店版号，并要求本地 `package.json`/manifest 保持同一主、次版本且补丁号恰高 `1`；因此商店升级后必须先同步本地版号再构建。它在同一 Chrome Profile 中不能与商店版同时启用；仅通过开发者模式加载 `dist`，不用于 Chrome Web Store 或其他公开分发。公开 key 只能固定 ID，不能提供商店发布或 CRX 签名权限。

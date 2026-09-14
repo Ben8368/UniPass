@@ -172,6 +172,9 @@
   background: linear-gradient(145deg, #edf4ff, #f7faff);
   color: #3978c6;
 }
+:root[data-theme="light"] .local-unlock-primary button { border-color: rgba(8, 125, 86, .30); background: rgba(8, 125, 86, .12); color: #075f41; }
+:root[data-theme="light"] .local-unlock-primary button:hover { border-color: rgba(8, 125, 86, .42); background: rgba(8, 125, 86, .19); }
+:root[data-theme="light"] .webdav-local-unlock { background: rgba(30, 55, 78, .025); }
 :root[data-theme="light"] .current-page-add-icon {
   border-color: rgba(11, 153, 104, .22);
   background: rgba(11, 153, 104, .10);
