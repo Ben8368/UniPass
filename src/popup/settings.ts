@@ -1,16 +1,15 @@
 import type { PluginVersionSettings } from "../shared/types";
 import { AdvancedModeUnlock } from "./advanced-mode";
-import { buildSelfDerivedBuild, SELF_BUILD_CLICK_WINDOW_MS, validateSelfBuildTarget } from "./self-builder";
+import { SELF_BUILD_CLICK_WINDOW_MS } from "./self-builder";
 import { SaveGestureStateMachine } from "./save-gesture";
+import { SelfBuildDialogController } from "./self-build-dialog";
 import { send } from "./bridge";
 import { errorText, get } from "./dom";
 import type { DomStorage } from "./dom";
+import { ThemeController, type Theme } from "./theme-controller";
 import { WebDavSettingsController } from "./webdav-settings";
 
 const ADVANCED_MODE_PORT_NAME = "unipass-advanced-mode";
-
-type Theme = "light" | "dark";
-const THEME_STORAGE_KEY = "unipass-theme";
 
 export function normalizeWebDavUrl(value: string): string {
   const requestedUrl = value.trim();
@@ -29,7 +28,6 @@ export function normalizeWebDavUrl(value: string): string {
 }
 
 export class SettingsController {
-  private readonly themeToggle = get<HTMLButtonElement>("themeToggle");
   private readonly dialog = get("versionSettingsDialog");
   private readonly settingsButton = get<HTMLButtonElement>("pluginVersionSettingsButton");
   private readonly closeButton = get<HTMLButtonElement>("closeVersionSettings");
@@ -41,27 +39,18 @@ export class SettingsController {
   private readonly localBuildTime = get("localBuildTime");
   private readonly networkVersion = get("networkPluginVersion");
   private readonly networkVersionSource = get("networkPluginVersionSource");
-  private readonly selfBuildDialog = get("selfBuildDialog");
-  private readonly closeSelfBuildButton = get<HTMLButtonElement>("closeSelfBuild");
-  private readonly cancelSelfBuildButton = get<HTMLButtonElement>("cancelSelfBuild");
-  private readonly generateSelfBuildButton = get<HTMLButtonElement>("generateSelfBuild");
-  private readonly selfBuildCurrentVersion = get("selfBuildCurrentVersion");
-  private readonly selfBuildTargetVersion = get("selfBuildTargetVersion");
-  private readonly selfBuildTargetNetworkVersion = get("selfBuildTargetNetworkVersion");
-  private readonly selfBuildMessage = get("selfBuildMessage");
-  private readonly systemTheme = window.matchMedia("(prefers-color-scheme: light)");
-  private selfBuildPromptOpen = false;
-  private selfBuildBusy = false;
   private saveControlsDisabled = false;
   private advancedModeActive = false;
   private advancedModePending = false;
   private advancedPort: chrome.runtime.Port | null = null;
   private disposed = false;
   private readonly webdavSettings: WebDavSettingsController;
+  private readonly selfBuild: SelfBuildDialogController;
+  private readonly theme: ThemeController;
   private readonly advancedModeUnlock = new AdvancedModeUnlock(SELF_BUILD_CLICK_WINDOW_MS);
   private readonly saveGesture = new SaveGestureStateMachine(
     () => void this.saveOverride(),
-    () => this.openSelfBuildPrompt(),
+    () => this.selfBuild.open(this.override.value.trim()),
     SELF_BUILD_CLICK_WINDOW_MS,
     (callback, delay) => window.setTimeout(callback, delay),
     (timer) => window.clearTimeout(timer),
@@ -74,6 +63,8 @@ export class SettingsController {
     private readonly onAdvancedModeChange: () => void = () => {},
   ) {
     this.webdavSettings = new WebDavSettingsController(reportStatus);
+    this.selfBuild = new SelfBuildDialogController(reportStatus, (disabled) => this.setSaveControlsDisabled(disabled));
+    this.theme = new ThemeController(storage, themeTarget);
   }
 
   get isAdvancedModeEnabled(): boolean {
@@ -81,19 +72,13 @@ export class SettingsController {
   }
 
   bind(): void {
-    this.applyStoredTheme();
-    this.themeToggle.addEventListener("click", () => this.toggleTheme());
-    this.systemTheme.addEventListener("change", () => {
-      if (!this.getStoredTheme()) {
-        this.themeTarget.dataset.theme = this.systemTheme.matches ? "light" : "dark";
-        this.updateThemeToggle();
-      }
-    });
+    this.theme.bind();
     this.settingsButton.addEventListener("click", () => void this.open());
     this.closeButton.addEventListener("click", () => this.close());
     this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); this.resetSaveClicks(); void this.saveOverride(); });
     this.saveButton.addEventListener("click", (event) => { event.preventDefault(); this.handleSaveClick(); });
     this.webdavSettings.bind();
+    this.selfBuild.bind();
     window.addEventListener("unipass-open-webdav-settings", (event) => {
       const vaultId = event instanceof CustomEvent && typeof event.detail?.vaultId === "string" ? event.detail.vaultId : undefined;
       void this.open(vaultId);
@@ -111,17 +96,13 @@ export class SettingsController {
       void this.saveOverride(true);
     });
     this.dialog.addEventListener("click", (event) => { if (event.target === this.dialog) this.close(); });
-    this.closeSelfBuildButton.addEventListener("click", () => this.closeSelfBuildPrompt());
-    this.cancelSelfBuildButton.addEventListener("click", () => this.closeSelfBuildPrompt());
-    this.selfBuildDialog.addEventListener("click", (event) => { if (event.target === this.selfBuildDialog) this.closeSelfBuildPrompt(); });
-    this.generateSelfBuildButton.addEventListener("click", () => void this.generateSelfBuild());
     window.addEventListener("pagehide", () => {
       this.dispose();
-      if (!this.selfBuildPromptOpen && !this.selfBuildBusy) this.saveGesture.flushPendingSave();
+      if (!this.selfBuild.isOpen && !this.selfBuild.isBusy) this.saveGesture.flushPendingSave();
     });
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
-      if (!this.selfBuildDialog.classList.contains("hidden")) this.closeSelfBuildPrompt();
+      if (this.selfBuild.isOpen) this.selfBuild.close();
       else if (!this.dialog.classList.contains("hidden")) this.close();
     });
   }
@@ -136,39 +117,8 @@ export class SettingsController {
     this.advancedModeUnlock.reset();
   }
 
-  private getStoredTheme(): Theme | null {
-    const value = this.storage.getItem(THEME_STORAGE_KEY);
-    return value === "light" || value === "dark" ? value : null;
-  }
-
-  private applyStoredTheme(): void {
-    this.themeTarget.dataset.theme = this.getStoredTheme() ?? (this.systemTheme.matches ? "light" : "dark");
-    this.updateThemeToggle();
-  }
-
   applyAutoTheme(theme: Theme): void {
-    if (this.getStoredTheme()) return;
-    this.themeTarget.dataset.theme = theme;
-    this.updateThemeToggle();
-  }
-
-  private toggleTheme(): void {
-    const theme = this.effectiveTheme() === "dark" ? "light" : "dark";
-    this.themeTarget.dataset.theme = theme;
-    this.storage.setItem(THEME_STORAGE_KEY, theme);
-    this.updateThemeToggle();
-  }
-
-  private effectiveTheme(): Theme {
-    return this.themeTarget.dataset.theme === "light" || (this.themeTarget.dataset.theme !== "dark" && this.systemTheme.matches) ? "light" : "dark";
-  }
-
-  private updateThemeToggle(): void {
-    const dark = this.effectiveTheme() === "dark";
-    const label = dark ? "切换浅色模式" : "切换深色模式";
-    this.themeToggle.title = label;
-    this.themeToggle.setAttribute("aria-label", label);
-    this.themeToggle.dataset.theme = dark ? "dark" : "light";
+    this.theme.applyAutoTheme(theme);
   }
 
   private async open(vaultId?: string): Promise<void> {
@@ -210,7 +160,7 @@ export class SettingsController {
   }
 
   private async saveOverride(keepControlsEnabled = false): Promise<void> {
-    if (this.selfBuildBusy) return;
+    if (this.selfBuild.isBusy) return;
     if (!keepControlsEnabled) this.setSaveControlsDisabled(true);
     try {
       const settings = await send<PluginVersionSettings>({
@@ -227,7 +177,7 @@ export class SettingsController {
   }
 
   private handleSaveClick(): void {
-    if (this.selfBuildBusy || this.selfBuildPromptOpen) return;
+    if (this.selfBuild.isBusy || this.selfBuild.isOpen) return;
     if (this.advancedModeUnlock.recordSaveClick()) {
       this.resetSaveClicks();
       this.updateRestoreButton();
@@ -295,62 +245,6 @@ export class SettingsController {
 
   private resetSaveClicks(): void {
     this.saveGesture.reset();
-  }
-
-  private openSelfBuildPrompt(): void {
-    try {
-      const current = chrome.runtime.getManifest().version;
-      const target = this.override.value.trim();
-      const network = validateSelfBuildTarget(target, current);
-      this.selfBuildCurrentVersion.textContent = current;
-      this.selfBuildTargetVersion.textContent = target;
-      this.selfBuildTargetNetworkVersion.textContent = network;
-      this.selfBuildMessage.textContent = "将复制当前 runtime 文件并生成 ZIP；不会修改当前扩展。";
-      this.generateSelfBuildButton.hidden = false;
-      this.cancelSelfBuildButton.textContent = "取消";
-      this.selfBuildPromptOpen = true;
-      this.selfBuildDialog.classList.remove("hidden");
-      this.generateSelfBuildButton.focus();
-    } catch (error) {
-      this.reportStatus(errorText(error), true);
-    }
-  }
-
-  private closeSelfBuildPrompt(): void {
-    if (this.selfBuildBusy) return;
-    this.selfBuildPromptOpen = false;
-    this.selfBuildDialog.classList.add("hidden");
-    this.generateSelfBuildButton.hidden = false;
-    this.cancelSelfBuildButton.textContent = "取消";
-    this.selfBuildMessage.textContent = "";
-    this.saveButton.focus();
-  }
-
-  private async generateSelfBuild(): Promise<void> {
-    if (!this.selfBuildPromptOpen || this.selfBuildBusy) return;
-    this.selfBuildBusy = true;
-    this.setSaveControlsDisabled(true);
-    this.generateSelfBuildButton.disabled = true;
-    this.cancelSelfBuildButton.disabled = true;
-    this.closeSelfBuildButton.disabled = true;
-    this.selfBuildMessage.textContent = "正在读取当前 runtime 文件并生成 ZIP…";
-    try {
-      const result = await buildSelfDerivedBuild(this.selfBuildTargetVersion.textContent ?? "");
-      this.selfBuildMessage.textContent = `已生成 ${result.fileName}\nLocal Build Version: ${result.targetLocalVersion}\nX-Browser-Plugin-Version: ${result.targetNetworkVersion}\n\n解压后覆盖/替换当前扩展目录，然后在 chrome://extensions 中重新加载。`;
-      this.generateSelfBuildButton.hidden = true;
-      this.cancelSelfBuildButton.disabled = false;
-      this.cancelSelfBuildButton.textContent = "关闭";
-      this.reportStatus(`已生成 UniPass ${result.targetLocalVersion}`);
-    } catch (error) {
-      this.selfBuildMessage.textContent = errorText(error);
-      this.reportStatus(errorText(error), true);
-      this.cancelSelfBuildButton.disabled = false;
-      this.cancelSelfBuildButton.textContent = "关闭";
-    } finally {
-      this.selfBuildBusy = false;
-      this.setSaveControlsDisabled(false);
-      this.closeSelfBuildButton.disabled = false;
-    }
   }
 
   private setSaveControlsDisabled(disabled: boolean): void {
