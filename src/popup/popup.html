@@ -131,19 +131,27 @@
             </button>
           </div>
           <form id="webdavForm" class="settings-form webdav-form">
-            <label id="webdavVaultProfileField" class="version-override" for="webdavVaultProfile">选择密码库
-              <select id="webdavVaultProfile">
-                <option value="__create__">新建密码库</option>
-                <option value="__existing__">连接已有密码库</option>
-              </select>
-            </label>
+            <div id="webdavVaultProfileField" class="version-override">
+              <span id="webdavVaultProfileLabel">选择密码库</span>
+              <div class="webdav-vault-split">
+                <div id="webdavVaultPicker" class="webdav-vault-picker">
+                <select id="webdavVaultProfile" aria-hidden="true" tabindex="-1" hidden>
+                  <option value="__add__">添加密码库</option>
+                </select>
+                  <input id="webdavVaultName" type="text" autocomplete="off" hidden />
+                  <button id="webdavVaultSelection" type="button" aria-labelledby="webdavVaultProfileLabel webdavVaultSelectionText" role="combobox" aria-controls="webdavVaultProfileMenu" aria-haspopup="listbox" aria-expanded="false"><span id="webdavVaultSelectionText">添加密码库</span></button>
+                <svg class="webdav-vault-picker-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+                <div id="webdavVaultProfileMenu" class="webdav-vault-menu" role="listbox" aria-label="密码库选项" hidden></div>
+                <button id="removeWebDavVault" class="webdav-vault-remove" type="button" title="删除密码库" aria-label="删除密码库" hidden>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+                </button>
+                </div>
+                <span class="webdav-vault-divider" aria-hidden="true"></span>
+                <label class="sr-only" for="webdavUrl">WebDAV 地址</label>
+                <input id="webdavUrl" type="url" autocomplete="off" placeholder="WebDAV 地址" />
+              </div>
+            </div>
             <div id="webdavConnectionFields">
-              <label id="webdavVaultNameField" class="version-override" for="webdavVaultName">新密码库名称
-                <input id="webdavVaultName" type="text" autocomplete="off" placeholder="例如：我的 NAS 密码库" />
-              </label>
-              <label class="version-override" for="webdavUrl">WebDAV 地址
-                <input id="webdavUrl" type="url" autocomplete="off" placeholder="https://nas.example.com/dav/" />
-              </label>
               <div class="webdav-auth-row">
                 <label class="version-override" for="webdavUsername">WebDAV 用户名
                   <input id="webdavUsername" type="text" autocomplete="username" placeholder="专用账号" />
@@ -153,8 +161,8 @@
                 </label>
               </div>
               <label id="webdavVaultKeyField" class="version-override" for="webdavVaultKey"><span>Vault Key</span>
-                <input id="webdavVaultKey" type="password" autocomplete="off" placeholder="粘贴创建时保存的 Vault Key" aria-describedby="webdavTaskHint webdavConnectionHelp" hidden />
-                <small id="webdavTaskHint" class="webdav-vault-key-help">创建新的加密密码库，完成后请立即保存 Vault Key。</small>
+                <input id="webdavVaultKey" type="password" autocomplete="off" placeholder="新建可留空，接入已有库时粘贴" aria-describedby="webdavTaskHint webdavConnectionHelp" />
+                <small id="webdavTaskHint" class="webdav-vault-key-help">留空将新建密码库；粘贴已有 Vault Key 则接入远端密码库。</small>
               </label>
               <p id="webdavConnectionHelp" class="settings-help">认证信息仅用于本次浏览器会话，不会写入本地；连接时会申请主机权限并检查目录访问。</p>
             </div>
@@ -182,9 +190,8 @@
             <div id="legacyBuildSettings" hidden aria-hidden="true"></div>
           </form>
           <div id="webdavActions" class="settings-actions webdav-actions">
-            <button id="removeWebDavVault" class="settings-danger" type="button" hidden>删除密码库</button>
             <button id="testWebDav" class="settings-reset" type="button">仅测试</button>
-            <button id="saveWebDav" class="settings-save" type="submit" form="webdavForm">创建密码库</button>
+            <button id="saveWebDav" class="settings-save" type="submit" form="webdavForm">添加密码库</button>
           </div>
           <form id="versionForm" hidden aria-hidden="true">
             <input id="pluginVersionOverride" type="text" />

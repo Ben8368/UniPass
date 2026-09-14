@@ -26,18 +26,7 @@
   padding: 18px;
   background: rgba(0, 0, 0, .48);
 }
-.version-dialog {
-  max-height: calc(100vh - 28px);
-  overflow-y: auto;
-  width: min(100%, 350px);
-  padding: 15px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-raised);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 18px 45px rgba(0, 0, 0, .28);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-}
+.version-dialog { max-height: calc(100vh - 28px); overflow-y: auto; width: min(100%, 350px); padding: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 18px 45px rgba(0, 0, 0, .28); backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%); }
 .dialog-heading {
   display: flex;
   align-items: flex-start;
@@ -74,7 +63,25 @@
 #webdavForm .settings-help { font-size: 9px; line-height: 1.4; }
 #webdavForm .version-override { gap: 4px; }
 #webdavForm .version-override input, #webdavForm .version-override select { height: 30px; }
-#webdavVaultNameField[hidden] { display: none !important; }
+.webdav-vault-split { display: grid; grid-template-columns: minmax(140px, .42fr) 1px minmax(0, 1fr); min-height: 30px; overflow: visible; border: 1px solid var(--border); border-radius: 6px; background: var(--input); }
+.webdav-vault-split:focus-within { border-color: rgba(65, 211, 155, .44); box-shadow: 0 0 0 2px rgba(65, 211, 155, .10); }
+.webdav-vault-picker { position: relative; min-width: 0; }
+.webdav-vault-picker > button#webdavVaultSelection { width: 100%; height: 30px; overflow: hidden; padding: 0 28px 0 9px; border: 0; background: transparent; color: var(--text-1); font: inherit; font-size: 10px; font-weight: 700; text-align: left; }
+.webdav-vault-picker > button#webdavVaultSelection > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.webdav-vault-picker.has-remove > button#webdavVaultSelection { padding-right: 50px; }
+.webdav-vault-divider { align-self: stretch; width: 1px; background: var(--border); }
+.webdav-vault-split > input#webdavUrl { width: 100%; min-width: 0; height: 30px; padding: 0 9px; border: 0; border-radius: 0 6px 6px 0; background: transparent; color: var(--text-0); font-size: 10px; }
+.webdav-vault-split > input#webdavUrl::placeholder { color: var(--placeholder); }
+.webdav-vault-picker-icon { position: absolute; top: 8px; right: 9px; width: 14px; height: 14px; fill: none; stroke: var(--text-2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.webdav-vault-remove { position: absolute; top: 3px; right: 25px; display: grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); }
+.webdav-vault-remove:hover { background: var(--fill-hover); color: var(--text-1); }
+.webdav-vault-remove[hidden], .webdav-vault-menu[hidden] { display: none !important; }
+.webdav-vault-remove svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.webdav-vault-menu { position: absolute; top: calc(100% + 5px); right: auto; left: 0; width: max(220px, 100%); z-index: 2; display: grid; gap: 2px; padding: 5px; border: 1px solid rgba(255, 255, 255, .13); border-radius: 8px; background: rgba(18, 24, 31, .94); box-shadow: 0 14px 30px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .10); backdrop-filter: blur(18px) saturate(145%); -webkit-backdrop-filter: blur(18px) saturate(145%); }
+.webdav-vault-menu button { display: grid; gap: 1px; min-width: 0; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-1); text-align: left; }
+.webdav-vault-menu button:hover, .webdav-vault-menu button[aria-selected="true"] { background: rgba(65, 211, 155, .12); color: #c3ffe8; }
+.webdav-vault-menu button > span { overflow: hidden; font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.webdav-vault-menu button > small { color: var(--text-2); font-size: 8.5px; font-weight: 500; }
 #webdavConnectionFields { display: grid; gap: 7px; }
 .webdav-auth-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px; }
 .webdav-auth-row > label { min-width: 0; }
@@ -103,8 +110,6 @@
 .settings-actions > button { display: inline-flex; height: 34px; min-height: 34px; align-items: center; justify-content: center; margin: 0; }
 .webdav-actions { justify-content: flex-end; margin-top: 7px; }
 #webdavActions > button { height: 32px; min-height: 32px; }
-.webdav-actions .settings-danger { margin-right: auto; }
-.webdav-actions .settings-danger[hidden] { display: none !important; }
 .settings-danger { padding: 0 11px; border: 1px solid rgba(232, 92, 92, .42); border-radius: 6px; background: rgba(232, 92, 92, .08); color: var(--danger-text); font-size: 10px; font-weight: 700; }
 .settings-danger:hover { background: rgba(232, 92, 92, .15); }
 .settings-danger:disabled { cursor: not-allowed; opacity: .58; }

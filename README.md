@@ -41,7 +41,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
-齿轮中的“密码库设置”直接完成 WebDAV 地址、用户名、App Password 的测试和保存，不会新开标签页。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。当前 HTTPS 页面没有匹配账号时，可直接选择已连接 Vault 并保存账号与密码；扩展会使用当前域名创建或复用网站记录。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
+齿轮中的“密码库设置”可在“添加密码库”和任一本地已保存密码库之间直接切换，也可从“重新连接”入口切回添加；不再提供与真实 Profile 混淆的“连接已有密码库”伪选项。添加时 Vault Key 留空会新建密码库，填写已有 Vault Key 则接入远端密码库。表单直接完成 WebDAV 地址、用户名、App Password 的测试和保存，不会新开标签页。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。当前 HTTPS 页面没有匹配账号时，可直接选择已连接 Vault 并保存账号与密码；扩展会使用当前域名创建或复用网站记录。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
 
 ## 项目治理
 

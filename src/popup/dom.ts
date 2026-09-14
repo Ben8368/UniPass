@@ -12,6 +12,10 @@ export function setDomRoot(root: Document | ShadowRoot): void {
   domRoot = root;
 }
 
+export function getDomRoot(): Document | ShadowRoot {
+  return domRoot;
+}
+
 export function get<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = domRoot.querySelector(`#${id}`);
   if (!element) throw new Error(`Missing element: ${id}`);

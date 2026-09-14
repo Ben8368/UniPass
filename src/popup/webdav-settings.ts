@@ -1,10 +1,9 @@
 import type { VaultConnection, VaultProfile } from "../shared/vault";
 import { normalizeWebDavUrl } from "../shared/url";
 import { send } from "./bridge";
-import { errorText, get } from "./dom";
+import { errorText, get, getDomRoot } from "./dom";
 
-const CREATE_PROFILE_VALUE = "__create__";
-const EXISTING_PROFILE_VALUE = "__existing__";
+const ADD_PROFILE_VALUE = "__add__";
 
 export class WebDavSettingsController {
   private readonly form = get<HTMLFormElement>("webdavForm");
@@ -12,8 +11,12 @@ export class WebDavSettingsController {
   private readonly fields = get("webdavConnectionFields");
   private readonly taskHint = get("webdavTaskHint");
   private readonly actions = get("webdavActions");
-  private readonly nameField = get("webdavVaultNameField");
   private readonly name = get<HTMLInputElement>("webdavVaultName");
+  private readonly picker = get("webdavVaultProfileField");
+  private readonly vaultPicker = get("webdavVaultPicker");
+  private readonly selection = get<HTMLButtonElement>("webdavVaultSelection");
+  private readonly selectionText = get("webdavVaultSelectionText");
+  private readonly menu = get<HTMLDivElement>("webdavVaultProfileMenu");
   private readonly endpoint = get<HTMLInputElement>("webdavUrl");
   private readonly username = get<HTMLInputElement>("webdavUsername");
   private readonly appPassword = get<HTMLInputElement>("webdavPassword");
@@ -41,7 +44,18 @@ export class WebDavSettingsController {
     this.form.addEventListener("submit", (event) => { event.preventDefault(); void this.saveVault(); });
     this.remove.addEventListener("click", () => void this.removeVault());
     this.test.addEventListener("click", () => void this.testConnection());
-    this.profile.addEventListener("change", () => this.applySelectedProfile());
+    this.selection.addEventListener("click", () => this.toggleProfilePicker());
+    this.selection.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") this.closeProfilePicker();
+      if (event.key === "ArrowDown") this.openProfilePicker();
+    });
+    this.menu.addEventListener("click", (event) => {
+      const option = (event.target as Element).closest<HTMLButtonElement>("[data-vault-profile]");
+      if (option?.dataset.vaultProfile) this.selectProfile(option.dataset.vaultProfile);
+    });
+    getDomRoot().addEventListener("pointerdown", (event) => {
+      if (!event.composedPath().includes(this.picker)) this.closeProfilePicker();
+    });
     this.enableLocalUnlock.addEventListener("click", () => void this.localUnlockAction("enable"));
     this.unlockLocalUnlock.addEventListener("click", () => void this.localUnlockAction("unlock"));
     this.lock.addEventListener("click", () => void this.localUnlockAction("lock"));
@@ -53,12 +67,12 @@ export class WebDavSettingsController {
       this.showStatus("");
       this.profiles = await send<VaultProfile[]>({ type: "listVaultProfiles" });
       this.profile.replaceChildren(
-        new Option("新建密码库", CREATE_PROFILE_VALUE),
-        new Option("连接已有密码库", EXISTING_PROFILE_VALUE),
-        ...this.profiles.map((profile) => new Option(`本地 · ${profile.name}`, profile.id)),
+        new Option("添加密码库", ADD_PROFILE_VALUE),
+        ...this.profiles.map((profile) => new Option(profile.name, profile.id)),
       );
       const selectedVaultId = vaultId && this.profiles.some((profile) => profile.id === vaultId) ? vaultId : "";
-      this.profile.value = selectedVaultId || CREATE_PROFILE_VALUE;
+      this.profile.value = selectedVaultId || ADD_PROFILE_VALUE;
+      this.renderProfileOptions();
       this.applySelectedProfile();
     } catch (error) {
       this.reportStatus(errorText(error), true);
@@ -78,20 +92,18 @@ export class WebDavSettingsController {
   }
 
   private selectedMode(): "create" | "existing" | "reconnect" {
-    if (this.profile.value === CREATE_PROFILE_VALUE) return "create";
-    if (this.profile.value === EXISTING_PROFILE_VALUE) return "existing";
-    return "reconnect";
+    if (this.profile.value !== ADD_PROFILE_VALUE) return "reconnect";
+    return this.vaultKey.value.trim() ? "existing" : "create";
   }
 
   private applySelectedProfile(): void {
     const selected = this.profiles.find((profile) => profile.id === this.profile.value);
-    const mode = this.selectedMode();
-    const reconnecting = mode === "reconnect" && Boolean(selected);
+    const reconnecting = Boolean(selected);
     this.fields.hidden = false;
     this.actions.hidden = false;
-    this.nameField.hidden = reconnecting;
+    this.vaultPicker.classList.toggle("has-remove", reconnecting);
     this.vaultKeyField.hidden = false;
-    this.vaultKey.hidden = mode === "create";
+    this.vaultKey.hidden = false;
     this.localUnlock.hidden = !reconnecting;
     if (!reconnecting) this.localUnlock.open = false;
     this.remove.hidden = !reconnecting;
@@ -99,30 +111,73 @@ export class WebDavSettingsController {
     this.recovery.hidden = true;
     this.name.value = reconnecting ? (selected?.name ?? "") : "";
     this.endpoint.value = reconnecting ? (selected?.endpoint ?? "") : "";
+    this.selectionText.textContent = selected?.name ?? "添加密码库";
     this.username.value = "";
     this.appPassword.value = "";
     this.vaultKey.value = "";
     this.localUnlockPassword.value = "";
-    if (mode === "create") {
-      this.taskHint.textContent = "创建新的加密密码库，完成后请立即保存 Vault Key。";
-      this.save.textContent = "创建密码库";
-    } else if (mode === "existing") {
-      this.taskHint.textContent = "使用 Vault Key 打开远端已有密码库，并在本机保存连接名称。";
-      this.save.textContent = "连接密码库";
-    } else {
+    if (reconnecting) {
       this.taskHint.textContent = selected ? `恢复“${selected.name}”的本次会话连接。地址已为你填好。` : "当前没有可重新连接的本地密码库。";
       this.save.textContent = "重新连接";
+    } else {
+      this.taskHint.textContent = "留空将新建密码库；粘贴已有 Vault Key 则接入远端密码库。";
+      this.save.textContent = "添加密码库";
     }
     this.updateDisabledStates();
     this.showStatus("");
   }
 
+  private renderProfileOptions(): void {
+    const options = [
+      { value: ADD_PROFILE_VALUE, label: "添加密码库", detail: "新建，或用 Vault Key 接入远端密码库" },
+      ...this.profiles.map((profile) => ({ value: profile.id, label: profile.name, detail: "本地已保存的连接" })),
+    ];
+    this.menu.replaceChildren(...options.map((option) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.vaultProfile = option.value;
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", String(option.value === this.profile.value));
+      const label = document.createElement("span");
+      label.textContent = option.label;
+      const detail = document.createElement("small");
+      detail.textContent = option.detail;
+      button.append(label, detail);
+      return button;
+    }));
+  }
+
+  private openProfilePicker(): void {
+    if (this.busy) return;
+    this.renderProfileOptions();
+    this.menu.hidden = false;
+    this.selection.setAttribute("aria-expanded", "true");
+  }
+
+  private toggleProfilePicker(): void {
+    if (this.menu.hidden) this.openProfilePicker();
+    else this.closeProfilePicker();
+  }
+
+  private closeProfilePicker(): void {
+    this.menu.hidden = true;
+    this.selection.setAttribute("aria-expanded", "false");
+  }
+
+  private selectProfile(value: string): void {
+    this.profile.value = value;
+    this.closeProfilePicker();
+    this.applySelectedProfile();
+  }
+
   private input() {
+    const endpoint = normalizeWebDavUrl(this.endpoint.value);
+    const mode = this.selectedMode();
     return {
-      mode: this.selectedMode(),
-      vaultId: this.selectedMode() === "reconnect" ? this.profile.value : undefined,
-      name: this.name.value.trim(),
-      endpoint: normalizeWebDavUrl(this.endpoint.value),
+      mode,
+      vaultId: mode === "reconnect" ? this.profile.value : undefined,
+      name: this.name.value.trim() || new URL(endpoint).hostname,
+      endpoint,
       username: this.username.value.trim(),
       appPassword: this.appPassword.value,
       vaultKey: this.vaultKey.value.trim() || undefined,
@@ -161,7 +216,7 @@ export class WebDavSettingsController {
       await this.requestOrigin(input.endpoint);
       const connection = await send<VaultConnection>({ type: "saveWebDavVault", ...input });
       saved = true;
-      await this.open(savingMode === "reconnect" ? connection.profile.id : undefined);
+      await this.open(connection.profile.id);
       window.dispatchEvent(new Event("unipass-vault-changed"));
       if (connection.recoveryKey) this.showRecoveryKey(connection.recoveryKey);
       this.showStatus(connection.recoveryKey ? "WebDAV 密码库已保存并连接。请保存下方 Vault Key" : savingMode === "existing" ? "已有 WebDAV 密码库已连接" : "WebDAV 密码库已重新连接");
@@ -210,13 +265,14 @@ export class WebDavSettingsController {
     this.operation = busy ? operation : null;
     this.updateDisabledStates();
     this.test.textContent = this.operation === "test" ? "测试中…" : "仅测试";
-    this.save.textContent = this.operation === "save" ? "连接中…" : this.selectedMode() === "reconnect" ? "重新连接" : this.selectedMode() === "existing" ? "连接密码库" : "创建密码库";
-    this.remove.textContent = this.operation === "remove" ? "删除中…" : "删除密码库";
+    this.save.textContent = this.operation === "save" ? "连接中…" : this.selectedMode() === "reconnect" ? "重新连接" : "添加密码库";
+    this.remove.title = this.operation === "remove" ? "正在删除密码库" : "删除密码库";
+    this.remove.setAttribute("aria-label", this.remove.title);
   }
 
   private updateDisabledStates(): void {
     const selected = this.profiles.some((profile) => profile.id === this.profile.value);
-    for (const control of [this.profile, this.name, this.endpoint, this.username, this.appPassword, this.vaultKey, this.localUnlockPassword, this.enableLocalUnlock, this.unlockLocalUnlock, this.lock, this.disableLocalUnlock, this.remove, this.test, this.save]) control.disabled = this.busy;
+    for (const control of [this.profile, this.name, this.selection, this.endpoint, this.username, this.appPassword, this.vaultKey, this.localUnlockPassword, this.enableLocalUnlock, this.unlockLocalUnlock, this.lock, this.disableLocalUnlock, this.remove, this.test, this.save]) control.disabled = this.busy;
     const reconnectUnavailable = this.selectedMode() === "reconnect" && !selected;
     this.test.disabled = this.busy || reconnectUnavailable;
     this.save.disabled = this.busy || reconnectUnavailable;

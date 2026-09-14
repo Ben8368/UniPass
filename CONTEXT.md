@@ -13,7 +13,7 @@
 - UniPass AES-ECB-PKCS7 解密及 Jupiter 的 MD5/DES-ECB-PKCS7 密码转换已迁入随扩展本地打包的 Rust `credential-core.wasm`；availability 在 WASM 内只返回状态，Jupiter keepalive 从 UniPass ciphertext 直接得到 transformed password，JS 不再接触原始 Jupiter 明文。普通构建固定 `stable-v1` 材料，hardened 构建由 `UNIPASS_HARDEN_SEED` 生成 3～5 个 fragment、重排和轻量算术重构；JS/WASM 仍完全自包含。该措施只提高静态分析成本，动态调试仍可能取得运行时材料或明文；继续使用客户端解密是当前产品计划。
 - Rust 构建统一启用 workspace、Cargo registry 与 toolchain path remap；hardened 构建默认要求 Binaryen `wasm-opt`，缺失即 fail closed，报告与 integrity 仅写入 `artifacts/hardened/`。普通 WASM 保持 byte-for-byte reproducibility；hardened seed 还选择 4 种有限等价 reconstruction strategy 之一。
 - 保留只读 `legacy-unipass`，新增每个 `VaultProfile` 一个 WebDAV backend；Core/Crypto/Backend 独立，禁止双写和 Legacy 迁移，Cloudflare/GitHub 仅留接口。
-- WebDAV 连接配置明确区分创建新 Vault、连接已有 Vault 和重新连接本地 profile；新设备通过 endpoint + WebDAV credential + Vault Key 解密远端 manifest，vaultId 来自 manifest。认证与 key 只存 session；可选本地解锁仅保存加密封装，失败锁定并可显式清除。新建时只显示一次恢复用 Vault Key，缺失时 fail closed。对象分离，ETag 冲突 fail closed。
+- WebDAV 后台状态机明确区分创建新 Vault、接入远端 Vault 和重新连接本地 profile；UI 选择器只列“添加密码库”和真实 profile，添加时以 Vault Key 是否填写区分新建/接入。新设备通过 endpoint + WebDAV credential + Vault Key 解密远端 manifest，vaultId 来自 manifest。认证与 key 只存 session；可选本地解锁仅保存加密封装，失败锁定并可显式清除。新建时只显示一次恢复用 Vault Key，缺失时 fail closed。对象分离，ETag 冲突 fail closed。
 - 验证：`npm test` 通过 126 项，TypeScript、Rust QA、标准构建和产物审计通过。新增跨设备 Vault、manifest fail-closed、username 单源、tombstone、availability error、MKCOL/XML 和本地解锁覆盖；真实 WebDAV、权限拒绝、Legacy+WebDAV 联测和 Chrome smoke 待验收。
 - 本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
