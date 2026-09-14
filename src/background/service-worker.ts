@@ -23,6 +23,8 @@ import {
   disableLocalUnlock,
   lockVault,
   removeVault,
+  releaseUnusedWebDavPermission,
+  requestWebDavPermission,
   saveWebDavVault,
   testWebDavConnection,
   updateVaultAccount,
@@ -35,7 +37,7 @@ import {
 } from "./vault/vault-service";
 import { beginSystemAuthenticator, saveSystemAuthenticator, systemAuthenticatorStatus, verifySystemAuthenticator } from "./vault/system-auth";
 import { popupSessionUserFor } from "../shared/user-scope";
-import { isJupiterUrl, webDavPermissionOrigin } from "../shared/url";
+import { isJupiterUrl } from "../shared/url";
 import { appsWithAvailableCredentials, clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
 import {
   getJupiterKeepaliveSettings,
@@ -188,12 +190,25 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return requireVaultManager(sender, () => disableLocalUnlock(message.vaultId));
     case "lockVault":
       return requireVaultManager(sender, () => lockVault(message.vaultId));
-    case "requestWebDavPermission":
-      return requireVaultManager(sender, () => chrome.permissions.request({ origins: [webDavPermissionOrigin(message.endpoint)] }));
     case "testWebDavConnection":
-      return requireVaultManager(sender, () => testWebDavConnection(message));
+      return requireVaultManager(sender, async () => {
+        await requestWebDavPermission(message.endpoint);
+        try {
+          return await testWebDavConnection(message);
+        } finally {
+          await releaseUnusedWebDavPermission(message.endpoint);
+        }
+      });
     case "saveWebDavVault":
-      return requireVaultManager(sender, () => saveWebDavVault(message));
+      return requireVaultManager(sender, async () => {
+        await requestWebDavPermission(message.endpoint);
+        try {
+          return await saveWebDavVault(message);
+        } catch (error) {
+          await releaseUnusedWebDavPermission(message.endpoint);
+          throw error;
+        }
+      });
     case "removeVault":
       return requireVaultManager(sender, () => removeVault(message.vaultId));
     case "vaultCatalog":

@@ -1,8 +1,8 @@
 import { credentialForAccount, credentialAvailableForAccount } from "../../shared/api";
 import { importVaultKey, exportVaultKey, generateVaultKey } from "../../shared/vault-crypto";
-import { normalizeWebDavUrl } from "../../shared/url";
+import { normalizeWebDavUrl, webDavPermissionOrigin } from "../../shared/url";
 import type { AccountListResult, UniPassAccount } from "../../shared/types";
-import { type AccountRef, type VaultAccount, type VaultApp, type VaultConnection, type VaultConnectionState, type VaultCredential, type VaultProfile } from "../../shared/vault";
+import { type AccountRef, type VaultAccount, type VaultAccountUpdate, type VaultApp, type VaultConnection, type VaultConnectionState, type VaultCredential, type VaultProfile } from "../../shared/vault";
 import { openGlobalPin, openLocalUnlockMaterial, sealGlobalPin, sealLocalUnlockMaterial, validateGlobalPin, type LocalUnlockEnvelope } from "./local-unlock";
 import { openPersistentMaterial, sealPersistentMaterial, type PersistentSecretEnvelope } from "./persistent-secrets";
 import { WebDavBackend } from "./webdav-backend";
@@ -39,6 +39,19 @@ export async function listVaultConnectionStates(): Promise<VaultConnectionState[
 export async function testWebDavConnection(input: Pick<WebDavVaultInput, "endpoint" | "username" | "appPassword"> & { vaultId?: string }): Promise<void> {
   const material = await connectionMaterial(input.vaultId, input.username, input.appPassword);
   await new WebDavBackend(normalizeWebDavUrl(input.endpoint), material.username, material.appPassword).connect();
+}
+
+export async function requestWebDavPermission(endpoint: string): Promise<void> {
+  const granted = await chrome.permissions.request({ origins: [webDavPermissionOrigin(endpoint)] });
+  if (!granted) throw new Error("未授予 WebDAV 主机权限，已取消操作");
+}
+
+export async function releaseUnusedWebDavPermission(endpoint: string): Promise<void> {
+  try {
+    await releaseWebDavPermissionIfUnused(endpoint, await listVaultProfiles());
+  } catch {
+    // Permission cleanup is best effort and must not mask the requested operation.
+  }
 }
 
 /** Explicit create/open/reconnect state machine; neither unsuccessful open nor a wrong key changes local state. */
@@ -82,6 +95,9 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultCon
     [PROFILES_KEY]: [...nextProfiles, profile],
     [PERSISTENT_CONNECTIONS_KEY]: persistent,
   });
+  if (existingProfile?.endpoint && webDavPermissionOrigin(existingProfile.endpoint) !== webDavPermissionOrigin(endpoint)) {
+    await releaseWebDavPermissionIfUnused(existingProfile.endpoint, [...nextProfiles, profile]);
+  }
   const nextSecrets = { ...secrets };
   if (existingProfile && existingProfile.id !== profile.id) delete nextSecrets[existingProfile.id];
   nextSecrets[profile.id] = material satisfies SessionSecret;
@@ -167,7 +183,7 @@ export async function removeVault(vaultId: string): Promise<void> {
   });
   const secrets = await readSecrets(); delete secrets[vaultId];
   await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: secrets });
-  if (target.endpoint) try { const origin = new URL(target.endpoint).origin; if (!remaining.some((profile) => profile.endpoint && new URL(profile.endpoint).origin === origin)) await chrome.permissions.remove({ origins: [`${origin}/*`] }); } catch { /* permission cleanup is best effort */ }
+  if (target.endpoint) await releaseWebDavPermissionIfUnused(target.endpoint, remaining);
 }
 export async function vaultCatalog(): Promise<WebDavVaultCatalogResult> {
   const entries: WebDavVaultCatalogResult["entries"] = []; const failures: WebDavVaultCatalogResult["failures"] = [];
@@ -183,7 +199,7 @@ export async function createVaultApp(vaultId: string, input: Omit<VaultApp, "id"
 export async function updateVaultApp(vaultId: string, app: VaultApp): Promise<VaultApp> { return coreFor(await profileFor(vaultId)).then((core) => core.updateApp(app)); }
 export async function deleteVaultApp(vaultId: string, appId: string): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.deleteApp(appId)); }
 export async function createVaultAccount(vaultId: string, input: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string }): Promise<VaultAccount> { return coreFor(await profileFor(vaultId)).then((core) => core.createAccount(input)); }
-export async function updateVaultAccount(vaultId: string, account: VaultAccount): Promise<VaultAccount> { return coreFor(await profileFor(vaultId)).then((core) => core.updateAccount(account)); }
+export async function updateVaultAccount(vaultId: string, account: VaultAccountUpdate): Promise<VaultAccount> { return coreFor(await profileFor(vaultId)).then((core) => core.updateAccount(account)); }
 export async function deleteVaultAccount(vaultId: string, accountId: string): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.deleteAccount(accountId)); }
 export async function updateVaultCredential(vaultId: string, accountId: string, credential: VaultCredential): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.updateCredential({ vaultId, accountId }, credential)); }
 
@@ -224,6 +240,15 @@ async function connectionMaterial(vaultId: string | undefined, username: string,
   const material = { username: username.trim() || saved?.username || "", appPassword: appPassword || saved?.appPassword || "", vaultKey: saved?.vaultKey || "" };
   if (!material.username || !material.appPassword) throw new Error("请填写 WebDAV 用户名和 App Password");
   return material;
+}
+async function releaseWebDavPermissionIfUnused(endpoint: string, profiles: VaultProfile[]): Promise<void> {
+  try {
+    const origin = webDavPermissionOrigin(endpoint);
+    const inUse = profiles.some((profile) => profile.endpoint && webDavPermissionOrigin(profile.endpoint) === origin);
+    if (!inUse) await chrome.permissions.remove({ origins: [origin] });
+  } catch {
+    // Permission cleanup is best effort and must not roll back committed Vault state.
+  }
 }
 async function readGlobalPinEnvelope(): Promise<LocalUnlockEnvelope | undefined> { const value = (await chrome.storage.local.get(GLOBAL_PIN_KEY))[GLOBAL_PIN_KEY]; return isRecord(value) ? value as unknown as LocalUnlockEnvelope : undefined; }
 async function readGlobalPinFailures(): Promise<number> { const value = (await chrome.storage.session.get(GLOBAL_PIN_FAILURES_KEY))[GLOBAL_PIN_FAILURES_KEY]; return typeof value === "number" ? value : 0; }

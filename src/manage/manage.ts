@@ -1,5 +1,5 @@
 import { send } from "../popup/bridge";
-import { normalizeWebDavUrl, webDavPermissionOrigin } from "../shared/url";
+import { normalizeWebDavUrl } from "../shared/url";
 import type { AccountCatalogResult } from "../shared/types";
 import type { VaultAccount, VaultApp, VaultConnection, VaultProfile } from "../shared/vault";
 
@@ -43,7 +43,6 @@ async function load(): Promise<void> {
 async function testVault(): Promise<void> {
   try {
     const input = vaultInput();
-    await requestOrigin(input.endpoint);
     await send<void>({ type: "testWebDavConnection", vaultId: selectedVaultId || undefined, ...input });
     setStatus("WebDAV 连接和目录权限检查通过");
   } catch (error) { setStatus(errorText(error), true); }
@@ -53,7 +52,6 @@ async function saveVault(): Promise<void> {
   let saved = false;
   try {
     const input = vaultInput();
-    await requestOrigin(input.endpoint);
     const connection = await send<VaultConnection>({ type: "saveWebDavVault", mode: selectedVaultId ? "reconnect" : "create", vaultId: selectedVaultId || undefined, ...input });
     selectedVaultId = connection.profile.id;
     saved = true;
@@ -65,11 +63,6 @@ async function saveVault(): Promise<void> {
     await load();
   } catch (error) { setStatus(errorText(error), true); }
   finally { if (saved) setValue("appPassword", ""); }
-}
-
-async function requestOrigin(endpoint: string): Promise<void> {
-  const granted = await chrome.permissions.request({ origins: [webDavPermissionOrigin(endpoint)] });
-  if (!granted) throw new Error("未授予 WebDAV 主机权限，已取消操作");
 }
 
 function vaultInput() {
@@ -98,7 +91,7 @@ async function saveAccount(): Promise<void> {
     } else {
       const existing = findAccount(id);
       if (!existing) throw new Error("账号不存在");
-      await send<VaultAccount>({ type: "updateVaultAccount", vaultId: selectedVaultId, account: { ...existing, appId: accountApp.value, username: value("accountUsername"), remark: value("accountRemark") || undefined } });
+      await send({ type: "updateVaultAccount", vaultId: selectedVaultId, account: { id, appId: accountApp.value, username: value("accountUsername"), remark: value("accountRemark") || undefined } });
       if (value("accountPassword")) await send<void>({ type: "updateVaultCredential", vaultId: selectedVaultId, accountId: id, credential: { password: value("accountPassword") } });
     }
     resetAccount(); setStatus("账号和凭据已保存"); await load();
@@ -116,7 +109,7 @@ function selectApp(entry: AccountCatalogResult["entries"][number]): void { setVa
 function selectAccount(account: AccountCatalogResult["entries"][number]["accounts"][number]): void { setValue("accountId", String(account.id ?? "")); setValue("accountUsername", account.account || account.email || ""); setValue("accountRemark", account.remark || ""); accountApp.value = String(account.appId || ""); document.querySelector<HTMLButtonElement>("#deleteAccount")!.disabled = false; }
 function resetApp(): void { ["appId", "appName", "appHost", "appPath"].forEach((id) => setValue(id, "")); document.querySelector<HTMLButtonElement>("#deleteApp")!.disabled = true; }
 function resetAccount(): void { ["accountId", "accountUsername", "accountRemark", "accountPassword"].forEach((id) => setValue(id, "")); document.querySelector<HTMLButtonElement>("#deleteAccount")!.disabled = true; }
-function findAccount(id: string): VaultAccount | undefined { return catalog.flatMap((entry) => entry.accounts).find((account) => String(account.id) === id) as VaultAccount | undefined; }
+function findAccount(id: string): AccountCatalogResult["entries"][number]["accounts"][number] | undefined { return catalog.flatMap((entry) => entry.accounts).find((account) => String(account.id) === id); }
 function entryName(apps: AccountCatalogResult["entries"], appId: string | number | undefined): string { return apps.find((entry) => String(entry.appId) === String(appId))?.appName || "无备注"; }
 function row(title: string, meta: string, onClick: () => void): HTMLElement { const element = document.createElement("button"); element.type = "button"; element.className = "row"; const main = document.createElement("span"); main.textContent = title; const small = document.createElement("small"); small.textContent = meta; main.append(small); element.append(main); element.addEventListener("click", onClick); return element; }
 function value(id: string): string { return document.querySelector<HTMLInputElement>(`#${id}`)?.value.trim() || ""; }

@@ -201,6 +201,26 @@ test("removing a Vault clears only extension state and its unused host permissio
   }
 });
 
+test("permission cleanup keeps origins used by another profile and removes orphan origins", async () => {
+  const originalChrome = globalThis.chrome;
+  let profiles = [{ id: "vault-shared-origin", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/other/" }];
+  const permissionRemovals = [];
+  globalThis.chrome = {
+    storage: { local: { async get(key) { return { [key]: profiles }; } } },
+    permissions: { async remove(value) { permissionRemovals.push(value); return true; } },
+  };
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    await vaultService.releaseUnusedWebDavPermission("https://nas.example/test/");
+    assert.deepEqual(permissionRemovals, []);
+    profiles = [];
+    await vaultService.releaseUnusedWebDavPermission("https://nas.example/test/");
+    assert.deepEqual(permissionRemovals, [{ origins: ["https://nas.example/*"] }]);
+  } finally {
+    globalThis.chrome = originalChrome;
+  }
+});
+
 test("orphan persistent material is ignored and cannot create a usable Vault", async () => {
   const originalChrome = globalThis.chrome;
   const localValues = new Map();
@@ -263,16 +283,17 @@ test("existing Vault opens from its encrypted manifest identity without writing 
   assert.equal((await opened.catalog()).accounts[0].id, account.id);
 });
 
-test("reconnect adopts a stale local profile ID from the remote manifest without overwriting data", async () => {
+test("reconnect adopts a stale local profile ID and releases its unused previous origin", async () => {
   const originalChrome = globalThis.chrome;
   const originalFetch = globalThis.fetch;
   const remoteVaultId = "remote-vault-123456";
-  const staleProfile = { id: "stale-local-id", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/dav/" };
+  const staleProfile = { id: "stale-local-id", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://old-nas.example/dav/" };
   const key = await cryptoApi.generateVaultKey();
   const vaultKey = await cryptoApi.exportVaultKey(key);
   const manifestData = await cryptoApi.encryptVaultObject(key, "manifest", "manifest", { vaultId: remoteVaultId, schemaVersion: 1 });
   const localWrites = [];
   const sessionWrites = [];
+  const permissionRemovals = [];
   globalThis.chrome = {
     storage: {
       local: {
@@ -290,6 +311,7 @@ test("reconnect adopts a stale local profile ID from the remote manifest without
         async set(value) { sessionWrites.push(value); },
       },
     },
+    permissions: { async remove(value) { permissionRemovals.push(value); return true; } },
   };
   globalThis.fetch = async (_input, init) => {
     if (init.method === "PROPFIND" && String(_input).endsWith("/objects/")) return new Response(`<d:multistatus xmlns:d='DAV:'><d:response><d:href>/dav/objects/manifest.json</d:href><d:getetag>&quot;manifest&quot;</d:getetag></d:response></d:multistatus>`, { status: 207 });
@@ -299,10 +321,11 @@ test("reconnect adopts a stale local profile ID from the remote manifest without
   };
   try {
     const vaultService = await load("src/background/vault/vault-service.ts");
-    const result = await vaultService.saveWebDavVault({ mode: "reconnect", vaultId: staleProfile.id, name: staleProfile.name, endpoint: staleProfile.endpoint, username: "fixture-user", appPassword: "fixture-only-app-password" });
+    const result = await vaultService.saveWebDavVault({ mode: "reconnect", vaultId: staleProfile.id, name: staleProfile.name, endpoint: "https://new-nas.example/dav/", username: "fixture-user", appPassword: "fixture-only-app-password" });
     assert.equal(result.profile.id, remoteVaultId);
     assert.equal(localWrites.some((value) => value["unipass-vault-profiles"]?.some((profile) => profile.id === staleProfile.id)), false);
     assert.equal(sessionWrites.some((value) => value["unipass-vault-session-secrets"]?.[remoteVaultId]?.vaultKey === vaultKey), true);
+    assert.deepEqual(permissionRemovals, [{ origins: ["https://old-nas.example/*"] }]);
   } finally {
     globalThis.chrome = originalChrome;
     globalThis.fetch = originalFetch;
@@ -370,8 +393,9 @@ test("Vault Core uses Account username only, preserves password, and tombstones 
   const account = await core.createAccount({ appId: app.id, username: "A", password: "secret" });
   const credentialObject = objects.get(`credential_${account.credentialId}`);
   assert.deepEqual(Object.keys((await cryptoApi.decryptVaultObject(key, credentialObject.data)).payload).sort(), ["password"]);
-  await core.updateAccount({ ...account, username: "B" });
+  await core.updateAccount({ id: account.id, appId: account.appId, username: "B", credentialId: "attacker-controlled-id" });
   assert.deepEqual(await core.credential({ vaultId: core.vaultId, accountId: account.id }), { username: "B", password: "secret" });
+  assert.equal((await core.catalog()).accounts[0].credentialId, account.credentialId);
   await assert.rejects(core.deleteApp(app.id), /仍包含账号/);
   await core.deleteAccount(account.id);
   await assert.rejects(core.credential({ vaultId: core.vaultId, accountId: account.id }), /已删除/);

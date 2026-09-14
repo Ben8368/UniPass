@@ -51,6 +51,9 @@ export interface VaultAccount {
   deletedAt?: number;
 }
 
+/** Mutable account metadata; credential ownership is immutable after creation. */
+export type VaultAccountUpdate = Pick<VaultAccount, "id" | "appId" | "username" | "remark" | "favorite">;
+
 /** New payloads contain secrets only. Readers accept the former optional username field. */
 export interface VaultCredential { password: string; deletedAt?: number; username?: string; }
 

@@ -14,6 +14,7 @@ const { normalizeWebDavUrl, webDavPermissionOrigin } = await load("src/shared/ur
 const popupHtml = await readFile(new URL("../src/popup/popup.html", import.meta.url), "utf8");
 const popupCss = await readFile(new URL("../src/popup/components.css", import.meta.url), "utf8");
 const webdavSource = await readFile(new URL("../src/popup/webdav-settings.ts", import.meta.url), "utf8");
+const workerSource = await readFile(new URL("../src/background/service-worker.ts", import.meta.url), "utf8");
 
 test("WebDAV URLs are HTTPS-only and permission is narrowed to one origin", () => {
   assert.equal(normalizeWebDavUrl("https://nas.example/dav"), "https://nas.example/dav/");
@@ -22,17 +23,18 @@ test("WebDAV URLs are HTTPS-only and permission is narrowed to one origin", () =
   assert.throws(() => normalizeWebDavUrl("https://user:secret@nas.example/dav"), /只能包含/);
 });
 
-test("WebDAV settings handles denied permission without saving and clears secrets after save", () => {
+test("WebDAV settings delegates permission lifecycle to the background and clears secrets after save", () => {
   assert.match(popupHtml, /id="webdavUrl" type="url"/);
   assert.match(popupHtml, /id="webdavUsername" type="text" autocomplete="username"/);
   assert.match(popupHtml, /id="webdavPassword" type="password" autocomplete="new-password"/);
-  assert.match(webdavSource, /type: "requestWebDavPermission"/);
-  assert.match(webdavSource, /未授予 WebDAV 主机权限，已取消操作/);
+  assert.doesNotMatch(webdavSource, /requestWebDavPermission|chrome\.permissions/);
   assert.match(webdavSource, /type: "testWebDavConnection"/);
   assert.match(webdavSource, /WebDAV 连接和目录权限检查通过/);
   assert.match(webdavSource, /type: "saveWebDavVault"/);
   assert.match(webdavSource, /if \(saved\) \{ this\.appPassword\.value = ""; this\.vaultKey\.value = ""; \}/);
   assert.match(webdavSource, /type: "removeVault"/);
+  assert.match(workerSource, /case "testWebDavConnection":[\s\S]*requestWebDavPermission[\s\S]*finally[\s\S]*releaseUnusedWebDavPermission/);
+  assert.match(workerSource, /case "saveWebDavVault":[\s\S]*requestWebDavPermission[\s\S]*catch[\s\S]*releaseUnusedWebDavPermission/);
   assert.match(popupCss, /\.webdav-status\s*\{[^}]*display:\s*flex/s);
 });
 

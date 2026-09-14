@@ -55,12 +55,12 @@ test("Popup Advanced mode is ephemeral and uses a handshaken Port", () => {
 test("settings connects WebDAV inside the extension UI without opening a management tab", () => {
   assert.match(settingsSource, /new WebDavSettingsController\(reportStatus/);
   assert.doesNotMatch(settingsSource, /openVaultManager|chrome\.tabs\.create/);
-  assert.match(webdavSettingsSource, /type: "requestWebDavPermission"/);
+  assert.doesNotMatch(webdavSettingsSource, /requestWebDavPermission|chrome\.permissions/);
   assert.match(webdavSettingsSource, /type: "testWebDavConnection"/);
   assert.match(webdavSettingsSource, /type: "saveWebDavVault"/);
   assert.match(webdavSettingsSource, /type: "removeVault"/);
   assert.match(workerSource, /sender\.id !== chrome\.runtime\.id/);
-  assert.match(workerSource, /case "requestWebDavPermission":[\s\S]*chrome\.permissions\.request/);
+  assert.match(workerSource, /case "testWebDavConnection":[\s\S]*requestWebDavPermission/);
   assert.match(workerSource, /case "removeVault":\s+return requireVaultManager\(sender, \(\) => removeVault\(message\.vaultId\)\)/);
   assert.doesNotMatch(workerSource, /case "openVaultManager"/);
 });

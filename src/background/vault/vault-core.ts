@@ -5,6 +5,7 @@ import {
   type AccountRef,
   type StoredObject,
   type VaultAccount,
+  type VaultAccountUpdate,
   type VaultApp,
   type VaultBackend,
   type VaultCatalog,
@@ -124,11 +125,20 @@ export class VaultCore {
     return account;
   }
 
-  async updateAccount(account: VaultAccount): Promise<VaultAccount> {
+  async updateAccount(account: VaultAccountUpdate): Promise<VaultAccount> {
     const current = await this.readAccount(account.id);
     const app = await this.readApp(account.appId);
     if (app.value.deletedAt) throw new Error("应用已删除");
-    const next = { ...account, vaultId: this.vaultId, deletedAt: undefined };
+    const next: VaultAccount = {
+      ...current.value,
+      appId: account.appId,
+      username: account.username,
+      remark: account.remark,
+      favorite: account.favorite,
+      vaultId: this.vaultId,
+      credentialId: current.value.credentialId,
+      deletedAt: undefined,
+    };
     await this.update("account", account.id, next, current.stored.revision);
     return next;
   }

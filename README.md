@@ -26,7 +26,7 @@
 - `https://portal.unipass.top/*`：调用 UniPass API，并使用浏览器已有的 UniPass 登录会话。
 - `https://accounts.feishu.cn/*`：仅在用户点击“一键登录”后，对固定 Tec-IAM OAuth 客户端和回调地址点击“授权”；不读取飞书账号数据或授权码。
 - `https://jupiter.tec-do.com/*`：仅在用户主动开启木星保活后登录并同步会话。
-- `optional_host_permissions: https://*/*`：仅在用户在扩展齿轮的密码库设置中主动测试/保存 WebDAV URL 时申请对应的 `https://host/*`；不会申请常驻全站访问。
+- `optional_host_permissions: https://*/*`：仅在用户在扩展齿轮的密码库设置中主动测试/保存 WebDAV URL 时申请对应的 `https://host/*`；测试完成、保存失败、地址迁移或删除连接后会回收不再使用的 origin，不会申请常驻全站访问。
 
 扩展不申请 `cookies`、`privacy`、`webNavigation`、`contextMenus`、`declarativeNetRequest` 或 `<all_urls>`，也不注册常驻 Content Script。
 

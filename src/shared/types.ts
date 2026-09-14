@@ -1,4 +1,4 @@
-import type { AccountRef, AppRef, VaultAccount, VaultApp, VaultConnectionState, VaultTarget } from "./vault";
+import type { AccountRef, AppRef, VaultAccount, VaultAccountUpdate, VaultApp, VaultConnectionState, VaultTarget } from "./vault";
 
 export interface UniPassApp {
   id: string | number;
@@ -89,7 +89,6 @@ export type BackgroundRequest =
   | { type: "setGlobalPin"; pin: string }
   | { type: "disableLocalUnlock"; vaultId: string }
   | { type: "lockVault"; vaultId: string }
-  | { type: "requestWebDavPermission"; endpoint: string }
   | { type: "testWebDavConnection"; name?: string; endpoint: string; username: string; appPassword: string; mode?: "create" | "existing" | "reconnect"; vaultId?: string; vaultKey?: string }
   | { type: "saveWebDavVault"; mode: "create" | "existing" | "reconnect"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string; vaultKey?: string }
   | { type: "removeVault"; vaultId: string }
@@ -98,7 +97,7 @@ export type BackgroundRequest =
   | { type: "updateVaultApp"; vaultId: string; app: VaultApp }
   | { type: "deleteVaultApp"; vaultId: string; appId: string }
   | { type: "createVaultAccount"; vaultId: string; account: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string } }
-  | { type: "updateVaultAccount"; vaultId: string; account: VaultAccount }
+  | { type: "updateVaultAccount"; vaultId: string; account: VaultAccountUpdate }
   | { type: "deleteVaultAccount"; vaultId: string; accountId: string }
   | { type: "updateVaultCredential"; vaultId: string; accountId: string; credential: { password: string } };
 

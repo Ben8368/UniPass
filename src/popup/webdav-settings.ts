@@ -190,18 +190,12 @@ export class WebDavSettingsController {
     };
   }
 
-  private async requestOrigin(endpoint: string): Promise<void> {
-    const granted = await send<boolean>({ type: "requestWebDavPermission", endpoint });
-    if (!granted) throw new Error("未授予 WebDAV 主机权限，已取消操作");
-  }
-
   private async testConnection(): Promise<void> {
     if (this.busy) return;
     this.setBusy(true, "test");
     this.showStatus("正在测试 WebDAV 连接…");
     try {
       const input = this.input();
-      await this.requestOrigin(input.endpoint);
       await send<void>({ type: "testWebDavConnection", ...input });
       this.showStatus("WebDAV 连接和目录权限检查通过");
     } catch (error) {
@@ -219,7 +213,6 @@ export class WebDavSettingsController {
     let saved = false;
     try {
       const input = this.input();
-      await this.requestOrigin(input.endpoint);
       const connection = await send<VaultConnection>({ type: "saveWebDavVault", ...input });
       saved = true;
       await this.open(connection.profile.id);
