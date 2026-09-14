@@ -1,4 +1,5 @@
 import type { SystemAuthenticatorAssertion, SystemAuthenticatorAttestation } from "../../shared/types";
+import { verifyGlobalPin } from "./vault-service";
 
 const SYSTEM_AUTHENTICATOR_KEY = "unipass-system-authenticator";
 const SYSTEM_AUTH_PENDING_KEY = "unipass-system-auth-pending";
@@ -23,9 +24,18 @@ export async function systemAuthenticatorStatus(): Promise<{ configured: boolean
   return { configured: Boolean(await readRecord()) };
 }
 
-export async function beginSystemAuthenticator(purpose: PendingSystemAuth["purpose"]): Promise<{ challenge: string; credentialId?: string }> {
+export async function beginSystemAuthenticator(
+  purpose: PendingSystemAuth["purpose"],
+  replacementAuth?: SystemAuthenticatorAssertion,
+  replacementPin?: string,
+): Promise<{ challenge: string; credentialId?: string }> {
   const record = await readRecord();
   if (purpose === "authenticate" && !record) throw new Error("尚未设置系统验证，请先设置系统验证或使用备用 PIN");
+  if (purpose === "register" && record) {
+    if (replacementAuth) await verifySystemAuthenticator(replacementAuth);
+    else if (replacementPin) await verifyGlobalPinForReplacement(replacementPin);
+    else throw new Error("已有系统验证器，请先完成当前系统验证或输入备用 PIN 后再替换");
+  }
   const challenge = base64Url(crypto.getRandomValues(new Uint8Array(32)));
   await chrome.storage.session.set({ [SYSTEM_AUTH_PENDING_KEY]: { purpose, challenge, expiresAt: Date.now() + SYSTEM_AUTH_TIMEOUT_MS } satisfies PendingSystemAuth });
   return { challenge, ...(purpose === "authenticate" && record ? { credentialId: record.credentialId } : {}) };
@@ -35,7 +45,7 @@ export async function saveSystemAuthenticator(attestation: SystemAuthenticatorAt
   const pending = await consumePending("register");
   const clientData = verifyClientData(attestation.clientDataJSON, pending, "webauthn.create");
   const authenticatorData = fromBase64Url(attestation.authenticatorData);
-  requireUserVerification(authenticatorData);
+  await requireAuthenticatorData(authenticatorData);
   const publicKey = fromBase64Url(attestation.publicKey);
   if (!attestation.credentialId || !publicKey.byteLength || (attestation.algorithm !== -7 && attestation.algorithm !== -257)) {
     throw new Error("系统验证器注册信息无效");
@@ -58,7 +68,7 @@ export async function verifySystemAuthenticator(assertion: SystemAuthenticatorAs
   if (!record || assertion.credentialId !== record.credentialId) throw new Error("系统验证器与当前扩展不匹配");
   const clientData = verifyClientData(assertion.clientDataJSON, pending, "webauthn.get");
   const authenticatorData = fromBase64Url(assertion.authenticatorData);
-  requireUserVerification(authenticatorData);
+  await requireAuthenticatorData(authenticatorData);
   const publicKey = fromBase64Url(record.publicKey);
   const key = await importPublicKey(publicKey, record.algorithm);
   const clientDataHash = new Uint8Array(await crypto.subtle.digest("SHA-256", asBufferSource(clientData.raw)));
@@ -97,8 +107,17 @@ function verifyClientData(encoded: string, pending: PendingSystemAuth, expectedT
   return { raw, parsed };
 }
 
-function requireUserVerification(authenticatorData: Uint8Array): void {
+async function requireAuthenticatorData(authenticatorData: Uint8Array): Promise<void> {
   if (authenticatorData.byteLength < 37 || (authenticatorData[32] & 0x04) === 0) throw new Error("系统验证未完成用户验证");
+  const expected = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(extensionOrigin())));
+  const actual = authenticatorData.subarray(0, 32);
+  let mismatch = actual.byteLength ^ expected.byteLength;
+  for (let index = 0; index < expected.byteLength; index += 1) mismatch |= actual[index] ^ expected[index];
+  if (mismatch !== 0) throw new Error("系统验证 RP ID 不匹配");
+}
+
+async function verifyGlobalPinForReplacement(pin: string): Promise<void> {
+  await verifyGlobalPin(pin);
 }
 
 async function importPublicKey(publicKey: Uint8Array, algorithm: -7 | -257): Promise<CryptoKey> {

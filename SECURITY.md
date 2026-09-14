@@ -4,6 +4,24 @@
 
 本扩展处理 UniPass 账号展示信息、短生命周期明文密码和 Jupiter 会话。首要目标是减少凭据暴露、限制可填充页面，并让权限、网络和缓存行为可审计。
 
+## Threat Model / Accepted Risks
+
+### 主要保护目标
+
+- 恶意网页不能直接取得扩展保存的凭据；错误页面或错误账号不能绕过 HTTPS、origin/path 和用户触发检查完成填充。
+- WebDAV 服务端即使泄露，也只能看到加密 Vault 对象，不能直接得到 Vault plaintext 或 Vault Key。
+- Chrome 扩展权限、外部主机和持久化数据保持最小化；凭据不进入日志、明文持久化存储或构建产物。
+- Advanced plaintext disclosure 必须由用户显式触发，并且只在当前页面/Popup 的 ephemeral capability 生命周期内存在。
+
+### 不作为主要保护目标
+
+以下情形超出客户端扩展可以可靠提供的安全边界：已完全控制用户 OS、已完全控制并解锁 Chrome Profile、DevTools 或 runtime memory inspection、用户主动安装的恶意修改版扩展。客户端必须持有 Legacy 协议材料，因此 WASM hardening 只提高静态分析成本，不构成真正的秘密边界。
+
+### Accepted Risks / Product Trade-offs
+
+- 备用全局 PIN 有意允许 4–32 位数字。它服务于私人设备上的低摩擦 fallback，不是设备完全失陷后的最终安全边界；本任务不提高最低长度，也不改成强密码要求。
+- Legacy UniPass / Jupiter 当前仍是 active requirement。TD-009 只有未来确认不再使用 Legacy 后才执行；当前只冻结无必要的新 Legacy crypto responsibility，不删除现有兼容能力。
+
 ## 强制安全不变量
 
 - 真实用户的 UniPass/Vault credential 明文密码不得写入 `localStorage`、`chrome.storage`、日志、错误文本、测试 fixture 或构建产物；仅允许不对应任何真实账号的固定算法测试向量。WebDAV App Password 和 Vault Key 是另行管理的认证 secret，只能以扩展设备密钥保护的密文长期保存，解密后的值仅在 Service Worker 当前运行需要时存在。
@@ -26,7 +44,7 @@
 
 - Self Derived Build 是 Popup 内的静态打包器：只按当前构建生成的 `self-build-files.json` fetch runtime 文件；清单不存在或文件超出单文件/总量限制时 fail closed。禁止读取 `chrome.storage`、`localStorage`、cookies、凭据、token、会话或用户输入数据（目标版号除外）。生成前后均 fail closed 审计 manifest 版本/key、除 `version`/`version_name` 外的顶层字段、WASM magic、runtime config、完整文件集合和 WASM byte-for-byte 一致性；不申请 `downloads` 权限，使用用户点击触发的 Blob 下载。它不会重新编译 Rust/WASM、生成新的 hardened crypto strategy 或 AES material fragmentation。
 
-WebDAV Vault 是独立于 Legacy UniPass 的新数据源。齿轮二级页只接受 HTTPS URL，并在用户主动测试/保存时通过 `chrome.permissions.request` 申请对应的 `https://host/*` optional origin；manifest 不包含 WebDAV 永久 host permission。Popup/页面浮层只在用户点击测试或保存时短暂发送用户名、App Password 和 Vault Key，绝不自行发起 WebDAV 网络请求；网络请求和 `Authorization` header 始终由 Service Worker 的 `WebDavBackend` 生成。当前页就地添加账号同样只能由用户提交触发，且自动建立的目标仅为当前 HTTPS 域名。Legacy userScope 只保护 legacy-unipass；WebDAV 使用自身 AccountRef、持久化加密连接材料/Vault Key 与 Advanced capability。扩展在 IndexedDB 中保存不可导出的设备 AES-256-GCM 密钥，在 `chrome.storage.local` 保存按 Vault 加密的连接材料密文；浏览器重启后自动恢复 WebDAV 登录态，不要求 PIN。查看账号密码和 Legacy 高级功能优先使用系统 WebAuthn 用户验证：扩展只校验一次性 challenge、扩展 origin、用户已验证标志和本地公钥签名，不接触 macOS/Windows 的具体 PIN；系统验证不可用时才回退到 4 至 32 位备用全局 PIN。备用 PIN 明文不保存，失败计数只在 session，达到上限 fail closed。解密后的认证用户名、App Password 和 Vault Key 只在 Service Worker 当前运行需要时进入内存或 `chrome.storage.session`，不写入明文 local、localStorage、Vault Object 或日志。Vault Key 绝不上传 WebDAV。新建 Vault 时仅向当前设置界面返回一次恢复用 Vault Key，用户必须自行安全保存；界面关闭后清空显示值。重新连接已有 Vault 时优先使用本机长期保存的连接材料，用户也可填写新材料替换；缺失或错误时不得生成新 Key、覆盖 profile 或写入远端数据。用户在确认后可删除本地 Vault Profile；该操作只清除扩展中的 Profile、持久化/会话连接材料和不再使用的 optional host permission，绝不删除 WebDAV 服务器上的对象。
+WebDAV Vault 是独立于 Legacy UniPass 的新数据源。齿轮二级页只接受 HTTPS URL，并在用户主动测试/保存时通过 `chrome.permissions.request` 申请对应的 `https://host/*` optional origin；manifest 不包含 WebDAV 永久 host permission。Popup/页面浮层只在用户点击测试或保存时短暂发送用户名、App Password 和 Vault Key，绝不自行发起 WebDAV 网络请求；网络请求和 `Authorization` header 始终由 Service Worker 的 `WebDavBackend` 生成。当前页就地添加账号同样只能由用户提交触发，且自动建立的目标仅为当前 HTTPS 域名。Legacy userScope 只保护 legacy-unipass；WebDAV 使用自身 AccountRef、持久化加密连接材料/Vault Key 与 Advanced capability。扩展在 IndexedDB 中保存不可导出的设备 AES-256-GCM 密钥，在 `chrome.storage.local` 保存按 Vault 加密的连接材料密文；浏览器重启后自动恢复 WebDAV 登录态，不要求 PIN。查看账号密码和 Legacy 高级功能优先使用系统 WebAuthn 用户验证：扩展校验一次性 challenge、`webauthn.create/get`、扩展 origin、`authenticatorData` 的 `rpIdHash = SHA-256(chrome-extension://<extension-id>)`、用户已验证标志、本地公钥签名和 credential ID；替换已有验证器前必须再次通过当前系统验证器或备用 PIN。扩展不接触 macOS/Windows 的具体 PIN；系统验证不可用时才回退到 4 至 32 位备用全局 PIN。备用 PIN 明文不保存，失败计数只在 session，达到上限 fail closed。解密后的认证用户名、App Password 和 Vault Key 只在 Service Worker 当前运行需要时进入内存或 `chrome.storage.session`，不写入明文 local、localStorage、Vault Object 或日志。Vault Key 绝不上传 WebDAV。新建 Vault 时仅向当前设置界面返回一次恢复用 Vault Key，用户必须自行安全保存；界面关闭后清空显示值。重新连接已有 Vault 时优先使用本机长期保存的连接材料，用户也可填写新材料替换；缺失或错误时不得生成新 Key、覆盖 profile 或写入远端数据。用户在确认后可删除本地 Vault Profile；该操作只清除扩展中的 Profile、持久化/会话连接材料和不再使用的 optional host permission，绝不删除 WebDAV 服务器上的对象。
 
 - 当前页只能将本会话已连接的 Vault 作为写入目标；未连接 Profile 仅公开 ID、名称和连接状态，界面必须引导用户重新连接，不能将读取失败降级为“没有保存账号”。
 

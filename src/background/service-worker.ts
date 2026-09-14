@@ -121,7 +121,7 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
     case "getSystemAuthenticatorStatus":
       return requireVaultManager(sender, systemAuthenticatorStatus);
     case "beginSystemAuthenticator":
-      return requireVaultManager(sender, () => beginSystemAuthenticator(message.purpose));
+      return requireVaultManager(sender, () => beginSystemAuthenticator(message.purpose, message.replacementAuth, message.replacementPin));
     case "saveSystemAuthenticator":
       return requireVaultManager(sender, () => saveSystemAuthenticator(message.attestation));
     case "fillFromOverlay":

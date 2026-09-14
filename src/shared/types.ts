@@ -78,7 +78,7 @@ export type BackgroundRequest =
   | { type: "revealCredential"; accountId: string | number; accountRef?: AccountRef; userScope?: string }
   | { type: "enableAdvancedMode"; pin?: string; systemAuth?: SystemAuthenticatorAssertion }
   | { type: "getSystemAuthenticatorStatus" }
-  | { type: "beginSystemAuthenticator"; purpose: "register" | "authenticate" }
+  | { type: "beginSystemAuthenticator"; purpose: "register" | "authenticate"; replacementAuth?: SystemAuthenticatorAssertion; replacementPin?: string }
   | { type: "saveSystemAuthenticator"; attestation: SystemAuthenticatorAttestation }
   | { type: "getJupiterKeepalive"; userScope: string }
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }

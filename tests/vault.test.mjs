@@ -191,13 +191,54 @@ test("removing a Vault clears only extension state and its unused host permissio
   try {
     const vaultService = await load("src/background/vault/vault-service.ts");
     await vaultService.removeVault(profile.id);
-    assert.deepEqual(localWrites, [{ "unipass-vault-profiles": [] }, { "unipass-vault-local-unlocks": {} }, { "unipass-vault-persistent-connections": {} }]);
+    assert.deepEqual(localWrites, [{ "unipass-vault-profiles": [], "unipass-vault-local-unlocks": {}, "unipass-vault-persistent-connections": {} }]);
     assert.deepEqual(sessionWrites, [{ "unipass-vault-session-secrets": {} }]);
     assert.deepEqual(permissionRemovals, [{ origins: ["https://nas.example/*"] }]);
     assert.equal(networkCalls, 0);
   } finally {
     globalThis.chrome = originalChrome;
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("orphan persistent material is ignored and cannot create a usable Vault", async () => {
+  const originalChrome = globalThis.chrome;
+  const localValues = new Map();
+  const area = (values) => ({
+    async get(key) { return { [key]: values.get(key) }; },
+    async set(entries) { for (const [key, value] of Object.entries(entries)) values.set(key, value); },
+  });
+  globalThis.chrome = { storage: { local: area(localValues), session: { async get() { return {}; }, async set() {} } } };
+  try {
+    const persistentApi = await load("src/background/vault/persistent-secrets.ts");
+    localValues.set("unipass-vault-persistent-connections", {
+      "orphan-vault": await persistentApi.sealPersistentMaterial({ username: "fixture-user", appPassword: "fixture-only-app-password", vaultKey: "fixture-vault-key" }),
+    });
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    assert.deepEqual(await vaultService.listVaultProfiles(), []);
+    await assert.rejects(vaultService.credentialForRef({ vaultId: "orphan-vault", accountId: "orphan-account" }), /Vault 不存在/);
+  } finally {
+    globalThis.chrome = originalChrome;
+  }
+});
+
+test("an unreadable persistent secret is disconnected and reported as a Vault failure, not an empty catalog", async () => {
+  const originalChrome = globalThis.chrome;
+  const profile = { id: "vault-unreadable", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/dav/" };
+  globalThis.chrome = {
+    storage: {
+      local: { async get(key) { return key === "unipass-vault-profiles" ? { [key]: [profile] } : { [key]: { [profile.id]: { version: 1, algorithm: "AES-256-GCM", nonce: "bad", ciphertext: "bad" } } }; } },
+      session: { async get() { return {}; }, async set() {} },
+    },
+  };
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    assert.deepEqual(await vaultService.listVaultConnectionStates(), [{ vaultId: profile.id, name: profile.name, connected: false }]);
+    const catalog = await vaultService.vaultCatalog();
+    assert.deepEqual(catalog.entries, []);
+    assert.deepEqual(catalog.failures.map(({ vaultId }) => vaultId), [profile.id]);
+  } finally {
+    globalThis.chrome = originalChrome;
   }
 });
 
@@ -262,6 +303,52 @@ test("reconnect adopts a stale local profile ID from the remote manifest without
     assert.equal(result.profile.id, remoteVaultId);
     assert.equal(localWrites.some((value) => value["unipass-vault-profiles"]?.some((profile) => profile.id === staleProfile.id)), false);
     assert.equal(sessionWrites.some((value) => value["unipass-vault-session-secrets"]?.[remoteVaultId]?.vaultKey === vaultKey), true);
+  } finally {
+    globalThis.chrome = originalChrome;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a local Vault commit failure leaves the old profile and session state recoverable", async () => {
+  const originalChrome = globalThis.chrome;
+  const originalFetch = globalThis.fetch;
+  const remoteVaultId = "remote-vault-commit-failure";
+  const staleProfile = { id: "stale-local-commit", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/dav/" };
+  const key = await cryptoApi.generateVaultKey();
+  const vaultKey = await cryptoApi.exportVaultKey(key);
+  const manifestData = await cryptoApi.encryptVaultObject(key, "manifest", "manifest", { vaultId: remoteVaultId, schemaVersion: 1 });
+  const localValues = new Map([["unipass-vault-profiles", [staleProfile]]]);
+  const localWrites = [];
+  const sessionWrites = [];
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get(keyName) { return { [keyName]: localValues.get(keyName) }; },
+        async set(value) {
+          localWrites.push(value);
+          if ("unipass-vault-profiles" in value) throw new Error("injected local commit failure");
+          for (const [keyName, stored] of Object.entries(value)) localValues.set(keyName, stored);
+        },
+      },
+      session: {
+        async get(keyName) { return keyName === "unipass-vault-session-secrets" ? { [keyName]: { [staleProfile.id]: { username: "fixture-user", appPassword: "fixture-only-app-password", vaultKey } } } : {}; },
+        async set(value) { sessionWrites.push(value); },
+      },
+    },
+  };
+  globalThis.fetch = async (_input, init) => {
+    if (init.method === "PROPFIND" && String(_input).endsWith("/objects/")) return new Response(`<d:multistatus xmlns:d='DAV:'><d:response><d:href>/dav/objects/manifest.json</d:href><d:getetag>&quot;manifest&quot;</d:getetag></d:response></d:multistatus>`, { status: 207 });
+    if (init.method === "PROPFIND") return new Response("", { status: 207 });
+    if (init.method === "GET") return new Response(manifestData, { status: 200, headers: { ETag: '"manifest"' } });
+    throw new Error(`unexpected ${init.method}`);
+  };
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    await assert.rejects(vaultService.saveWebDavVault({ mode: "reconnect", vaultId: staleProfile.id, name: staleProfile.name, endpoint: staleProfile.endpoint, username: "fixture-user", appPassword: "fixture-only-app-password" }), /injected local commit failure/);
+    assert.deepEqual(localValues.get("unipass-vault-profiles"), [staleProfile]);
+    assert.equal(localWrites.filter((value) => "unipass-vault-profiles" in value).length, 1);
+    assert.equal("unipass-vault-persistent-connections" in localWrites.find((value) => "unipass-vault-profiles" in value), true);
+    assert.deepEqual(sessionWrites, []);
   } finally {
     globalThis.chrome = originalChrome;
     globalThis.fetch = originalFetch;
@@ -343,7 +430,8 @@ test("system authenticator verifies a user-verified WebAuthn assertion without r
     const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
     const publicKey = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
     const register = await systemAuth.beginSystemAuthenticator("register");
-    const registrationData = new Uint8Array(37); registrationData[32] = 0x05;
+    const rpIdHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("https://extension.fixture")));
+    const registrationData = new Uint8Array(37); registrationData.set(rpIdHash); registrationData[32] = 0x05;
     await systemAuth.saveSystemAuthenticator({
       credentialId: "fixture-credential",
       clientDataJSON: base64Url(new TextEncoder().encode(JSON.stringify({ type: "webauthn.create", challenge: register.challenge, origin: "https://extension.fixture" }))),
@@ -353,7 +441,7 @@ test("system authenticator verifies a user-verified WebAuthn assertion without r
     });
     const authenticate = await systemAuth.beginSystemAuthenticator("authenticate");
     const clientData = new TextEncoder().encode(JSON.stringify({ type: "webauthn.get", challenge: authenticate.challenge, origin: "https://extension.fixture" }));
-    const authenticatorData = new Uint8Array(37); authenticatorData[32] = 0x05;
+    const authenticatorData = new Uint8Array(37); authenticatorData.set(rpIdHash); authenticatorData[32] = 0x05;
     const clientDataHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientData));
     const signedData = new Uint8Array(authenticatorData.length + clientDataHash.length); signedData.set(authenticatorData); signedData.set(clientDataHash, authenticatorData.length);
     const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, signedData));
@@ -363,6 +451,106 @@ test("system authenticator verifies a user-verified WebAuthn assertion without r
     globalThis.chrome = originalChrome;
   }
 });
+
+test("system authenticator rejects malformed or replayed assertions, including RP ID mismatch", async (t) => {
+  const cases = [
+    ["challenge mismatch", (assertion, pending) => { assertion.clientDataJSON = base64Url(new TextEncoder().encode(JSON.stringify({ type: "webauthn.get", challenge: "wrong", origin: pending.origin }))); }, /响应不匹配/],
+    ["expired challenge", (_assertion, _pending, harness) => { harness.sessionValues.set("unipass-system-auth-pending", { purpose: "authenticate", challenge: harness.challenge, expiresAt: Date.now() - 1 }); }, /请求已失效/],
+    ["wrong origin", (assertion, pending) => { assertion.clientDataJSON = base64Url(new TextEncoder().encode(JSON.stringify({ type: "webauthn.get", challenge: pending.challenge, origin: "chrome-extension://wrong-extension" }))); }, /响应不匹配/],
+    ["wrong credential ID", (assertion) => { assertion.credentialId = "wrong-credential"; }, /不匹配/],
+    ["missing user verification", async (assertion, pending) => { assertion.authenticatorData = base64Url(await authenticatorDataFor(pending.origin, 0x01)); }, /用户验证/],
+    ["invalid signature", (assertion) => { assertion.signature = base64Url(new Uint8Array(64).fill(7)); }, /验证失败|签名格式/],
+    ["wrong RP ID hash", async (assertion, pending) => { assertion.authenticatorData = base64Url(await authenticatorDataFor(pending.origin, 0x05, "chrome-extension://wrong-extension")); }, /RP ID/],
+  ];
+
+  for (const [name, mutate, expected] of cases) {
+    await t.test(name, async () => {
+      const harness = await setupSystemAuthHarness();
+      try {
+        await registerFixture(harness);
+        const pending = await harness.api.beginSystemAuthenticator("authenticate");
+        harness.challenge = pending.challenge;
+        const assertion = await assertionFixture(harness, pending.challenge);
+        await mutate(assertion, { ...pending, origin: harness.origin }, harness);
+        await assert.rejects(harness.api.verifySystemAuthenticator(assertion), expected);
+      } finally {
+        harness.restore();
+      }
+    });
+  }
+
+  await t.test("same challenge cannot be replayed", async () => {
+    const harness = await setupSystemAuthHarness();
+    try {
+      await registerFixture(harness);
+      const pending = await harness.api.beginSystemAuthenticator("authenticate");
+      const assertion = await assertionFixture(harness, pending.challenge);
+      await harness.api.verifySystemAuthenticator(assertion);
+      await assert.rejects(harness.api.verifySystemAuthenticator(assertion), /请求已失效/);
+    } finally {
+      harness.restore();
+    }
+  });
+});
+
+test("replacing an existing system authenticator requires current auth or the configured fallback PIN", async () => {
+  const harness = await setupSystemAuthHarness();
+  try {
+    await registerFixture(harness);
+    await assert.rejects(harness.api.beginSystemAuthenticator("register"), /已有系统验证器/);
+    const pending = await harness.api.beginSystemAuthenticator("authenticate");
+    const assertion = await assertionFixture(harness, pending.challenge);
+    const replacement = await harness.api.beginSystemAuthenticator("register", assertion);
+    assert.equal(typeof replacement.challenge, "string");
+  } finally {
+    harness.restore();
+  }
+});
+
+async function setupSystemAuthHarness() {
+  const originalChrome = globalThis.chrome;
+  const localValues = new Map();
+  const sessionValues = new Map();
+  const area = (values) => ({
+    async get(key) { return { [key]: values.get(key) }; },
+    async set(entries) { for (const [key, value] of Object.entries(entries)) values.set(key, value); },
+  });
+  // Node's URL implementation reports a custom-scheme origin as "null";
+  // https:// here is the test double for Chrome's extension origin string.
+  const origin = "https://extension.fixture";
+  globalThis.chrome = { storage: { local: area(localValues), session: area(sessionValues) }, runtime: { getURL() { return `${origin}/`; } } };
+  return { api: await load("src/background/vault/system-auth.ts"), localValues, sessionValues, origin, restore() { globalThis.chrome = originalChrome; } };
+}
+
+async function registerFixture(harness) {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  harness.pair = pair;
+  const pending = await harness.api.beginSystemAuthenticator("register");
+  const clientData = new TextEncoder().encode(JSON.stringify({ type: "webauthn.create", challenge: pending.challenge, origin: harness.origin }));
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
+  await harness.api.saveSystemAuthenticator({
+    credentialId: "fixture-credential",
+    clientDataJSON: base64Url(clientData),
+    authenticatorData: base64Url(await authenticatorDataFor(harness.origin, 0x05)),
+    publicKey: base64Url(publicKey),
+    algorithm: -7,
+  });
+}
+
+async function assertionFixture(harness, challenge) {
+  const clientData = new TextEncoder().encode(JSON.stringify({ type: "webauthn.get", challenge, origin: harness.origin }));
+  const authenticatorData = await authenticatorDataFor(harness.origin, 0x05);
+  const clientDataHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientData));
+  const signedData = new Uint8Array(authenticatorData.length + clientDataHash.length);
+  signedData.set(authenticatorData); signedData.set(clientDataHash, authenticatorData.length);
+  const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, harness.pair.privateKey, signedData));
+  return { credentialId: "fixture-credential", clientDataJSON: base64Url(clientData), authenticatorData: base64Url(authenticatorData), signature: base64Url(signature) };
+}
+
+function authenticatorDataFor(origin, flags, rpId = origin) {
+  const data = new Uint8Array(37);
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(rpId)).then((hash) => { data.set(new Uint8Array(hash)); data[32] = flags; return data; });
+}
 
 function base64Url(value) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);

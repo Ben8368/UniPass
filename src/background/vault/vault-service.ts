@@ -71,12 +71,17 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultCon
   }
   const profile: VaultProfile = { id: core.vaultId, name, backend: "webdav", enabled: true, endpoint };
   const nextProfiles = profiles.filter((candidate) => candidate.id !== profile.id && candidate.id !== existingProfile?.id);
-  await chrome.storage.local.set({ [PROFILES_KEY]: [...nextProfiles, profile] });
   const material = { username: resolvedUsername, appPassword: resolvedAppPassword, vaultKey };
   const persistent = await readPersistentEnvelopes();
   if (existingProfile && existingProfile.id !== profile.id) delete persistent[existingProfile.id];
   persistent[profile.id] = await sealPersistentMaterial(material);
-  await chrome.storage.local.set({ [PERSISTENT_CONNECTIONS_KEY]: persistent });
+  // Profiles and their durable connection material describe one local state.
+  // chrome.storage.local is not a database transaction, but one set minimizes
+  // observable half-written states and gives failures a single recovery point.
+  await chrome.storage.local.set({
+    [PROFILES_KEY]: [...nextProfiles, profile],
+    [PERSISTENT_CONNECTIONS_KEY]: persistent,
+  });
   const nextSecrets = { ...secrets };
   if (existingProfile && existingProfile.id !== profile.id) delete nextSecrets[existingProfile.id];
   nextSecrets[profile.id] = material satisfies SessionSecret;
@@ -101,15 +106,23 @@ export async function unlockVaultLocally(vaultId: string, password: string): Pro
     const core = await VaultCore.open(new WebDavBackend(profile.endpoint!, material.username, material.appPassword), await importVaultKey(material.vaultKey));
     if (!(await readGlobalPinEnvelope())) await setGlobalPin(password);
     let resolvedId = vaultId;
+    const profiles = await listVaultProfiles();
+    const unlocks = await readUnlocks(); delete unlocks[vaultId];
+    const persistent = await readPersistentEnvelopes(); delete persistent[vaultId];
+    let nextProfiles = profiles;
     if (core.vaultId !== vaultId) {
-      const profiles = await listVaultProfiles();
       if (profiles.some((candidate) => candidate.id === core.vaultId && candidate.id !== vaultId)) throw new Error("远端 Vault 已对应另一个本地密码库");
-      await chrome.storage.local.set({ [PROFILES_KEY]: [...profiles.filter((candidate) => candidate.id !== vaultId && candidate.id !== core.vaultId), { ...profile, id: core.vaultId }] });
-      const unlocks = await readUnlocks(); delete unlocks[vaultId]; unlocks[core.vaultId] = await sealLocalUnlockMaterial(password, material); await chrome.storage.local.set({ [LOCAL_UNLOCKS_KEY]: unlocks });
       resolvedId = core.vaultId;
+      nextProfiles = [...profiles.filter((candidate) => candidate.id !== vaultId && candidate.id !== resolvedId), { ...profile, id: resolvedId }];
     }
+    unlocks[resolvedId] = await sealLocalUnlockMaterial(password, material);
+    persistent[resolvedId] = await sealPersistentMaterial(material);
+    await chrome.storage.local.set({
+      ...(core.vaultId !== vaultId && { [PROFILES_KEY]: nextProfiles }),
+      [LOCAL_UNLOCKS_KEY]: unlocks,
+      [PERSISTENT_CONNECTIONS_KEY]: persistent,
+    });
     const secrets = await readSecrets(); delete secrets[vaultId]; secrets[resolvedId] = material; await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: secrets });
-    const persistent = await readPersistentEnvelopes(); delete persistent[vaultId]; persistent[resolvedId] = await sealPersistentMaterial(material); await chrome.storage.local.set({ [PERSISTENT_CONNECTIONS_KEY]: persistent });
     delete failures[vaultId]; await chrome.storage.session.set({ [LOCAL_UNLOCK_FAILURES_KEY]: failures });
   } catch (error) {
     failures[vaultId] = (failures[vaultId] ?? 0) + 1; await chrome.storage.session.set({ [LOCAL_UNLOCK_FAILURES_KEY]: failures });
@@ -142,8 +155,18 @@ export async function verifyGlobalPin(pin: string): Promise<void> {
 
 export async function removeVault(vaultId: string): Promise<void> {
   const profiles = await listVaultProfiles(); const target = profiles.find((profile) => profile.id === vaultId); if (!target) return;
-  const remaining = profiles.filter((profile) => profile.id !== vaultId); await chrome.storage.local.set({ [PROFILES_KEY]: remaining });
-  await lockVault(vaultId); await disableLocalUnlock(vaultId); await deletePersistentConnection(vaultId);
+  const remaining = profiles.filter((profile) => profile.id !== vaultId);
+  const unlocks = await readUnlocks(); delete unlocks[vaultId];
+  const persistent = await readPersistentEnvelopes(); delete persistent[vaultId];
+  // Keep local profile, legacy unlock material, and durable connection material
+  // in one local write so deletion cannot leave an apparently usable orphan.
+  await chrome.storage.local.set({
+    [PROFILES_KEY]: remaining,
+    [LOCAL_UNLOCKS_KEY]: unlocks,
+    [PERSISTENT_CONNECTIONS_KEY]: persistent,
+  });
+  const secrets = await readSecrets(); delete secrets[vaultId];
+  await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: secrets });
   if (target.endpoint) try { const origin = new URL(target.endpoint).origin; if (!remaining.some((profile) => profile.endpoint && new URL(profile.endpoint).origin === origin)) await chrome.permissions.remove({ origins: [`${origin}/*`] }); } catch { /* permission cleanup is best effort */ }
 }
 export async function vaultCatalog(): Promise<WebDavVaultCatalogResult> {
@@ -168,10 +191,11 @@ async function coreFor(profile: VaultProfile): Promise<VaultCore> { if (profile.
 async function profileFor(vaultId: string): Promise<VaultProfile> { const profile = (await listVaultProfiles()).find((candidate) => candidate.id === vaultId); if (!profile || !profile.enabled) throw new Error("Vault 不存在或已停用"); return profile; }
 async function readSecrets(): Promise<Record<string, SessionSecret>> {
   const value = (await chrome.storage.session.get(SESSION_SECRETS_KEY))[SESSION_SECRETS_KEY];
-  const session = isRecord(value) ? value as Record<string, SessionSecret> : {};
-  const persistent = await readPersistentConnections();
-  const restored: Record<string, SessionSecret> = { ...persistent, ...session };
-  return restored;
+  // An existing session map is authoritative for this browser session. This
+  // also makes an explicit lock/removal (an empty map) stick. Only an absent
+  // map triggers restoration from durable encrypted material after startup.
+  if (isRecord(value)) return value as Record<string, SessionSecret>;
+  return readPersistentConnections();
 }
 async function readUnlocks(): Promise<Record<string, LocalUnlockEnvelope>> { const value = (await chrome.storage.local.get(LOCAL_UNLOCKS_KEY))[LOCAL_UNLOCKS_KEY]; return isRecord(value) ? value as Record<string, LocalUnlockEnvelope> : {}; }
 async function readPersistentConnections(): Promise<Record<string, SessionSecret>> {
@@ -201,6 +225,5 @@ async function connectionMaterial(vaultId: string | undefined, username: string,
   if (!material.username || !material.appPassword) throw new Error("请填写 WebDAV 用户名和 App Password");
   return material;
 }
-async function deletePersistentConnection(vaultId: string): Promise<void> { const persistent = await readPersistentEnvelopes(); delete persistent[vaultId]; await chrome.storage.local.set({ [PERSISTENT_CONNECTIONS_KEY]: persistent }); }
 async function readGlobalPinEnvelope(): Promise<LocalUnlockEnvelope | undefined> { const value = (await chrome.storage.local.get(GLOBAL_PIN_KEY))[GLOBAL_PIN_KEY]; return isRecord(value) ? value as unknown as LocalUnlockEnvelope : undefined; }
 async function readGlobalPinFailures(): Promise<number> { const value = (await chrome.storage.session.get(GLOBAL_PIN_FAILURES_KEY))[GLOBAL_PIN_FAILURES_KEY]; return typeof value === "number" ? value : 0; }

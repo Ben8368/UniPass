@@ -29,7 +29,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/vault-crypto.ts` | Web Crypto AES-256-GCM、versioned envelope、nonce/key import/export | 不复用 Legacy UniPass 密文格式；不上传 Vault Key |
 | `src/manage/` | 保留的宽屏 Vault 管理界面 | 不读取 Legacy 密码；不直接访问 WebDAV 网络 |
 | `src/background/advanced-capability.ts` | 以 `sender.documentId` 和 `runtime.Port` 管理 ephemeral Advanced plaintext disclosure capability | 自动因任意 `connect` 授权；使用 storage/TTL/alarm 持久化 capability |
-| `src/background/vault/system-auth.ts` / `src/popup/system-auth.ts` | 通过扩展页 WebAuthn 调用平台认证器，后台验证一次性 challenge、origin、用户验证标志和本地公钥签名 | 读取或保存系统 PIN；把系统认证当作长期 Advanced capability |
+| `src/background/vault/system-auth.ts` / `src/popup/system-auth.ts` | 通过扩展页 WebAuthn 调用平台认证器，后台验证一次性 challenge、origin、`authenticatorData` 的 RP ID hash、用户验证标志和本地公钥签名；替换已有验证器前重新认证 | 读取或保存系统 PIN；把系统认证当作长期 Advanced capability |
 | `src/content/` | 用户点击扩展后挂载页面浮层，或用户点击填入后在当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |

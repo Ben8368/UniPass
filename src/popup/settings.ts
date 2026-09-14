@@ -226,7 +226,8 @@ export class SettingsController {
 
   private async setupSystemAuthenticator(): Promise<void> {
     try {
-      await registerSystemAuthenticator();
+      await registerSystemAuthenticator(this.webdavSettings.readGlobalPin());
+      this.webdavSettings.clearGlobalPin();
       this.reportStatus("系统验证已设置；查看账号密码时将调用 macOS/Windows 的系统认证");
     } catch (error) {
       this.reportStatus(errorText(error), true);

@@ -18,9 +18,19 @@ export async function hasSystemAuthenticator(): Promise<boolean> {
   return (await send<{ configured: boolean }>({ type: "getSystemAuthenticatorStatus" })).configured;
 }
 
-export async function registerSystemAuthenticator(): Promise<void> {
+export async function registerSystemAuthenticator(pin = ""): Promise<void> {
   if (!isWebAuthnAvailable()) throw new SystemAuthUnavailableError();
-  const { challenge } = await send<{ challenge: string }>({ type: "beginSystemAuthenticator", purpose: "register" });
+  let replacementAuth: SystemAuthenticatorAssertion | undefined;
+  let replacementPin: string | undefined;
+  if (await hasSystemAuthenticator()) {
+    try {
+      replacementAuth = await authenticateSystemAuthenticator();
+    } catch (error) {
+      if (!pin) throw new SystemAuthUnavailableError(`当前系统验证未完成；如需替换，请输入备用 PIN：${error instanceof Error ? error.message : "请重试"}`);
+      replacementPin = pin;
+    }
+  }
+  const { challenge } = await send<{ challenge: string }>({ type: "beginSystemAuthenticator", purpose: "register", replacementAuth, replacementPin });
   const credential = await navigator.credentials.create({ publicKey: {
     challenge: fromBase64Url(challenge),
     rp: { name: "UniPass" },
