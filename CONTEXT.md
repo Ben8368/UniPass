@@ -1,7 +1,7 @@
 # 当前状态
 
 > **最后确认：** 2026-09-14
-> **阶段：** Manifest V3 浏览器扩展，版本 `5.3.4`；核心查询、查看/填入、目录匹配、UniPass 一键登录和 Jupiter 会话保活已接入。
+> **阶段：** Manifest V3 扩展，版本 `5.3.4`；核心功能、WebDAV Vault、真实人工验收和发布前门禁均已完成。
 
 ## 当前决策
 
@@ -14,12 +14,12 @@
 - Rust 构建统一启用 workspace、Cargo registry 与 toolchain path remap；hardened 构建默认要求 Binaryen `wasm-opt`，缺失即 fail closed，报告与 integrity 仅写入 `artifacts/hardened/`。普通 WASM 保持 byte-for-byte reproducibility；hardened seed 还选择 4 种有限等价 reconstruction strategy 之一。
 - Legacy UniPass 仍在使用；`credential-core` 新增职责冻结为 Legacy compatibility，新的 Vault AES-GCM 等能力不迁入 WASM；退役与 core 收缩见 [ADR 0003](docs/ADR/0003-crypto-boundary-and-legacy-retirement.md) / [TD-009](docs/TECH_DEBT.md)。`legacy-unipass` 与 WebDAV 分离，禁止双写。
 - WebDAV 后台状态机明确区分创建新 Vault、接入远端 Vault 和重新连接本地 profile；UI 选择器只列“添加密码库”和真实 profile，添加时以 Vault Key 是否填写区分新建/接入。新设备通过 endpoint + WebDAV credential + Vault Key 解密远端 manifest，vaultId 来自 manifest。认证与 key 只存 session；可选本地解锁仅保存加密封装，失败锁定并可显式清除。新建时只显示一次恢复用 Vault Key，缺失时 fail closed。对象分离，ETag 冲突 fail closed。
-- 验证：`npm test` 通过 126 项，TypeScript、Rust QA、标准构建和产物审计通过。新增跨设备 Vault、manifest fail-closed、username 单源、tombstone、availability error、MKCOL/XML 和本地解锁覆盖；真实浏览器/WebDAV 集成验收已完成，人工检验暂未发现 bug。
+- 验证：三条门禁均通过；126 项测试、依赖审计、类型检查、Rust QA、构建、产物审计及 Chrome smoke 均通过。真实 Chrome、UniPass/Jupiter 和 WebDAV 多设备人工验收已完成，暂未发现 bug。
 - 本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
 ## 近期优先级
 
-1. 完成 scope、SW/WASM 重启与 Self Build 验收；Jupiter 适配取消。
+1. 当前版本功能与验收已收口；后续按需发布。Jupiter 新适配取消，长期仅保留 `TD-009` 的 Legacy UniPass 退役与 `credential-core` 收缩。
 
 ## 按需入口
 
