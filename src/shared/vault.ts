@@ -27,6 +27,13 @@ export interface VaultProfile {
   endpoint?: string;
 }
 
+/** Non-sensitive session state used to guide the user through reconnection. */
+export interface VaultConnectionState {
+  vaultId: string;
+  name: string;
+  connected: boolean;
+}
+
 /**
  * The recovery key is returned only immediately after creating a new Vault.
  * Callers must keep it in memory only and clear it when their UI closes.

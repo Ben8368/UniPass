@@ -410,6 +410,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .current-page-add-connect { cursor: pointer; }
 .current-page-add-connect:hover { filter: brightness(1.08); }
 .current-page-add-connect:active { transform: scale(.97); }
+.current-page-reconnect { gap: 10px; }
+.current-page-reconnect-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-left: 46px; }
+.current-page-reconnect-button { min-height: 30px; padding: 0 11px; border: 1px solid rgba(65, 211, 155, .30); border-radius: 999px; background: rgba(65, 211, 155, .13); color: var(--green-text); font-size: 10px; font-weight: 750; }
+.current-page-reconnect-button:hover { border-color: rgba(132, 247, 207, .48); background: rgba(65, 211, 155, .22); }
 .current-page-add-help { margin: 0 0 0 46px; color: var(--text-2); font-size: 10px; line-height: 1.55; }
 .current-page-add-destination { margin: 0; padding: 7px 9px; border-left: 2px solid rgba(65, 211, 155, .36); border-radius: 0 6px 6px 0; background: var(--green-soft); color: var(--text-2); font-size: 9.5px; line-height: 1.45; }
 .current-page-add-form { display: grid; gap: 9px; padding-top: 2px; }

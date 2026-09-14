@@ -1,5 +1,5 @@
 import type { AccountCatalogEntry, PageContext } from "../shared/types";
-import type { VaultAccount, VaultApp, VaultProfile } from "../shared/vault";
+import type { VaultAccount, VaultApp, VaultConnectionState } from "../shared/vault";
 import { vaultTargetMatches } from "../shared/url";
 import { send } from "./bridge";
 import { button, errorText, textElement } from "./dom";
@@ -12,9 +12,15 @@ export class CurrentPageAccountEditor {
     private readonly openSettings: () => void,
   ) {}
 
-  async render(context: PageContext, entries: AccountCatalogEntry[]): Promise<void> {
-    const profiles = await send<VaultProfile[]>({ type: "listVaultProfiles" });
+  async render(context: PageContext, entries: AccountCatalogEntry[], connectionStates?: VaultConnectionState[]): Promise<void> {
+    const states = connectionStates ?? await send<VaultConnectionState[]>({ type: "listVaultConnectionStates" });
     this.container.replaceChildren();
+    const profiles = states.filter((state) => state.connected);
+    const disconnected = states.filter((state) => !state.connected);
+    if (!profiles.length) {
+      this.renderReconnectState(disconnected);
+      return;
+    }
     const panel = document.createElement("section");
     panel.className = "current-page-add";
     const heading = document.createElement("div");
@@ -27,27 +33,15 @@ export class CurrentPageAccountEditor {
     copy.className = "current-page-add-copy";
     copy.append(textElement("span", "current-page-add-eyebrow", "WEB DAV"));
     copy.append(textElement("strong", "current-page-add-title", "这个页面还没有保存账号"));
-    const connection = profiles.length
-      ? textElement("span", "current-page-add-badge", "可保存")
-      : button("未连接", "current-page-add-badge current-page-add-connect");
-    if (!profiles.length) {
-      connection.title = "添加 WebDAV 连接";
-      connection.setAttribute("aria-label", "添加 WebDAV 连接");
-      connection.addEventListener("click", this.openSettings);
-    }
+    const connection = textElement("span", "current-page-add-badge", "可保存");
     heading.append(icon, copy, connection);
     panel.append(heading);
     panel.append(textElement("p", "current-page-add-help", "直接添加到当前页面，之后即可一键填入。"));
 
-    if (!profiles.length) {
-      this.container.append(panel);
-      return;
-    }
-
     const form = document.createElement("form");
     form.className = "current-page-add-form";
     const vault = document.createElement("select");
-    for (const profile of profiles) vault.add(new Option(profile.name, profile.id));
+    for (const profile of profiles) vault.add(new Option(profile.name, profile.vaultId));
     const destination = textElement("p", "current-page-add-destination", "");
     const username = this.input("账号", "text", "例如：name@example.com", "username");
     const password = this.input("密码", "password", "填写要保存的密码", "new-password");
@@ -68,6 +62,38 @@ export class CurrentPageAccountEditor {
       void this.save({ context, entries, vaultId: vault.value, username: username.input, password: password.input, remark: remark.input, submit });
     });
     panel.append(form);
+    this.container.append(panel);
+  }
+
+  private renderReconnectState(states: VaultConnectionState[]): void {
+    const panel = document.createElement("section");
+    panel.className = "current-page-add current-page-reconnect";
+    const heading = document.createElement("div");
+    heading.className = "current-page-add-heading";
+    const icon = document.createElement("span");
+    icon.className = "current-page-add-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2M5 10h14v10H5z" /><path d="M12 14v2" /></svg>';
+    const copy = document.createElement("div");
+    copy.className = "current-page-add-copy";
+    copy.append(textElement("span", "current-page-add-eyebrow", "WEB DAV"));
+    copy.append(textElement("strong", "current-page-add-title", "账号仍在密码库中，需要重新连接"));
+    heading.append(icon, copy);
+    panel.append(heading);
+    panel.append(textElement("p", "current-page-add-help", states.length ? "浏览器会话已结束，扩展保留了密码库配置，但需要重新输入连接信息后才能读取账号。" : "当前没有可用的 WebDAV 密码库连接。"));
+    const actions = document.createElement("div");
+    actions.className = "current-page-reconnect-actions";
+    if (!states.length) {
+      const connect = button("添加 WebDAV 连接", "current-page-reconnect-button");
+      connect.addEventListener("click", this.openSettings);
+      actions.append(connect);
+    }
+    for (const state of states) {
+      const reconnect = button(`重新连接 ${state.name}`, "current-page-reconnect-button");
+      reconnect.addEventListener("click", () => window.dispatchEvent(new CustomEvent("unipass-open-webdav-settings", { detail: { vaultId: state.vaultId } })));
+      actions.append(reconnect);
+    }
+    panel.append(actions);
     this.container.append(panel);
   }
 

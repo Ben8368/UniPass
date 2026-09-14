@@ -72,11 +72,27 @@ test("page overlay keeps editable keystrokes inside the Shadow DOM", () => {
 });
 
 test("an empty current page offers an inline WebDAV account form", () => {
-  assert.match(catalogSource, /if \(!accounts\.length\) await this\.currentPageEditor\.render\(tab, catalog\.entries\)/);
+  assert.match(catalogSource, /listVaultConnectionStates/);
+  assert.match(catalogSource, /if \(!accounts\.length\) await this\.currentPageEditor\.render\(tab, catalog\.entries, connectionStates\)/);
   assert.match(currentPageAccountSource, /这个页面还没有保存账号/);
   assert.match(currentPageAccountSource, /type: "createVaultApp"/);
   assert.match(currentPageAccountSource, /type: "createVaultAccount"/);
   assert.match(currentPageAccountSource, /vaultTargetMatches\(target, url\)/);
+});
+
+test("a disconnected WebDAV Vault is routed to reconnect instead of an empty-account form", () => {
+  assert.match(workerSource, /case "listVaultConnectionStates":\s+return requireVaultManager\(sender, listVaultConnectionStates\)/);
+  assert.match(currentPageAccountSource, /账号仍在密码库中，需要重新连接/);
+  assert.match(currentPageAccountSource, /重新连接 \$\{state\.name\}/);
+  assert.match(currentPageAccountSource, /new CustomEvent\("unipass-open-webdav-settings", \{ detail: \{ vaultId: state\.vaultId \} \}\)/);
+  assert.match(settingsSource, /event\.detail\?\.vaultId/);
+  assert.match(webdavSettingsSource, /async open\(vaultId\?: string\)/);
+});
+
+test("a disconnected Vault does not masquerade as a UniPass application sync failure", () => {
+  assert.match(catalogSource, /密码库 \$\{names\} 需要重新连接，账号目录未读取/);
+  assert.match(catalogSource, /const reconnectFailures = result\.failures\.filter/);
+  assert.match(catalogSource, /const otherFailures = result\.failures\.filter/);
 });
 
 test("application cards keep their icon and only view accounts in advanced mode", () => {

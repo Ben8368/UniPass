@@ -122,6 +122,23 @@ test("an existing Vault without a session key refuses reconnect without changing
   }
 });
 
+test("Vault connection state exposes only whether this session can read a profile", async () => {
+  const originalChrome = globalThis.chrome;
+  const profile = { id: "vault-state", name: "fixture vault", backend: "webdav", enabled: true, endpoint: "https://nas.example/dav/" };
+  globalThis.chrome = {
+    storage: {
+      local: { async get() { return { "unipass-vault-profiles": [profile] }; } },
+      session: { async get() { return { "unipass-vault-session-secrets": {} }; } },
+    },
+  };
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    assert.deepEqual(await vaultService.listVaultConnectionStates(), [{ vaultId: profile.id, name: profile.name, connected: false }]);
+  } finally {
+    globalThis.chrome = originalChrome;
+  }
+});
+
 test("removing a Vault clears only extension state and its unused host permission", async () => {
   const originalChrome = globalThis.chrome;
   const originalFetch = globalThis.fetch;

@@ -94,7 +94,10 @@ export class SettingsController {
     this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); this.resetSaveClicks(); void this.saveOverride(); });
     this.saveButton.addEventListener("click", (event) => { event.preventDefault(); this.handleSaveClick(); });
     this.webdavSettings.bind();
-    window.addEventListener("unipass-open-webdav-settings", () => void this.open());
+    window.addEventListener("unipass-open-webdav-settings", (event) => {
+      const vaultId = event instanceof CustomEvent && typeof event.detail?.vaultId === "string" ? event.detail.vaultId : undefined;
+      void this.open(vaultId);
+    });
     this.override.addEventListener("input", () => this.updateRestoreButton());
     this.restoreBaseline.addEventListener("click", () => {
       if (this.advancedModeUnlock.isUnlockReady) {
@@ -168,7 +171,7 @@ export class SettingsController {
     this.themeToggle.dataset.theme = dark ? "dark" : "light";
   }
 
-  private async open(): Promise<void> {
+  private async open(vaultId?: string): Promise<void> {
     this.dialog.classList.remove("hidden");
     this.settingsButton.setAttribute("aria-expanded", "true");
     this.localBuildVersion.textContent = "检查中";
@@ -176,7 +179,7 @@ export class SettingsController {
     this.localBuildTime.textContent = manifest.version_name || "无构建描述";
     this.networkVersion.textContent = "检查中";
     this.networkVersionSource.textContent = "";
-    await this.webdavSettings.open();
+    await this.webdavSettings.open(vaultId);
     this.closeButton.focus();
     try {
       this.apply(await send<PluginVersionSettings>({ type: "getPluginVersionSettings" }));

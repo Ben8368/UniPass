@@ -12,7 +12,7 @@
 
 ## 未偿还债务
 
-- 无。
+- TD-008 本地解锁密码：为 WebDAV Vault 增加仅浏览器扩展内的“本地解锁密码”模式，以用户密码加密保存本机连接材料，减少浏览器重启后反复输入 Vault Key；不得引入 Native Messaging 或本地辅助程序，不得直接持久化 Vault Key、WebDAV 用户名或 App Password。实现前需完成 KDF/加密封装、失败锁定、显式锁定、清除路径和迁移安全设计，并同步 `SECURITY.md`。P1。
 
 
 ## 已归档

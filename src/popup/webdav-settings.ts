@@ -34,12 +34,12 @@ export class WebDavSettingsController {
     this.profile.addEventListener("change", () => this.applySelectedProfile());
   }
 
-  async open(): Promise<void> {
+  async open(vaultId?: string): Promise<void> {
     try {
       this.showStatus("");
       this.profiles = await send<VaultProfile[]>({ type: "listVaultProfiles" });
       this.profile.replaceChildren(new Option("新建密码库", ""), ...this.profiles.map((profile) => new Option(profile.name, profile.id)));
-      this.profile.value = this.profiles[0]?.id ?? "";
+      this.profile.value = vaultId && this.profiles.some((profile) => profile.id === vaultId) ? vaultId : (this.profiles[0]?.id ?? "");
       this.applySelectedProfile();
     } catch (error) {
       this.reportStatus(errorText(error), true);

@@ -28,6 +28,8 @@
 
 WebDAV Vault 是独立于 Legacy UniPass 的新数据源。齿轮二级页只接受 HTTPS URL，并在用户主动测试/保存时通过 `chrome.permissions.request` 申请对应的 `https://host/*` optional origin；manifest 不包含 WebDAV 永久 host permission。Popup/页面浮层只在用户点击测试或保存时短暂发送用户名与 App Password，绝不自行发起 WebDAV 网络请求；网络请求和 `Authorization` header 始终由 Service Worker 的 `WebDavBackend` 生成。当前页就地添加账号同样只能由用户提交触发，且自动建立的目标仅为当前 HTTPS 域名。认证用户名与 App Password 只保存在当前会话的 `chrome.storage.session`，不写入 `chrome.storage.local`、localStorage、Vault Object 或日志；浏览器会话结束后必须重新输入。Vault Key 也只以当前会话的 base64 包装值保存在 `chrome.storage.session`，绝不上传 WebDAV，故这是一个 fail-closed 的会话级 MVP。新建 Vault 时仅向当前设置界面返回一次恢复用 Vault Key，用户必须自行安全保存；界面关闭后清空。重新连接已有 Vault 时必须由用户粘贴该 Key，缺失或错误时不得生成新 Key、覆盖 profile 或写入远端数据。用户在确认后可删除本地 Vault Profile；该操作只清除扩展中的 Profile、会话 secret 和不再使用的 optional host permission，绝不删除 WebDAV 服务器上的对象。
 
+- 当前页只能将本会话已连接的 Vault 作为写入目标；未连接 Profile 仅公开 ID、名称和连接状态，界面必须引导用户重新连接，不能将读取失败降级为“没有保存账号”。
+
 Vault Core 使用 AES-256-GCM、每对象随机 12-byte nonce、`formatVersion: 1` 与 `keyVersion: 1`。WebDAV 只保存加密后的 App/Account/Credential/Manifest objects；目录 `PROPFIND` 只读取 App/Account 对象，Credential object 仅在 Fill/Reveal/可用性检查时按需读取。对象更新以 WebDAV ETag 映射为 opaque `RevisionToken`，使用 `If-Match`；新建使用 `If-None-Match: *`，409/412 映射为结构化 conflict，禁止 silent last-write-wins。删除在 Core 中保留 `deletedAt` tombstone 并加密更新对象，给未来 D1/GitHub 同步保留扩展点。
 
 ## 权限与主机

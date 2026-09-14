@@ -2,7 +2,7 @@ import { credentialForAccount, credentialAvailableForAccount } from "../../share
 import { importVaultKey, exportVaultKey, generateVaultKey } from "../../shared/vault-crypto";
 import { normalizeWebDavUrl } from "../../shared/url";
 import type { AccountListResult, UniPassAccount } from "../../shared/types";
-import { VaultCryptoError, VaultFormatError, VaultRemoteDataError, type AccountRef, type VaultAccount, type VaultApp, type VaultCatalog, type VaultConnection, type VaultCredential, type VaultProfile } from "../../shared/vault";
+import { VaultCryptoError, VaultFormatError, VaultRemoteDataError, type AccountRef, type VaultAccount, type VaultApp, type VaultCatalog, type VaultConnection, type VaultConnectionState, type VaultCredential, type VaultProfile } from "../../shared/vault";
 import { WebDavBackend } from "./webdav-backend";
 import { VaultCore } from "./vault-core";
 
@@ -33,6 +33,15 @@ export interface WebDavVaultCatalogResult {
 export async function listVaultProfiles(): Promise<VaultProfile[]> {
   const stored = await chrome.storage.local.get(PROFILES_KEY);
   return validateProfiles(stored[PROFILES_KEY]);
+}
+
+export async function listVaultConnectionStates(): Promise<VaultConnectionState[]> {
+  const [profiles, secrets] = await Promise.all([listVaultProfiles(), readSecrets()]);
+  return profiles.map((profile) => ({
+    vaultId: profile.id,
+    name: profile.name,
+    connected: hasSessionSecret(secrets[profile.id]),
+  }));
 }
 
 export async function testWebDavConnection(input: WebDavVaultInput): Promise<void> {
@@ -212,4 +221,8 @@ function targetToUrl(target: VaultApp["targets"][number]): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function hasSessionSecret(value: SessionSecret | undefined): boolean {
+  return Boolean(value?.username && value.appPassword && value.vaultKey);
 }

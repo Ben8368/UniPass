@@ -1,4 +1,4 @@
-import type { AccountRef, AppRef, VaultAccount, VaultApp, VaultTarget } from "./vault";
+import type { AccountRef, AppRef, VaultAccount, VaultApp, VaultConnectionState, VaultTarget } from "./vault";
 
 export interface UniPassApp {
   id: string | number;
@@ -65,6 +65,7 @@ export type BackgroundRequest =
   | { type: "getJupiterKeepalive"; userScope: string }
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }
   | { type: "listVaultProfiles" }
+  | { type: "listVaultConnectionStates" }
   | { type: "requestWebDavPermission"; endpoint: string }
   | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string }
   | { type: "saveWebDavVault"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string; vaultKey?: string }

@@ -15,6 +15,7 @@ import {
   deleteVaultAccount,
   deleteVaultApp,
   listVaultProfiles,
+  listVaultConnectionStates,
   removeVault,
   saveWebDavVault,
   testWebDavConnection,
@@ -172,6 +173,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return withUserScope(message.userScope, () => setJupiterKeepalive(message.userScope, message.enabled, message.appId, message.accountId, message.username));
     case "listVaultProfiles":
       return requireVaultManager(sender, listVaultProfiles);
+    case "listVaultConnectionStates":
+      return requireVaultManager(sender, listVaultConnectionStates);
     case "requestWebDavPermission":
       return requireVaultManager(sender, () => chrome.permissions.request({ origins: [webDavPermissionOrigin(message.endpoint)] }));
     case "testWebDavConnection":

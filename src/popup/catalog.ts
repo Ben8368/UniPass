@@ -1,5 +1,5 @@
 import type { AccountCatalogEntry, AccountCatalogResult, AccountListResult, AvailableAppsResult, CredentialAvailabilityResult, CurrentUser, JupiterKeepaliveSettings, PageContext, UniPassAccount, UniPassApp } from "../shared/types";
-import type { AccountRef, VaultAccount, VaultApp } from "../shared/vault";
+import type { AccountRef, VaultAccount, VaultApp, VaultConnectionState } from "../shared/vault";
 import { appUrlMatches, isHttpsUrl, vaultTargetMatches } from "../shared/url";
 import { userScopeFor } from "../shared/user-scope";
 import { send } from "./bridge";
@@ -71,12 +71,14 @@ export class CatalogController {
       const tab = await this.getTabContext();
       if (!tab?.tabId || !tab.url || !isHttpsUrl(tab.url)) throw new Error("为保护凭据安全，仅支持 HTTPS 页面填充");
       this.pageHost.textContent = new URL(tab.url).hostname;
+      const connectionStates = await send<VaultConnectionState[]>({ type: "listVaultConnectionStates" });
+      const connectedVaultIds = new Set(connectionStates.filter((state) => state.connected).map((state) => state.vaultId));
       let catalog = override ?? this.loadCached();
       if (!catalog && !this.userScope) catalog = await this.loadVaultCatalog();
       if (!override && this.userScope && (!catalog || Date.now() - catalog.syncedAt > TTL_MS)) catalog = await this.sync();
       if (!catalog) throw new Error("账号目录不可用，请重新同步");
-      const accounts = this.accountsForUrl(catalog.entries, tab.url);
-      if (!accounts.length) await this.currentPageEditor.render(tab, catalog.entries);
+      const accounts = this.accountsForUrl(catalog.entries, tab.url, connectedVaultIds);
+      if (!accounts.length) await this.currentPageEditor.render(tab, catalog.entries, connectionStates);
       else await this.renderAccounts(this.currentAccounts, accounts, tab.tabId, tab.url);
     } catch (error) {
       this.currentAccounts.innerHTML = empty(errorText(error));
@@ -124,7 +126,18 @@ export class CatalogController {
         return catalog;
       }
       const previous = this.loadCached();
-      this.reportStatus(`有 ${result.failures.length} 个应用同步失败，${previous ? "继续使用上次完整目录" : "本次结果不会缓存"}`, true);
+      const connectionStates = await send<VaultConnectionState[]>({ type: "listVaultConnectionStates" });
+      const disconnectedVaults = new Map(connectionStates.filter((state) => !state.connected).map((state) => [state.vaultId, state.name]));
+      const reconnectFailures = result.failures.filter((failure) => failure.vaultId && disconnectedVaults.has(failure.vaultId));
+      const otherFailures = result.failures.filter((failure) => !reconnectFailures.includes(failure));
+      const notices: string[] = [];
+      if (reconnectFailures.length) {
+        const names = reconnectFailures.map((failure) => disconnectedVaults.get(failure.vaultId!) ?? "WebDAV 密码库").join("、");
+        notices.push(`密码库 ${names} 需要重新连接，账号目录未读取`);
+      }
+      if (otherFailures.length) notices.push(`有 ${otherFailures.length} 个应用同步失败`);
+      notices.push(previous ? "继续使用上次完整目录" : "本次结果不会缓存");
+      this.reportStatus(notices.join("；"), true);
       return previous ?? { syncedAt: 0, entries: result.entries };
     } finally { this.refresh.disabled = false; }
   }
@@ -145,14 +158,14 @@ export class CatalogController {
     };
   }
 
-  private accountsForUrl(entries: AccountCatalogEntry[], url: string): UniPassAccount[] {
+  private accountsForUrl(entries: AccountCatalogEntry[], url: string, connectedVaultIds?: Set<string>): UniPassAccount[] {
     const seen = new Set<string>();
     return entries.flatMap((entry) => entry.targets?.length
-      ? (entry.targets.some((target) => vaultTargetMatches(target, url)) ? entry.accounts : [])
+      ? (entry.targets.some((target) => vaultTargetMatches(target, url)) && (!entry.vaultId || !connectedVaultIds || connectedVaultIds.has(entry.vaultId)) ? entry.accounts : [])
       : (appUrlMatches(entry.appUrl, url) ? entry.accounts : [])).filter((account) => {
       const id = account.id ?? account.accountId ?? account.appAccountUserId;
       const key = id == null ? JSON.stringify(account) : `${account.vaultId ?? "legacy-unipass"}:${String(id)}`;
-      if (seen.has(key)) return false;
+      if (seen.has(key) || (account.vaultId && connectedVaultIds && !connectedVaultIds.has(account.vaultId))) return false;
       seen.add(key); return true;
     });
   }

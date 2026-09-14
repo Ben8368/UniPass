@@ -54,14 +54,20 @@ test("current-page WebDAV empty state connects from the unchanged status badge",
   assert.match(currentPageAccountSource, /current-page-add-icon/);
   assert.match(currentPageAccountSource, /WEB DAV/);
   assert.match(currentPageAccountSource, /current-page-add-badge/);
-  assert.match(currentPageAccountSource, /button\("未连接", "current-page-add-badge current-page-add-connect"\)/);
-  assert.match(currentPageAccountSource, /connection\.addEventListener\("click", this\.openSettings\)/);
   assert.doesNotMatch(currentPageAccountSource, /current-page-add-action/);
   assert.match(componentsCss, /\.current-page-add \{[^}]*background:\s*transparent/s);
   assert.match(componentsCss, /\.current-page-add-badge \{[^}]*min-height:\s*22px;[^}]*border-radius:\s*999px/s);
-  assert.match(componentsCss, /\.current-page-add-connect:hover/);
   assert.match(componentsCss, /\.current-page-add-icon svg/);
   assert.match(componentsCss, /\.current-page-add-destination/);
+});
+
+test("a disconnected Vault keeps its accounts protected behind an explicit reconnect action", () => {
+  assert.match(currentPageAccountSource, /账号仍在密码库中，需要重新连接/);
+  assert.match(currentPageAccountSource, /浏览器会话已结束/);
+  assert.match(currentPageAccountSource, /重新连接 \$\{state\.name\}/);
+  assert.match(currentPageAccountSource, /添加 WebDAV 连接/);
+  assert.match(componentsCss, /\.current-page-reconnect-actions/);
+  assert.match(componentsCss, /\.current-page-reconnect-button/);
 });
 
 test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {
