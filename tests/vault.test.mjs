@@ -31,6 +31,38 @@ test("Vault object round-trip uses versioned AES-GCM and fresh nonces", async ()
   await assert.rejects(cryptoApi.decryptVaultObject(key, new TextEncoder().encode(JSON.stringify(unsupported))), /Vault 数据格式/);
 });
 
+test("Vault Key format errors are distinct from encrypted-object decryption failures", async () => {
+  await assert.rejects(cryptoApi.importVaultKey("not-a-vault-key"), /Vault Key 格式无效/);
+});
+
+test("new Vaults explain when a WebDAV directory already contains unreadable data", async () => {
+  const originalChrome = globalThis.chrome;
+  const originalFetch = globalThis.fetch;
+  globalThis.chrome = {
+    storage: {
+      local: { async get() { return {}; }, async set() {} },
+      session: { async get() { return {}; }, async set() {} },
+    },
+  };
+  globalThis.fetch = async (_input, init) => {
+    if (init.method === "PROPFIND" && String(_input).endsWith("/objects/")) return new Response("<d:multistatus xmlns:d='DAV:'><d:response><d:href>/dav/objects/manifest.json</d:href><d:getetag>&quot;fixture&quot;</d:getetag></d:response></d:multistatus>", { status: 207 });
+    if (init.method === "PROPFIND") return new Response("", { status: 207 });
+    if (init.method === "MKCOL") return new Response("", { status: 405 });
+    if (init.method === "GET") return new Response(JSON.stringify({ formatVersion: 1, id: "manifest", kind: "manifest", keyVersion: 1, algorithm: "AES-256-GCM", nonce: "AAAAAAAAAAAAAAAA", ciphertext: "AAAAAAAAAAAAAAAAAAAAAAAA" }), { status: 200, headers: { ETag: '"fixture"' } });
+    throw new Error(`unexpected ${init.method}`);
+  };
+  try {
+    const vaultService = await load("src/background/vault/vault-service.ts");
+    await assert.rejects(
+      vaultService.saveWebDavVault({ name: "fixture vault", endpoint: "https://nas.example/dav", username: "fixture-user", appPassword: "fixture-only-app-password" }),
+      /已有密码库数据/,
+    );
+  } finally {
+    globalThis.chrome = originalChrome;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Vault Core keeps credential objects out of directory catalog reads and enforces vault identity", async () => {
   const objects = new Map();
   const gets = [];

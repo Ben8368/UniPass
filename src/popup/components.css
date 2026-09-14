@@ -393,14 +393,26 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   stroke-linejoin: round;
 }
 .empty.loading svg { color: var(--green); stroke: currentColor; animation: spin .8s linear infinite; }
-.current-page-add { display: grid; gap: 8px; min-height: 122px; padding: 16px; border: 1px solid rgba(65, 211, 155, .18); border-radius: 10px; background: linear-gradient(160deg, rgba(65, 211, 155, .09), rgba(255, 255, 255, .025)); }
-.current-page-add-title { color: var(--text-0); font-size: 12px; }
-.current-page-add-help, .current-page-add-destination { margin: 0; color: var(--text-2); font-size: 10px; line-height: 1.45; }
-.current-page-add-form { display: grid; gap: 8px; margin-top: 2px; }
+.current-page-add { display: grid; min-height: 150px; gap: 11px; padding: 17px 18px 18px; background: transparent; }
+.current-page-add-heading { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.current-page-add-icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(65, 211, 155, .20); border-radius: 11px; background: var(--green-soft); color: var(--green-text); }
+.current-page-add-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.current-page-add-copy { min-width: 0; }
+.current-page-add-eyebrow { display: block; margin-bottom: 3px; color: var(--green); font-size: 8px; font-weight: 800; letter-spacing: 0; line-height: 1; }
+.current-page-add-title { display: block; overflow-wrap: anywhere; color: var(--text-0); font-size: 12px; font-weight: 700; line-height: 1.35; }
+.current-page-add-badge { display: inline-flex; min-height: 22px; align-items: center; padding: 0 8px; border: 1px solid var(--glass-line-soft, var(--border)); border-radius: 999px; background: var(--fill); color: var(--text-2); font-size: 9px; font-weight: 700; white-space: nowrap; }
+.current-page-add-connect { cursor: pointer; }
+.current-page-add-connect:hover { filter: brightness(1.08); }
+.current-page-add-connect:active { transform: scale(.97); }
+.current-page-add-help { margin: 0 0 0 46px; color: var(--text-2); font-size: 10px; line-height: 1.55; }
+.current-page-add-destination { margin: 0; padding: 7px 9px; border-left: 2px solid rgba(65, 211, 155, .36); border-radius: 0 6px 6px 0; background: var(--green-soft); color: var(--text-2); font-size: 9.5px; line-height: 1.45; }
+.current-page-add-form { display: grid; gap: 9px; padding-top: 2px; }
 .current-page-add-form label { display: grid; gap: 4px; color: var(--text-1); font-size: 10px; font-weight: 700; }
 .current-page-add-form input, .current-page-add-form select { width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text-0); font-size: 10.5px; }
 .current-page-add-form input:focus, .current-page-add-form select:focus { border-color: rgba(65, 211, 155, .44); outline: none; box-shadow: 0 0 0 2px rgba(65, 211, 155, .10); }
-.current-page-add-form > button { justify-self: start; }
+.current-page-add-form > button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 7px; justify-self: start; padding: 0 14px; border: 1px solid rgba(65, 211, 155, .28); border-radius: 999px; background: rgba(65, 211, 155, .14); color: var(--green-text); box-shadow: inset 0 1px 0 rgba(223, 255, 244, .12); font-size: 10.5px; font-weight: 750; transition: background .14s ease, border-color .14s ease, color .14s ease, transform .14s ease; }
+.current-page-add-form > button:hover { border-color: rgba(132, 247, 207, .42); background: rgba(65, 211, 155, .22); color: var(--green-text); }
+.current-page-add-form > button:active { transform: scale(.97); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .statusbar {

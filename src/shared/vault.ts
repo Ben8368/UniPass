@@ -118,6 +118,20 @@ export class VaultCryptoError extends Error {
   }
 }
 
+export class VaultRemoteDataError extends Error {
+  constructor() {
+    super("该 WebDAV 目录已有密码库数据，但无法用当前 Vault Key 解密。请换一个空目录，或选择已有密码库并粘贴正确的 Vault Key");
+    this.name = "VaultRemoteDataError";
+  }
+}
+
+export class VaultKeyFormatError extends Error {
+  constructor() {
+    super("Vault Key 格式无效。请使用创建密码库时显示的完整 Vault Key");
+    this.name = "VaultKeyFormatError";
+  }
+}
+
 export class WebDavCompatibilityError extends Error {
   constructor(message = "WebDAV 服务器不兼容") {
     super(message);

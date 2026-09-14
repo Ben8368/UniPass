@@ -14,7 +14,7 @@
 - Rust 构建统一启用 workspace、Cargo registry 与 toolchain path remap；hardened 构建默认要求 Binaryen `wasm-opt`，缺失即 fail closed，报告与 integrity 仅写入 `artifacts/hardened/`。普通 WASM 保持 byte-for-byte reproducibility；hardened seed 还选择 4 种有限等价 reconstruction strategy 之一。
 - 保留只读 `legacy-unipass`，新增每个 `VaultProfile` 一个 WebDAV backend；Core/Crypto/Backend 独立，禁止双写和 Legacy 迁移，Cloudflare/GitHub 仅留接口。
 - WebDAV 连接配置收进扩展齿轮二级页：用户可在此输入 HTTPS 地址、用户名和 App Password、测试后保存；当前页面无匹配账号时可直接创建当前域名的 WebDAV 账号。认证与 key 只存 session；新建时只显示一次恢复用 Vault Key，重启后用户以该 Key 重新连接，缺失时 fail closed。对象分离，ETag 冲突 fail closed。
-- 最近客观验证：2026-09-13 `npm run verify` 通过；共 108 项 Node/WASM 测试，依赖审计 0 漏洞，TypeScript、Rust QA、标准构建和产物审计通过。CI Chrome smoke 已改为从页面上下文触发隐藏的兼容控件；本机 Chrome 启动在 macOS 环境中提前关闭，尚未完成真实 WebDAV、权限拒绝、Legacy+WebDAV 页面联测和本机 Chrome smoke 验收。
+- 最近客观验证：2026-09-14 `npm run verify` 通过，共 114 项 Node/WASM 测试、依赖审计 0 漏洞；TypeScript、Rust QA、标准构建和产物审计通过。Popup 兼容旧 Service Worker 应用数组；页面浮层阻止输入控件键盘事件传播；WebDAV 已覆盖空目录伪 200、旧 manifest 和 Key 格式错误。UniPass 登录态、历史账号填充和扩展热更新已人工验收；真实 WebDAV、权限拒绝、Legacy+WebDAV 联测和本机 Chrome smoke 仍待验收。
 - 私人本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
 ## 近期优先级

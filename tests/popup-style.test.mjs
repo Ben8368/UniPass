@@ -8,6 +8,7 @@ const componentsCss = await readFile(new URL("../src/popup/components.css", impo
 const popupHtml = await readFile(new URL("../src/popup/popup.html", import.meta.url), "utf8");
 const settingsSource = await readFile(new URL("../src/popup/settings.ts", import.meta.url), "utf8");
 const webdavSettingsSource = await readFile(new URL("../src/popup/webdav-settings.ts", import.meta.url), "utf8");
+const currentPageAccountSource = await readFile(new URL("../src/popup/current-page-account.ts", import.meta.url), "utf8");
 
 test("build time uses the compact YYMMDD-HHMM format", () => {
   assert.equal(formatBuildTime(new Date(2026, 8, 10, 21, 12)), "260910-2112");
@@ -42,6 +43,21 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
   );
   assert.doesNotMatch(componentsCss, /\.settings-save\s*\{[^}]*margin-top:\s*3px/s);
   assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
+});
+
+test("current-page WebDAV empty state connects from the unchanged status badge", () => {
+  assert.match(currentPageAccountSource, /current-page-add-heading/);
+  assert.match(currentPageAccountSource, /current-page-add-icon/);
+  assert.match(currentPageAccountSource, /WEB DAV/);
+  assert.match(currentPageAccountSource, /current-page-add-badge/);
+  assert.match(currentPageAccountSource, /button\("未连接", "current-page-add-badge current-page-add-connect"\)/);
+  assert.match(currentPageAccountSource, /connection\.addEventListener\("click", this\.openSettings\)/);
+  assert.doesNotMatch(currentPageAccountSource, /current-page-add-action/);
+  assert.match(componentsCss, /\.current-page-add \{[^}]*background:\s*transparent/s);
+  assert.match(componentsCss, /\.current-page-add-badge \{[^}]*min-height:\s*22px;[^}]*border-radius:\s*999px/s);
+  assert.match(componentsCss, /\.current-page-add-connect:hover/);
+  assert.match(componentsCss, /\.current-page-add-icon svg/);
+  assert.match(componentsCss, /\.current-page-add-destination/);
 });
 
 test("an existing WebDAV profile exposes a session-safe reconnect flow", () => {

@@ -35,6 +35,8 @@ export class WebDavBackend implements VaultBackend {
   }
 
   async getManifest(): Promise<StoredObject | null> {
+    const manifest = (await this.list()).find((object) => object.id === "manifest");
+    if (!manifest) return null;
     return this.get("manifest");
   }
 
@@ -117,7 +119,7 @@ function parsePropfind(xml: string, base: string): StoredObjectMeta[] {
       const name = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
       if (!name.endsWith(".json")) continue;
       const id = name.slice(0, -5);
-      if (/^[A-Za-z0-9_-]{16,160}$/.test(id)) results.push({ id, revision: unescapeXml(etag) });
+      if (id === "manifest" || /^[A-Za-z0-9_-]{16,160}$/.test(id)) results.push({ id, revision: unescapeXml(etag) });
     } catch {
       // Ignore malformed directory members; they are not valid Vault objects.
     }

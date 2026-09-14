@@ -34,6 +34,15 @@ async function mount(): Promise<void> {
   if (!appWindow) return;
   const brandIcon = appWindow.querySelector<HTMLImageElement>(".window-brand > img");
   if (brandIcon) brandIcon.src = chrome.runtime.getURL("icons/icon48.png");
+  const stopEditableKeyPropagation = (event: Event): void => {
+    if (!(event instanceof KeyboardEvent)) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.matches("input, textarea, select") || target.isContentEditable) event.stopPropagation();
+  };
+  for (const eventName of ["keydown", "keypress", "keyup"]) {
+    appWindow.addEventListener(eventName, stopEditableKeyPropagation);
+  }
   overlayRoot.append(appWindow);
   shadow.append(overlayRoot);
   document.documentElement.append(host);

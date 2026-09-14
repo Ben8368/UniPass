@@ -87,7 +87,9 @@ export class CatalogController {
     this.apps.innerHTML = loading("正在加载应用");
     this.showAppList();
     try {
-      const result = await send<AvailableAppsResult>({ type: "listApps", keyword, userScope: this.requireUserScope() });
+      // The popup can briefly outlive a service-worker update. Accept the pre-filter
+      // array response during that window, but reject malformed responses explicitly.
+      const result = normalizeAvailableAppsResult(await send<AvailableAppsResult>({ type: "listApps", keyword, userScope: this.requireUserScope() }));
       this.reportAppFiltering(result);
       await this.renderApps(result);
     }
@@ -291,4 +293,31 @@ export class CatalogController {
   }
 
   private showAppList(): void { this.apps.classList.remove("hidden"); this.heading.classList.remove("hidden"); this.back.classList.add("hidden"); this.appAccounts.classList.add("hidden"); this.appAccounts.replaceChildren(); }
+}
+
+function normalizeAvailableAppsResult(value: unknown): AvailableAppsResult {
+  if (Array.isArray(value)) {
+    return {
+      apps: value as UniPassApp[],
+      totalApps: value.length,
+      excludedEmptyCredentialApps: 0,
+      excludedVerificationFailureApps: 0,
+      excludedDirectoryFailureApps: 0,
+    };
+  }
+  if (!value || typeof value !== "object" || !Array.isArray((value as Partial<AvailableAppsResult>).apps)) {
+    throw new Error("应用列表返回格式异常，请重新加载扩展");
+  }
+  const result = value as Partial<AvailableAppsResult>;
+  return {
+    apps: result.apps as UniPassApp[],
+    totalApps: nonNegativeCount(result.totalApps),
+    excludedEmptyCredentialApps: nonNegativeCount(result.excludedEmptyCredentialApps),
+    excludedVerificationFailureApps: nonNegativeCount(result.excludedVerificationFailureApps),
+    excludedDirectoryFailureApps: nonNegativeCount(result.excludedDirectoryFailureApps),
+  };
+}
+
+function nonNegativeCount(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }

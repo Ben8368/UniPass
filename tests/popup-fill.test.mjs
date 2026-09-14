@@ -6,6 +6,7 @@ const popupSource = await readFile(new URL("../src/popup/credentials.ts", import
 const catalogSource = await readFile(new URL("../src/popup/catalog.ts", import.meta.url), "utf8");
 const workerSource = await readFile(new URL("../src/background/service-worker.ts", import.meta.url), "utf8");
 const overlaySource = await readFile(new URL("../src/background/page-overlay.ts", import.meta.url), "utf8");
+const contentOverlaySource = await readFile(new URL("../src/content/page-overlay.ts", import.meta.url), "utf8");
 const settingsSource = await readFile(new URL("../src/popup/settings.ts", import.meta.url), "utf8");
 const webdavSettingsSource = await readFile(new URL("../src/popup/webdav-settings.ts", import.meta.url), "utf8");
 const currentPageAccountSource = await readFile(new URL("../src/popup/current-page-account.ts", import.meta.url), "utf8");
@@ -62,6 +63,14 @@ test("settings connects WebDAV inside the extension UI without opening a managem
   assert.doesNotMatch(workerSource, /case "openVaultManager"/);
 });
 
+test("page overlay keeps editable keystrokes inside the Shadow DOM", () => {
+  assert.match(contentOverlaySource, /stopEditableKeyPropagation/);
+  assert.match(contentOverlaySource, /target\.matches\("input, textarea, select"\) \|\| target\.isContentEditable/);
+  assert.match(contentOverlaySource, /event\.stopPropagation\(\)/);
+  assert.match(contentOverlaySource, /\["keydown", "keypress", "keyup"\]/);
+  assert.doesNotMatch(contentOverlaySource, /stopEditableKeyPropagation[\s\S]*event\.preventDefault\(\)/);
+});
+
 test("an empty current page offers an inline WebDAV account form", () => {
   assert.match(catalogSource, /if \(!accounts\.length\) await this\.currentPageEditor\.render\(tab, catalog\.entries\)/);
   assert.match(currentPageAccountSource, /这个页面还没有保存账号/);
@@ -80,6 +89,9 @@ test("application cards keep their icon and only view accounts in advanced mode"
 
 test("application cards use the background availability aggregate and explain filtered states", () => {
   assert.match(catalogSource, /send<AvailableAppsResult>\(\{ type: "listApps"/);
+  assert.match(catalogSource, /normalizeAvailableAppsResult/);
+  assert.match(catalogSource, /if \(Array\.isArray\(value\)\)/);
+  assert.match(catalogSource, /应用列表返回格式异常，请重新加载扩展/);
   assert.match(catalogSource, /excludedEmptyCredentialApps/);
   assert.match(catalogSource, /excludedVerificationFailureApps/);
   assert.match(catalogSource, /excludedDirectoryFailureApps/);

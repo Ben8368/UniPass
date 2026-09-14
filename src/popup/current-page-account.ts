@@ -17,13 +17,29 @@ export class CurrentPageAccountEditor {
     this.container.replaceChildren();
     const panel = document.createElement("section");
     panel.className = "current-page-add";
-    panel.append(textElement("strong", "current-page-add-title", "这个页面还没有保存账号"));
+    const heading = document.createElement("div");
+    heading.className = "current-page-add-heading";
+    const icon = document.createElement("span");
+    icon.className = "current-page-add-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 8.5h14v10H5zM8 8.5V6h8v2.5M9 12h6" /><path d="M9 15h6" /></svg>';
+    const copy = document.createElement("div");
+    copy.className = "current-page-add-copy";
+    copy.append(textElement("span", "current-page-add-eyebrow", "WEB DAV"));
+    copy.append(textElement("strong", "current-page-add-title", "这个页面还没有保存账号"));
+    const connection = profiles.length
+      ? textElement("span", "current-page-add-badge", "可保存")
+      : button("未连接", "current-page-add-badge current-page-add-connect");
+    if (!profiles.length) {
+      connection.title = "添加 WebDAV 连接";
+      connection.setAttribute("aria-label", "添加 WebDAV 连接");
+      connection.addEventListener("click", this.openSettings);
+    }
+    heading.append(icon, copy, connection);
+    panel.append(heading);
     panel.append(textElement("p", "current-page-add-help", "直接添加到当前页面，之后即可一键填入。"));
 
     if (!profiles.length) {
-      const configure = button("先连接 WebDAV", "primary");
-      configure.addEventListener("click", this.openSettings);
-      panel.append(configure);
       this.container.append(panel);
       return;
     }

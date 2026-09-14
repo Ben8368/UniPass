@@ -2,7 +2,7 @@ import { credentialForAccount, credentialAvailableForAccount } from "../../share
 import { importVaultKey, exportVaultKey, generateVaultKey } from "../../shared/vault-crypto";
 import { normalizeWebDavUrl } from "../../shared/url";
 import type { AccountListResult, UniPassAccount } from "../../shared/types";
-import type { AccountRef, VaultAccount, VaultApp, VaultCatalog, VaultConnection, VaultCredential, VaultProfile } from "../../shared/vault";
+import { VaultCryptoError, VaultFormatError, VaultRemoteDataError, type AccountRef, type VaultAccount, type VaultApp, type VaultCatalog, type VaultConnection, type VaultCredential, type VaultProfile } from "../../shared/vault";
 import { WebDavBackend } from "./webdav-backend";
 import { VaultCore } from "./vault-core";
 
@@ -54,7 +54,7 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultCon
   const vaultId = existing?.id ?? crypto.randomUUID();
   const secrets = await readSecrets();
   let vaultKey = existing ? secrets[vaultId]?.vaultKey : undefined;
-  if (!vaultKey) vaultKey = input.vaultKey?.trim();
+  if (existing && !vaultKey) vaultKey = input.vaultKey?.trim();
   if (existing && !vaultKey) throw new Error("当前浏览器会话缺少 Vault Key。请粘贴创建该 Vault 时保存的 Vault Key 后重新连接");
   let recoveryKey: string | undefined;
   if (!vaultKey) {
@@ -63,7 +63,12 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultCon
   }
   const profile: VaultProfile = { id: vaultId, name, backend: "webdav", enabled: true, endpoint };
   const core = new VaultCore(vaultId, new WebDavBackend(endpoint, username, input.appPassword), await importVaultKey(vaultKey));
-  await core.initialize();
+  try {
+    await core.initialize();
+  } catch (error) {
+    if (!existing && (error instanceof VaultCryptoError || error instanceof VaultFormatError)) throw new VaultRemoteDataError();
+    throw error;
+  }
   await chrome.storage.local.set({ [PROFILES_KEY]: [...profiles.filter((candidate) => candidate.id !== vaultId), profile] });
   await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: { ...secrets, [vaultId]: { username, appPassword: input.appPassword, vaultKey } satisfies SessionSecret } });
   return { profile, ...(recoveryKey && { recoveryKey }) };

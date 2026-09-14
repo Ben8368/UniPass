@@ -1,6 +1,7 @@
 import {
   VaultCryptoError,
   VaultFormatError,
+  VaultKeyFormatError,
   type EncryptedVaultObject,
   type VaultObjectKind,
 } from "./vault";
@@ -20,9 +21,14 @@ export async function exportVaultKey(key: CryptoKey): Promise<string> {
 }
 
 export async function importVaultKey(value: string): Promise<CryptoKey> {
+  let raw: Uint8Array;
   try {
-    const raw = fromBase64(value);
-    if (raw.byteLength !== KEY_BYTES) throw new Error("bad key length");
+    raw = fromBase64(value);
+  } catch {
+    throw new VaultKeyFormatError();
+  }
+  if (raw.byteLength !== KEY_BYTES) throw new VaultKeyFormatError();
+  try {
     return await crypto.subtle.importKey("raw", asBufferSource(raw), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
   } catch {
     throw new VaultCryptoError();
