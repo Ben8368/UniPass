@@ -8,6 +8,7 @@ import { errorText, get } from "./dom";
 import type { DomStorage } from "./dom";
 import { ThemeController, type Theme } from "./theme-controller";
 import { WebDavSettingsController } from "./webdav-settings";
+import { authenticateSystemAuthenticator, registerSystemAuthenticator } from "./system-auth";
 
 const ADVANCED_MODE_PORT_NAME = "unipass-advanced-mode";
 
@@ -62,7 +63,7 @@ export class SettingsController {
     private readonly themeTarget: HTMLElement = document.documentElement,
     private readonly onAdvancedModeChange: () => void = () => {},
   ) {
-    this.webdavSettings = new WebDavSettingsController(reportStatus);
+    this.webdavSettings = new WebDavSettingsController(reportStatus, () => void this.enterAdvancedMode(undefined, true), () => void this.setupSystemAuthenticator());
     this.selfBuild = new SelfBuildDialogController(reportStatus, (disabled) => this.setSaveControlsDisabled(disabled));
     this.theme = new ThemeController(storage, themeTarget);
   }
@@ -187,12 +188,13 @@ export class SettingsController {
     this.saveGesture.click();
   }
 
-  private async enterAdvancedMode(): Promise<void> {
-    if (this.disposed || this.advancedModePending || !this.advancedModeUnlock.enter()) return;
+  private async enterAdvancedMode(pin = this.webdavSettings.readGlobalPin(), direct = false): Promise<void> {
+    if (this.disposed || this.advancedModePending || (!direct && !this.advancedModeUnlock.enter())) return;
     this.advancedModePending = true;
     this.updateRestoreButton();
     try {
-      const token = await send<string>({ type: "enableAdvancedMode" });
+      const auth = await this.advancedUnlockMaterial(pin);
+      const token = await send<string>({ type: "enableAdvancedMode", ...auth });
       const port = await this.connectAdvancedMode(token);
       if (this.disposed) {
         port.disconnect();
@@ -210,6 +212,7 @@ export class SettingsController {
       });
       this.updateRestoreButton();
       this.onAdvancedModeChange();
+      this.webdavSettings.clearGlobalPin();
       this.reportStatus("高级模式已开启，可查看和复制密码");
     } catch (error) {
       this.advancedModeUnlock.reset();
@@ -219,6 +222,34 @@ export class SettingsController {
       this.advancedModePending = false;
       this.updateRestoreButton();
     }
+  }
+
+  private async setupSystemAuthenticator(): Promise<void> {
+    try {
+      await registerSystemAuthenticator();
+      this.reportStatus("系统验证已设置；查看账号密码时将调用 macOS/Windows 的系统认证");
+    } catch (error) {
+      this.reportStatus(errorText(error), true);
+    }
+  }
+
+  private async advancedUnlockMaterial(pin: string): Promise<{ systemAuth?: Awaited<ReturnType<typeof authenticateSystemAuthenticator>>; pin?: string }> {
+    let configured = false;
+    try {
+      configured = await send<{ configured: boolean }>({ type: "getSystemAuthenticatorStatus" }).then((result) => result.configured);
+    } catch {
+      configured = false;
+    }
+    if (configured) {
+      try {
+        return { systemAuth: await authenticateSystemAuthenticator() };
+      } catch (error) {
+        if (!pin) throw new Error("系统验证未完成；可重试，或输入备用 PIN");
+        this.reportStatus(`系统验证未完成，将使用备用 PIN：${errorText(error)}`);
+      }
+    }
+    if (!pin) throw new Error("请先设置系统验证，或输入备用 4 至 32 位 PIN");
+    return { pin };
   }
 
   private connectAdvancedMode(token: string): Promise<chrome.runtime.Port> {

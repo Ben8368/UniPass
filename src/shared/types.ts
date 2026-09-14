@@ -29,6 +29,21 @@ export interface Credential {
   password: string;
 }
 
+export interface SystemAuthenticatorAssertion {
+  credentialId: string;
+  clientDataJSON: string;
+  authenticatorData: string;
+  signature: string;
+}
+
+export interface SystemAuthenticatorAttestation {
+  credentialId: string;
+  clientDataJSON: string;
+  authenticatorData: string;
+  publicKey: string;
+  algorithm: -7 | -257;
+}
+
 export interface CurrentUser {
   id?: string | number;
   userId?: string | number;
@@ -50,7 +65,6 @@ export type BackgroundRequest =
   | { type: "openApp"; appId: string | number; vaultId?: string; userScope: string }
   | { type: "fillFromOverlay"; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope?: string }
   | { type: "fillFromPopup"; tabId: number; accountId: string | number; accountRef?: AccountRef; expectedAppUrl: string; userScope?: string }
-  | { type: "enableAdvancedMode" }
   | { type: "startUniPassLogin" }
   | { type: "completeUniPassLogin" }
   | { type: "getPluginVersionSettings" }
@@ -62,16 +76,21 @@ export type BackgroundRequest =
   | { type: "appUrl"; appId: string | number; vaultId?: string; userScope: string }
   | { type: "credentialAvailability"; accountIds: Array<string | number>; accountRefs?: AccountRef[]; userScope: string }
   | { type: "revealCredential"; accountId: string | number; accountRef?: AccountRef; userScope?: string }
+  | { type: "enableAdvancedMode"; pin?: string; systemAuth?: SystemAuthenticatorAssertion }
+  | { type: "getSystemAuthenticatorStatus" }
+  | { type: "beginSystemAuthenticator"; purpose: "register" | "authenticate" }
+  | { type: "saveSystemAuthenticator"; attestation: SystemAuthenticatorAttestation }
   | { type: "getJupiterKeepalive"; userScope: string }
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }
   | { type: "listVaultProfiles" }
   | { type: "listVaultConnectionStates" }
   | { type: "enableLocalUnlock"; vaultId: string; password: string }
   | { type: "unlockVaultLocally"; vaultId: string; password: string }
+  | { type: "setGlobalPin"; pin: string }
   | { type: "disableLocalUnlock"; vaultId: string }
   | { type: "lockVault"; vaultId: string }
   | { type: "requestWebDavPermission"; endpoint: string }
-  | { type: "testWebDavConnection"; name: string; endpoint: string; username: string; appPassword: string; mode?: "create" | "existing" | "reconnect"; vaultId?: string; vaultKey?: string }
+  | { type: "testWebDavConnection"; name?: string; endpoint: string; username: string; appPassword: string; mode?: "create" | "existing" | "reconnect"; vaultId?: string; vaultKey?: string }
   | { type: "saveWebDavVault"; mode: "create" | "existing" | "reconnect"; vaultId?: string; name: string; endpoint: string; username: string; appPassword: string; vaultKey?: string }
   | { type: "removeVault"; vaultId: string }
   | { type: "vaultCatalog" }

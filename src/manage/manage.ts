@@ -44,7 +44,7 @@ async function testVault(): Promise<void> {
   try {
     const input = vaultInput();
     await requestOrigin(input.endpoint);
-    await send<void>({ type: "testWebDavConnection", ...input });
+    await send<void>({ type: "testWebDavConnection", vaultId: selectedVaultId || undefined, ...input });
     setStatus("WebDAV 连接和目录权限检查通过");
   } catch (error) { setStatus(errorText(error), true); }
 }

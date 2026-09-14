@@ -80,7 +80,7 @@ export class CurrentPageAccountEditor {
     copy.append(textElement("strong", "current-page-add-title", "账号仍在密码库中，需要重新连接"));
     heading.append(icon, copy);
     panel.append(heading);
-    panel.append(textElement("p", "current-page-add-help", states.length ? "浏览器会话已结束，扩展保留了密码库配置，但需要重新输入连接信息后才能读取账号。" : "当前没有可用的 WebDAV 密码库连接。"));
+    panel.append(textElement("p", "current-page-add-help", states.length ? "本机长期保存的 WebDAV 连接材料不可用或已被清除，请重新输入连接信息后读取账号。" : "当前没有可用的 WebDAV 密码库连接。"));
     const actions = document.createElement("div");
     actions.className = "current-page-reconnect-actions";
     if (!states.length) {

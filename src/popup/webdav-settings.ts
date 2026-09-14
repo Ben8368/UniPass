@@ -30,15 +30,18 @@ export class WebDavSettingsController {
   private readonly recoveryKey = get<HTMLInputElement>("webdavRecoveryKeyValue");
   private readonly localUnlock = get<HTMLDetailsElement>("webdavLocalUnlock");
   private readonly localUnlockPassword = get<HTMLInputElement>("webdavLocalUnlockPassword");
+  private readonly setupSystemAuth = get<HTMLButtonElement>("setupWebDavSystemAuth");
   private readonly enableLocalUnlock = get<HTMLButtonElement>("enableWebDavLocalUnlock");
-  private readonly unlockLocalUnlock = get<HTMLButtonElement>("unlockWebDavLocalUnlock");
-  private readonly lock = get<HTMLButtonElement>("lockWebDavVault");
-  private readonly disableLocalUnlock = get<HTMLButtonElement>("disableWebDavLocalUnlock");
+  private readonly unlockAdvanced = get<HTMLButtonElement>("unlockWebDavAdvanced");
   private profiles: VaultProfile[] = [];
   private busy = false;
   private operation: "test" | "save" | "remove" | null = null;
 
-  constructor(private readonly reportStatus: (text: string, isError?: boolean) => void) {}
+  constructor(
+    private readonly reportStatus: (text: string, isError?: boolean) => void,
+    private readonly onAdvancedUnlock: () => void = () => {},
+    private readonly onSystemAuthSetup: () => void = () => {},
+  ) {}
 
   bind(): void {
     this.form.addEventListener("submit", (event) => { event.preventDefault(); void this.saveVault(); });
@@ -56,10 +59,9 @@ export class WebDavSettingsController {
     getDomRoot().addEventListener("pointerdown", (event) => {
       if (!event.composedPath().includes(this.picker)) this.closeProfilePicker();
     });
-    this.enableLocalUnlock.addEventListener("click", () => void this.localUnlockAction("enable"));
-    this.unlockLocalUnlock.addEventListener("click", () => void this.localUnlockAction("unlock"));
-    this.lock.addEventListener("click", () => void this.localUnlockAction("lock"));
-    this.disableLocalUnlock.addEventListener("click", () => void this.localUnlockAction("disable"));
+    this.enableLocalUnlock.addEventListener("click", () => void this.setGlobalPin());
+    this.setupSystemAuth.addEventListener("click", () => this.onSystemAuthSetup());
+    this.unlockAdvanced.addEventListener("click", () => this.onAdvancedUnlock());
   }
 
   async open(vaultId?: string): Promise<void> {
@@ -87,9 +89,13 @@ export class WebDavSettingsController {
   clearSensitiveState(): void {
     this.appPassword.value = "";
     this.vaultKey.value = "";
+    this.localUnlockPassword.value = "";
     this.recoveryKey.value = "";
     this.recovery.hidden = true;
   }
+
+  readGlobalPin(): string { return this.localUnlockPassword.value.trim(); }
+  clearGlobalPin(): void { this.localUnlockPassword.value = ""; }
 
   private selectedMode(): "create" | "existing" | "reconnect" {
     if (this.profile.value !== ADD_PROFILE_VALUE) return "reconnect";
@@ -104,8 +110,8 @@ export class WebDavSettingsController {
     this.vaultPicker.classList.toggle("has-remove", reconnecting);
     this.vaultKeyField.hidden = false;
     this.vaultKey.hidden = false;
-    this.localUnlock.hidden = !reconnecting;
-    if (!reconnecting) this.localUnlock.open = false;
+    this.localUnlock.hidden = false;
+    this.localUnlock.open = true;
     this.remove.hidden = !reconnecting;
     this.recoveryKey.value = "";
     this.recovery.hidden = true;
@@ -117,7 +123,7 @@ export class WebDavSettingsController {
     this.vaultKey.value = "";
     this.localUnlockPassword.value = "";
     if (reconnecting) {
-      this.taskHint.textContent = selected ? `恢复“${selected.name}”的本次会话连接。地址已为你填好。` : "当前没有可重新连接的本地密码库。";
+      this.taskHint.textContent = selected ? `“${selected.name}”的连接材料已长期保存在本机，地址已为你填好；直接保存即可，填写新凭据可替换。` : "当前没有可重新连接的本地密码库。";
       this.save.textContent = "重新连接";
     } else {
       this.taskHint.textContent = "留空将新建密码库；粘贴已有 Vault Key 则接入远端密码库。";
@@ -228,16 +234,11 @@ export class WebDavSettingsController {
     }
   }
 
-  private async localUnlockAction(action: "enable" | "unlock" | "lock" | "disable"): Promise<void> {
-    const vaultId = this.profile.value;
-    if (this.selectedMode() !== "reconnect" || !this.profiles.some((profile) => profile.id === vaultId) || this.busy) return;
+  private async setGlobalPin(): Promise<void> {
+    if (this.busy) return;
     try {
-      if (action === "enable") await send<void>({ type: "enableLocalUnlock", vaultId, password: this.localUnlockPassword.value });
-      else if (action === "unlock") await send<void>({ type: "unlockVaultLocally", vaultId, password: this.localUnlockPassword.value });
-      else if (action === "lock") await send<void>({ type: "lockVault", vaultId });
-      else await send<void>({ type: "disableLocalUnlock", vaultId });
-      this.localUnlockPassword.value = "";
-      this.showStatus(action === "enable" ? "本地解锁已启用" : action === "unlock" ? "Vault 已解锁" : action === "lock" ? "Vault 已锁定" : "本地解锁已停用");
+      await send<void>({ type: "setGlobalPin", pin: this.readGlobalPin() });
+      this.showStatus("备用全局 PIN 已设置；系统验证不可用时可用它查看账号密码和高级功能");
     } catch (error) { this.showStatus(errorText(error), true); }
   }
 
@@ -272,7 +273,7 @@ export class WebDavSettingsController {
 
   private updateDisabledStates(): void {
     const selected = this.profiles.some((profile) => profile.id === this.profile.value);
-    for (const control of [this.profile, this.name, this.selection, this.endpoint, this.username, this.appPassword, this.vaultKey, this.localUnlockPassword, this.enableLocalUnlock, this.unlockLocalUnlock, this.lock, this.disableLocalUnlock, this.remove, this.test, this.save]) control.disabled = this.busy;
+    for (const control of [this.profile, this.name, this.selection, this.endpoint, this.username, this.appPassword, this.vaultKey, this.localUnlockPassword, this.setupSystemAuth, this.enableLocalUnlock, this.unlockAdvanced, this.remove, this.test, this.save]) control.disabled = this.busy;
     const reconnectUnavailable = this.selectedMode() === "reconnect" && !selected;
     this.test.disabled = this.busy || reconnectUnavailable;
     this.save.disabled = this.busy || reconnectUnavailable;

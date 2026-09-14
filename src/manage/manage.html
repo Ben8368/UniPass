@@ -35,11 +35,11 @@
         <form id="vaultForm" class="form-grid">
           <label>密码库名称<input id="vaultName" required autocomplete="off" placeholder="例如：我的 NAS 密码库" /><span class="field-help">给这个保存位置起一个容易识别的名字。</span></label>
           <label>WebDAV 地址<input id="endpoint" required type="text" inputmode="url" placeholder="https://nas.example.com/dav/" autocomplete="off" /><span class="field-help">必须以 https:// 开头，可包含文件夹路径。</span></label>
-          <label>WebDAV 用户名<input id="username" required autocomplete="username" /><span class="field-help">填写 WebDAV 服务专用账号。</span></label>
-          <label>应用密码（App Password）<input id="appPassword" required type="password" autocomplete="new-password" /><span class="field-help">填写 WebDAV 应用密码，不是 NAS 管理员登录密码。</span></label>
-          <label>Vault Key（重新连接时需要）<input id="vaultKey" type="password" autocomplete="off" /><span class="field-help">已有密码库在浏览器会话结束后需粘贴创建时保存的 Vault Key；首次创建时会显示一次。</span></label>
+          <label>WebDAV 用户名<input id="username" autocomplete="username" /><span class="field-help">新建时必填；已有密码库可留空，使用本机长期保存的连接材料。</span></label>
+          <label>应用密码（App Password）<input id="appPassword" type="password" autocomplete="new-password" /><span class="field-help">新建时必填；已有密码库可留空，使用本机长期保存的连接材料。</span></label>
+          <label>Vault Key（首次接入已有库时填写）<input id="vaultKey" type="password" autocomplete="off" /><span class="field-help">扩展会长期记住 Vault Key；只有迁移设备或恢复本地数据时才需要再次填写。</span></label>
           <div id="recoveryKeyNotice" class="security-note" hidden><strong>立即保存 Vault Key</strong><span>关闭此页后不会再显示。<input id="recoveryKey" readonly aria-label="Vault Key" /></span></div>
-          <div class="security-note"><strong>安全提示</strong><span>认证信息只在当前浏览器会话中使用；关闭浏览器后，重新连接时需要再次填写。</span></div>
+          <div class="security-note"><strong>安全提示</strong><span>WebDAV 用户名、App Password 和 Vault Key 会以扩展设备密钥加密并长期保存在本机；全局 PIN 只用于查看账号密码和高级功能。</span></div>
           <div class="actions"><button id="testVault" class="secondary" type="button">测试连接</button><button class="primary" type="submit">保存并继续</button><button id="removeVault" class="danger" type="button" disabled>删除密码库</button><p id="status" class="status" role="status" aria-live="polite" hidden></p></div>
         </form>
       </section>

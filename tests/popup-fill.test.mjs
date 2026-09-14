@@ -42,7 +42,9 @@ test("Reveal has a distinct Advanced-only background path", () => {
 });
 
 test("Popup Advanced mode is ephemeral and uses a handshaken Port", () => {
-  assert.match(settingsSource, /send<string>\(\{ type: "enableAdvancedMode" \}\)/);
+  assert.match(settingsSource, /send<string>\(\{ type: "enableAdvancedMode", \.\.\.auth \}\)/);
+  assert.match(settingsSource, /authenticateSystemAuthenticator/);
+  assert.match(settingsSource, /registerSystemAuthenticator/);
   assert.match(settingsSource, /chrome\.runtime\.connect\(\{ name: ADVANCED_MODE_PORT_NAME \}\)/);
   assert.match(settingsSource, /type: "advancedModeHandshake", token/);
   assert.match(settingsSource, /port\.onDisconnect\.addListener/);
@@ -51,7 +53,7 @@ test("Popup Advanced mode is ephemeral and uses a handshaken Port", () => {
 });
 
 test("settings connects WebDAV inside the extension UI without opening a management tab", () => {
-  assert.match(settingsSource, /new WebDavSettingsController\(reportStatus\)/);
+  assert.match(settingsSource, /new WebDavSettingsController\(reportStatus/);
   assert.doesNotMatch(settingsSource, /openVaultManager|chrome\.tabs\.create/);
   assert.match(webdavSettingsSource, /type: "requestWebDavPermission"/);
   assert.match(webdavSettingsSource, /type: "testWebDavConnection"/);

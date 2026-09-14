@@ -5,6 +5,7 @@ const SALT_BYTES = 16;
 const NONCE_BYTES = 12;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+export const GLOBAL_PIN_MARKER = "unipass-global-pin-v1";
 
 export interface LocalUnlockMaterial {
   username: string;
@@ -47,6 +48,19 @@ export async function openLocalUnlockMaterial(password: string, envelope: unknow
   } catch {
     throw new VaultCryptoError();
   } finally { zero(salt); zero(nonce); zero(ciphertext); }
+}
+
+export async function sealGlobalPin(pin: string): Promise<LocalUnlockEnvelope> {
+  return sealLocalUnlockMaterial(pin, { username: GLOBAL_PIN_MARKER, appPassword: GLOBAL_PIN_MARKER, vaultKey: GLOBAL_PIN_MARKER });
+}
+
+export async function openGlobalPin(pin: string, envelope: unknown): Promise<void> {
+  const material = await openLocalUnlockMaterial(pin, envelope);
+  if (material.username !== GLOBAL_PIN_MARKER || material.appPassword !== GLOBAL_PIN_MARKER || material.vaultKey !== GLOBAL_PIN_MARKER) throw new VaultCryptoError();
+}
+
+export function validateGlobalPin(pin: string): void {
+  if (!/^[0-9]{4,32}$/.test(pin)) throw new Error("全局 PIN 必须是 4 至 32 位数字");
 }
 
 function isEnvelope(value: unknown): value is LocalUnlockEnvelope {

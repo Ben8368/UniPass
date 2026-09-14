@@ -41,7 +41,7 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
-齿轮中的“密码库设置”可在“添加密码库”和任一本地已保存密码库之间直接切换，也可从“重新连接”入口切回添加；不再提供与真实 Profile 混淆的“连接已有密码库”伪选项。添加时 Vault Key 留空会新建密码库，填写已有 Vault Key 则接入远端密码库。表单直接完成 WebDAV 地址、用户名、App Password 的测试和保存，不会新开标签页。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。当前 HTTPS 页面没有匹配账号时，可直接选择已连接 Vault 并保存账号与密码；扩展会使用当前域名创建或复用网站记录。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
+齿轮中的“密码库设置”可在“添加密码库”和任一本地已保存密码库之间直接切换，也可从“重新连接”入口切回添加；不再提供与真实 Profile 混淆的“连接已有密码库”伪选项。添加时 Vault Key 留空会新建密码库，填写已有 Vault Key 则接入远端密码库。WebDAV 用户名、App Password 和 Vault Key 会以扩展设备密钥加密并长期保存在本机，浏览器重启后自动恢复登录态；重连时可直接保存，填写新材料则替换本机连接材料。查看账号密码和 Legacy UniPass 高级功能时优先调用系统验证（macOS 的 Touch ID/系统密码、Windows Hello/PIN 等），扩展只验证系统返回的 WebAuthn 证明，不会读取具体系统 PIN；系统验证不可用时才使用备用 4 至 32 位全局 PIN。表单直接完成 WebDAV 地址、用户名和 App Password 的测试与保存，不会新开标签页。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。当前 HTTPS 页面没有匹配账号时，可直接选择已连接 Vault 并保存账号与密码；扩展会使用当前域名创建或复用网站记录。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
 
 ## 项目治理
 
@@ -74,8 +74,8 @@ WASM 本身保证 byte-for-byte 可复现；`dist` 文件内容由构建流程�
 ## 安全与行为
 
 - Normal Mode 可以展示完整账号并执行 Fill，但 plaintext password 不返回 UI：Popup/浮层只发送 `accountId`，Service Worker 获取所选 credential 后经临时 Content Script 填入页面。Advanced Mode 在此基础上通过 ephemeral capability 允许 Reveal 和 Copy Password；availability 在 WASM 内只返回状态，Jupiter keepalive 在 WASM 内完成 ciphertext→transformed password。
-- UniPass/Vault credential 明文密码不写入 `chrome.storage`、日志或持久化文件；WebDAV App Password 是单独的会话级认证 secret，详见下方安全说明。
-- Legacy UniPass 是只读兼容数据源；WebDAV 是独立 New Vault。WebDAV 服务器只接收客户端 AES-256-GCM 加密后的版本化 App/Account/Credential objects，不接收明文密码或 Vault Key；WebDAV App Password 仅在当前浏览器会话的 `chrome.storage.session` 中保存，关闭会话后需重新连接。
+- UniPass/Vault credential 明文密码不写入 `chrome.storage`、日志或持久化文件；WebDAV App Password 和 Vault Key 只以扩展设备密钥保护的密文长期保存，解密后才进入当前运行的认证 secret。高级查看优先使用系统 WebAuthn 用户验证，扩展只保存系统凭据公钥和 ID；备用全局 PIN 只在系统验证不可用时使用。
+- Legacy UniPass 是只读兼容数据源；WebDAV 是独立 New Vault。WebDAV 服务器只接收客户端 AES-256-GCM 加密后的版本化 App/Account/Credential objects，不接收明文密码或 Vault Key；WebDAV 连接材料会在本机长期保存并自动恢复，查看账号密码仍需系统验证或备用全局 PIN。
 - WebDAV 修改使用 ETag 对应的 opaque revision token，`If-Match`/`If-None-Match` 冲突会显式失败，不使用 silent last-write-wins。
 - Advanced Credential panel 的明文凭据 60 秒后自动清除；关闭 Popup、Popup `pagehide`、移除页面浮层、Port disconnect 或 Service Worker 重启都会回到 Normal/fail-closed。系统剪贴板不会被自动清空。
 - 自动填充只处理当前页面主文档中的可见输入框，不自动提交表单。

@@ -3,15 +3,20 @@ import { importVaultKey, exportVaultKey, generateVaultKey } from "../../shared/v
 import { normalizeWebDavUrl } from "../../shared/url";
 import type { AccountListResult, UniPassAccount } from "../../shared/types";
 import { type AccountRef, type VaultAccount, type VaultApp, type VaultConnection, type VaultConnectionState, type VaultCredential, type VaultProfile } from "../../shared/vault";
-import { openLocalUnlockMaterial, sealLocalUnlockMaterial, type LocalUnlockEnvelope } from "./local-unlock";
+import { openGlobalPin, openLocalUnlockMaterial, sealGlobalPin, sealLocalUnlockMaterial, validateGlobalPin, type LocalUnlockEnvelope } from "./local-unlock";
+import { openPersistentMaterial, sealPersistentMaterial, type PersistentSecretEnvelope } from "./persistent-secrets";
 import { WebDavBackend } from "./webdav-backend";
 import { VaultCore } from "./vault-core";
 
 const PROFILES_KEY = "unipass-vault-profiles";
 const SESSION_SECRETS_KEY = "unipass-vault-session-secrets";
 const LOCAL_UNLOCKS_KEY = "unipass-vault-local-unlocks";
+const PERSISTENT_CONNECTIONS_KEY = "unipass-vault-persistent-connections";
 const LOCAL_UNLOCK_FAILURES_KEY = "unipass-vault-local-unlock-failures";
+const GLOBAL_PIN_KEY = "unipass-global-pin";
+const GLOBAL_PIN_FAILURES_KEY = "unipass-global-pin-failures";
 const LOCAL_UNLOCK_MAX_FAILURES = 5;
+const GLOBAL_PIN_MAX_FAILURES = 5;
 const LEGACY_VAULT_ID = "legacy-unipass";
 
 interface SessionSecret { username: string; appPassword: string; vaultKey: string; }
@@ -31,22 +36,26 @@ export async function listVaultConnectionStates(): Promise<VaultConnectionState[
   const [profiles, secrets] = await Promise.all([listVaultProfiles(), readSecrets()]);
   return profiles.map((profile) => ({ vaultId: profile.id, name: profile.name, connected: hasSessionSecret(secrets[profile.id]) }));
 }
-export async function testWebDavConnection(input: Omit<WebDavVaultInput, "mode">): Promise<void> {
-  await new WebDavBackend(normalizeWebDavUrl(input.endpoint), input.username, input.appPassword).connect();
+export async function testWebDavConnection(input: Pick<WebDavVaultInput, "endpoint" | "username" | "appPassword"> & { vaultId?: string }): Promise<void> {
+  const material = await connectionMaterial(input.vaultId, input.username, input.appPassword);
+  await new WebDavBackend(normalizeWebDavUrl(input.endpoint), material.username, material.appPassword).connect();
 }
 
 /** Explicit create/open/reconnect state machine; neither unsuccessful open nor a wrong key changes local state. */
 export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultConnection> {
   const endpoint = normalizeWebDavUrl(input.endpoint);
   const name = input.name.trim(); const username = input.username.trim();
-  if (!name || !username || !input.appPassword) throw new Error("Vault 名称、用户名和 App Password 不能为空");
+  const secrets = await readSecrets();
   const profiles = await listVaultProfiles();
   const existingProfile = input.vaultId ? profiles.find((profile) => profile.id === input.vaultId) : undefined;
   if (input.mode === "reconnect" && !existingProfile) throw new Error("Vault 不存在");
   if (input.mode !== "reconnect" && input.vaultId) throw new Error("新建或连接已有密码库不能复用本地 Vault ID");
-  const backend = new WebDavBackend(endpoint, username, input.appPassword);
+  const previous = existingProfile ? secrets[existingProfile.id] : undefined;
+  const resolvedUsername = username || previous?.username || "";
+  const resolvedAppPassword = input.appPassword || previous?.appPassword || "";
+  if (!name || !resolvedUsername || !resolvedAppPassword) throw new Error("Vault 名称、用户名和 App Password 不能为空");
+  const backend = new WebDavBackend(endpoint, resolvedUsername, resolvedAppPassword);
   await backend.connect();
-  const secrets = await readSecrets();
   let vaultKey: string;
   let core: VaultCore;
   let recoveryKey: string | undefined;
@@ -55,20 +64,30 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultCon
     const vaultId = crypto.randomUUID();
     core = await VaultCore.create(vaultId, backend, await importVaultKey(vaultKey));
   } else {
-    vaultKey = input.vaultKey?.trim() || secrets[existingProfile?.id ?? ""]?.vaultKey || "";
+    vaultKey = input.vaultKey?.trim() || previous?.vaultKey || "";
     if (!vaultKey) throw new Error("请粘贴 Vault Key 后重新连接");
     core = await VaultCore.open(backend, await importVaultKey(vaultKey));
-    if (input.mode === "reconnect" && existingProfile && existingProfile.id !== core.vaultId) throw new Error("远端 Vault 与本地连接配置不匹配");
+    if (input.mode === "reconnect" && existingProfile && profiles.some((profile) => profile.id === core.vaultId && profile.id !== existingProfile.id)) throw new Error("远端 Vault 已对应另一个本地密码库");
   }
   const profile: VaultProfile = { id: core.vaultId, name, backend: "webdav", enabled: true, endpoint };
-  await chrome.storage.local.set({ [PROFILES_KEY]: [...profiles.filter((candidate) => candidate.id !== profile.id), profile] });
-  await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: { ...secrets, [profile.id]: { username, appPassword: input.appPassword, vaultKey } satisfies SessionSecret } });
+  const nextProfiles = profiles.filter((candidate) => candidate.id !== profile.id && candidate.id !== existingProfile?.id);
+  await chrome.storage.local.set({ [PROFILES_KEY]: [...nextProfiles, profile] });
+  const material = { username: resolvedUsername, appPassword: resolvedAppPassword, vaultKey };
+  const persistent = await readPersistentEnvelopes();
+  if (existingProfile && existingProfile.id !== profile.id) delete persistent[existingProfile.id];
+  persistent[profile.id] = await sealPersistentMaterial(material);
+  await chrome.storage.local.set({ [PERSISTENT_CONNECTIONS_KEY]: persistent });
+  const nextSecrets = { ...secrets };
+  if (existingProfile && existingProfile.id !== profile.id) delete nextSecrets[existingProfile.id];
+  nextSecrets[profile.id] = material satisfies SessionSecret;
+  await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: nextSecrets });
   return { profile, ...(recoveryKey && { recoveryKey }) };
 }
 
-/** Local unlock is opt-in. It stores ciphertext only; unlock failures are session-scoped and fail closed. */
+/** Legacy local-unlock messages remain supported for profiles created by older builds. */
 export async function enableLocalUnlock(vaultId: string, password: string): Promise<void> {
   const secret = (await readSecrets())[vaultId]; if (!secret) throw new Error("请先连接 Vault 后再启用本地解锁");
+  await ensureGlobalPin(password);
   const unlocks = await readUnlocks();
   await chrome.storage.local.set({ [LOCAL_UNLOCKS_KEY]: { ...unlocks, [vaultId]: await sealLocalUnlockMaterial(password, secret) } });
 }
@@ -76,11 +95,21 @@ export async function unlockVaultLocally(vaultId: string, password: string): Pro
   const failures = await readFailures(); if ((failures[vaultId] ?? 0) >= LOCAL_UNLOCK_MAX_FAILURES) throw new Error("本地解锁已锁定，请重新连接该 Vault");
   const envelope = (await readUnlocks())[vaultId]; if (!envelope) throw new Error("该 Vault 未启用本地解锁");
   try {
+    if (await readGlobalPinEnvelope()) await verifyGlobalPin(password);
     const material = await openLocalUnlockMaterial(password, envelope);
     const profile = await profileFor(vaultId);
     const core = await VaultCore.open(new WebDavBackend(profile.endpoint!, material.username, material.appPassword), await importVaultKey(material.vaultKey));
-    if (core.vaultId !== vaultId) throw new Error("本地解锁材料与 Vault 不匹配");
-    const secrets = await readSecrets(); await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: { ...secrets, [vaultId]: material } });
+    if (!(await readGlobalPinEnvelope())) await setGlobalPin(password);
+    let resolvedId = vaultId;
+    if (core.vaultId !== vaultId) {
+      const profiles = await listVaultProfiles();
+      if (profiles.some((candidate) => candidate.id === core.vaultId && candidate.id !== vaultId)) throw new Error("远端 Vault 已对应另一个本地密码库");
+      await chrome.storage.local.set({ [PROFILES_KEY]: [...profiles.filter((candidate) => candidate.id !== vaultId && candidate.id !== core.vaultId), { ...profile, id: core.vaultId }] });
+      const unlocks = await readUnlocks(); delete unlocks[vaultId]; unlocks[core.vaultId] = await sealLocalUnlockMaterial(password, material); await chrome.storage.local.set({ [LOCAL_UNLOCKS_KEY]: unlocks });
+      resolvedId = core.vaultId;
+    }
+    const secrets = await readSecrets(); delete secrets[vaultId]; secrets[resolvedId] = material; await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: secrets });
+    const persistent = await readPersistentEnvelopes(); delete persistent[vaultId]; persistent[resolvedId] = await sealPersistentMaterial(material); await chrome.storage.local.set({ [PERSISTENT_CONNECTIONS_KEY]: persistent });
     delete failures[vaultId]; await chrome.storage.session.set({ [LOCAL_UNLOCK_FAILURES_KEY]: failures });
   } catch (error) {
     failures[vaultId] = (failures[vaultId] ?? 0) + 1; await chrome.storage.session.set({ [LOCAL_UNLOCK_FAILURES_KEY]: failures });
@@ -90,10 +119,31 @@ export async function unlockVaultLocally(vaultId: string, password: string): Pro
 export async function disableLocalUnlock(vaultId: string): Promise<void> { const unlocks = await readUnlocks(); delete unlocks[vaultId]; await chrome.storage.local.set({ [LOCAL_UNLOCKS_KEY]: unlocks }); }
 export async function lockVault(vaultId: string): Promise<void> { const secrets = await readSecrets(); delete secrets[vaultId]; await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: secrets }); }
 
+export async function setGlobalPin(pin: string): Promise<void> {
+  validateGlobalPin(pin);
+  if (await readGlobalPinEnvelope()) { await verifyGlobalPin(pin); return; }
+  await chrome.storage.local.set({ [GLOBAL_PIN_KEY]: await sealGlobalPin(pin) });
+}
+
+export async function verifyGlobalPin(pin: string): Promise<void> {
+  validateGlobalPin(pin);
+  const failures = await readGlobalPinFailures();
+  if (failures >= GLOBAL_PIN_MAX_FAILURES) throw new Error("全局 PIN 已锁定，请重新连接密码库");
+  const envelope = await readGlobalPinEnvelope();
+  if (!envelope) throw new Error("尚未设置全局 PIN，请先设置后再查看账号密码或使用高级功能");
+  try {
+    await openGlobalPin(pin, envelope);
+    await chrome.storage.session.set({ [GLOBAL_PIN_FAILURES_KEY]: 0 });
+  } catch {
+    await chrome.storage.session.set({ [GLOBAL_PIN_FAILURES_KEY]: failures + 1 });
+    throw new Error("全局 PIN 错误");
+  }
+}
+
 export async function removeVault(vaultId: string): Promise<void> {
   const profiles = await listVaultProfiles(); const target = profiles.find((profile) => profile.id === vaultId); if (!target) return;
   const remaining = profiles.filter((profile) => profile.id !== vaultId); await chrome.storage.local.set({ [PROFILES_KEY]: remaining });
-  await lockVault(vaultId); await disableLocalUnlock(vaultId);
+  await lockVault(vaultId); await disableLocalUnlock(vaultId); await deletePersistentConnection(vaultId);
   if (target.endpoint) try { const origin = new URL(target.endpoint).origin; if (!remaining.some((profile) => profile.endpoint && new URL(profile.endpoint).origin === origin)) await chrome.permissions.remove({ origins: [`${origin}/*`] }); } catch { /* permission cleanup is best effort */ }
 }
 export async function vaultCatalog(): Promise<WebDavVaultCatalogResult> {
@@ -114,13 +164,43 @@ export async function updateVaultAccount(vaultId: string, account: VaultAccount)
 export async function deleteVaultAccount(vaultId: string, accountId: string): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.deleteAccount(accountId)); }
 export async function updateVaultCredential(vaultId: string, accountId: string, credential: VaultCredential): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.updateCredential({ vaultId, accountId }, credential)); }
 
-async function coreFor(profile: VaultProfile): Promise<VaultCore> { if (profile.backend !== "webdav" || !profile.endpoint) throw new Error("Vault backend 不受支持"); const secret = (await readSecrets())[profile.id]; if (!secret) throw new Error("WebDAV 凭据未在当前浏览器会话中配置，请重新连接 Vault"); const core = await VaultCore.open(new WebDavBackend(profile.endpoint, secret.username, secret.appPassword), await importVaultKey(secret.vaultKey)); if (core.vaultId !== profile.id) throw new Error("远端 Vault 与本地连接配置不匹配"); return core; }
+async function coreFor(profile: VaultProfile): Promise<VaultCore> { if (profile.backend !== "webdav" || !profile.endpoint) throw new Error("Vault backend 不受支持"); const secret = (await readSecrets())[profile.id]; if (!secret) throw new Error("WebDAV 连接材料不存在，请重新连接 Vault"); const core = await VaultCore.open(new WebDavBackend(profile.endpoint, secret.username, secret.appPassword), await importVaultKey(secret.vaultKey)); if (core.vaultId !== profile.id) throw new Error("远端 Vault 与本地连接配置不匹配"); return core; }
 async function profileFor(vaultId: string): Promise<VaultProfile> { const profile = (await listVaultProfiles()).find((candidate) => candidate.id === vaultId); if (!profile || !profile.enabled) throw new Error("Vault 不存在或已停用"); return profile; }
-async function readSecrets(): Promise<Record<string, SessionSecret>> { const value = (await chrome.storage.session.get(SESSION_SECRETS_KEY))[SESSION_SECRETS_KEY]; return isRecord(value) ? value as Record<string, SessionSecret> : {}; }
+async function readSecrets(): Promise<Record<string, SessionSecret>> {
+  const value = (await chrome.storage.session.get(SESSION_SECRETS_KEY))[SESSION_SECRETS_KEY];
+  const session = isRecord(value) ? value as Record<string, SessionSecret> : {};
+  const persistent = await readPersistentConnections();
+  const restored: Record<string, SessionSecret> = { ...persistent, ...session };
+  return restored;
+}
 async function readUnlocks(): Promise<Record<string, LocalUnlockEnvelope>> { const value = (await chrome.storage.local.get(LOCAL_UNLOCKS_KEY))[LOCAL_UNLOCKS_KEY]; return isRecord(value) ? value as Record<string, LocalUnlockEnvelope> : {}; }
+async function readPersistentConnections(): Promise<Record<string, SessionSecret>> {
+  const value = await readPersistentEnvelopes();
+  if (!Object.keys(value).length) return {};
+  const entries = await Promise.all(Object.entries(value).map(async ([vaultId, envelope]) => {
+    try { return [vaultId, await openPersistentMaterial(envelope)] as const; } catch { return null; }
+  }));
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, SessionSecret] => Boolean(entry)));
+}
+async function readPersistentEnvelopes(): Promise<Record<string, PersistentSecretEnvelope>> {
+  const value = (await chrome.storage.local.get(PERSISTENT_CONNECTIONS_KEY))[PERSISTENT_CONNECTIONS_KEY];
+  if (!isRecord(value)) return {};
+  return value as Record<string, PersistentSecretEnvelope>;
+}
 async function readFailures(): Promise<Record<string, number>> { const value = (await chrome.storage.session.get(LOCAL_UNLOCK_FAILURES_KEY))[LOCAL_UNLOCK_FAILURES_KEY]; return isRecord(value) ? value as Record<string, number> : {}; }
 function validateProfiles(value: unknown): VaultProfile[] { return Array.isArray(value) ? value.filter((candidate): candidate is VaultProfile => { const profile = candidate as VaultProfile; return Boolean(profile && typeof profile.id === "string" && typeof profile.name === "string" && profile.backend === "webdav" && typeof profile.endpoint === "string" && profile.enabled === true); }) : []; }
 function toLegacyAccount(account: VaultAccount): UniPassAccount { return { id: account.id, account: account.username, remark: account.remark, vaultId: account.vaultId, appId: account.appId, accountRef: { vaultId: account.vaultId, accountId: account.id } }; }
 function targetToUrl(target: VaultApp["targets"][number]): string { return `https://${target.host}${target.pathPrefix || "/"}`; }
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
 function hasSessionSecret(value: SessionSecret | undefined): boolean { return Boolean(value?.username && value.appPassword && value.vaultKey); }
+
+async function ensureGlobalPin(pin: string): Promise<void> { validateGlobalPin(pin); if (await readGlobalPinEnvelope()) await verifyGlobalPin(pin); else await setGlobalPin(pin); }
+async function connectionMaterial(vaultId: string | undefined, username: string, appPassword: string): Promise<SessionSecret> {
+  const saved = vaultId ? (await readSecrets())[vaultId] : undefined;
+  const material = { username: username.trim() || saved?.username || "", appPassword: appPassword || saved?.appPassword || "", vaultKey: saved?.vaultKey || "" };
+  if (!material.username || !material.appPassword) throw new Error("请填写 WebDAV 用户名和 App Password");
+  return material;
+}
+async function deletePersistentConnection(vaultId: string): Promise<void> { const persistent = await readPersistentEnvelopes(); delete persistent[vaultId]; await chrome.storage.local.set({ [PERSISTENT_CONNECTIONS_KEY]: persistent }); }
+async function readGlobalPinEnvelope(): Promise<LocalUnlockEnvelope | undefined> { const value = (await chrome.storage.local.get(GLOBAL_PIN_KEY))[GLOBAL_PIN_KEY]; return isRecord(value) ? value as unknown as LocalUnlockEnvelope : undefined; }
+async function readGlobalPinFailures(): Promise<number> { const value = (await chrome.storage.session.get(GLOBAL_PIN_FAILURES_KEY))[GLOBAL_PIN_FAILURES_KEY]; return typeof value === "number" ? value : 0; }

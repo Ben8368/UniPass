@@ -29,6 +29,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/shared/vault-crypto.ts` | Web Crypto AES-256-GCM、versioned envelope、nonce/key import/export | 不复用 Legacy UniPass 密文格式；不上传 Vault Key |
 | `src/manage/` | 保留的宽屏 Vault 管理界面 | 不读取 Legacy 密码；不直接访问 WebDAV 网络 |
 | `src/background/advanced-capability.ts` | 以 `sender.documentId` 和 `runtime.Port` 管理 ephemeral Advanced plaintext disclosure capability | 自动因任意 `connect` 授权；使用 storage/TTL/alarm 持久化 capability |
+| `src/background/vault/system-auth.ts` / `src/popup/system-auth.ts` | 通过扩展页 WebAuthn 调用平台认证器，后台验证一次性 challenge、origin、用户验证标志和本地公钥签名 | 读取或保存系统 PIN；把系统认证当作长期 Advanced capability |
 | `src/content/` | 用户点击扩展后挂载页面浮层，或用户点击填入后在当前主文档内查找可见标准输入框并写入 | 常驻注册、自动提交、读取或回传页面数据 |
 | `src/shared/types.ts` | 跨上下文消息与数据契约 | 包含运行时副作用 |
 | `src/shared/url.ts` | URL 规范化、HTTPS 与 path 匹配纯函数 | 依赖 Chrome API 或 DOM |
@@ -42,7 +43,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ## 关键数据流
 
-- 齿轮二级页的密码库选择器只展示“添加密码库”和真实的本地 Profile，两个入口都可自由切换；“添加密码库”中 Vault Key 留空即创建新库，填写则接入远端已有库，内部仍保持 create/existing/reconnect 三条 fail-closed 状态。表单直接提供 HTTPS 地址、用户名和 App Password；用户点击测试或保存时申请单一 origin optional host permission，并由 Service Worker 执行 WebDAV capability 检查。Popup/页面浮层只在用户提交时短暂携带认证信息，不发起 WebDAV 网络请求；保存成功后清空 App Password。新建 Vault 时后台生成 Key、只向当前设置 UI 回传一次供用户安全保存；已存在 Vault 在会话丢失后需由用户粘贴该 Key 才能重新连接，缺失时 fail closed，绝不生成替代 Key 或改写远端对象。当前页仅将具有本会话连接材料的 Vault 作为可写入目标；若已有 Profile 因会话结束而未连接，则显示“账号仍在密码库中，需要重新连接”，并直达该 Profile 的重连设置，不得误显示为未保存账号；目录同步会单独报告密码库未连接，不能伪装为 UniPass 应用同步失败。已选 Vault 可经确认从扩展中移除；该消息只由 Service Worker 清除本地 Profile、session secret 和未被其他 Profile 使用的 optional host permission，不删除 WebDAV 远端对象。当前 HTTPS 页面没有匹配账号时，用户可就地选择已连接 Vault、填写账号和密码；后台按当前 HTTPS 域名创建或复用 Vault App 后写入账号。WebDAV Vault 可在未登录 UniPass 时独立展示和填入，但 Legacy UniPass 仍要求稳定用户作用域。原有 UniPass 版本 override、自派生构建和高级模式解锁流程保持隐藏兼容路径。
+- 齿轮二级页的密码库选择器只展示“添加密码库”和真实的本地 Profile，两个入口都可自由切换；“添加密码库”中 Vault Key 留空即创建新库，填写则接入远端已有库，内部仍保持 create/existing/reconnect 三条 fail-closed 状态。表单直接提供 HTTPS 地址、用户名和 App Password；用户点击测试或保存时申请单一 origin optional host permission，并由 Service Worker 执行 WebDAV capability 检查。Popup/页面浮层只在用户提交时短暂携带认证信息，不发起 WebDAV 网络请求；保存成功后清空 App Password。新建 Vault 时后台生成 Key、只向当前设置 UI 回传一次供用户安全保存；WebDAV credential 与 Vault Key 通过 IndexedDB 不可导出设备密钥保护的密文长期保存，浏览器重启后自动恢复连接，缺失时才进入重连流程，绝不生成替代 Key 或改写远端对象。查看账号密码和 Advanced Mode 优先使用系统 WebAuthn 用户验证，扩展只保存公钥和凭据 ID；系统验证不可用时回退到 4 至 32 位备用全局 PIN。当前页仅将具有可恢复连接材料的 Vault 作为可写入目标；目录同步会单独报告密码库连接失败，不能伪装成 UniPass 应用同步失败。已选 Vault 可经确认从扩展中移除；该消息只由 Service Worker 清除本地 Profile、持久化/会话连接材料和未被其他 Profile 使用的 optional host permission，不删除 WebDAV 远端对象。当前 HTTPS 页面没有匹配账号时，用户可就地选择已连接 Vault、填写账号和密码；后台按当前 HTTPS 域名创建或复用 Vault App 后写入账号。WebDAV Vault 可在未登录 UniPass 时独立展示和填入，但 Legacy UniPass 仍要求稳定用户作用域。原有 UniPass 版本 override、自派生构建和高级模式解锁流程保持隐藏兼容路径。
 
 - Popup 内部按 `popup.ts`（初始化与事件协调）、`catalog.ts`（目录与账号渲染）、`current-page-account.ts`（当前页 WebDAV 账号创建）、`credentials.ts`（短生命周期凭据与填入）、`settings.ts`（主题、隐藏版本兼容和高级模式状态机）、`webdav-settings.ts`（WebDAV 连接表单）、`self-builder.ts`（静态文件自派生打包）以及 `dom.ts`/`bridge.ts`（UI 基础设施）拆分。`getPluginVersionSettings` 返回本地构建、runtime config 网络基线、当前网络提交及其来源；`setPluginVersionOverride` 仅接受三段数字版号并由 Service Worker 存入 `chrome.storage.local`。网络请求优先使用手动 override，否则读取并缓存 `runtime-config.json`。设置页的“恢复默认”仅在手动版本覆盖非空时可点击；恢复后在 `1400ms` 内连续两击保存会解锁当前 Popup 生命周期内的高级模式入口。进入后到 Popup/页面浮层关闭前，当前页账号展示“查看”按钮，全部应用的应用图标可打开账号列表；未进入时“查看”不渲染，应用图标保留原状并静默无操作。原固定 `1400ms` 保存三击仍只进入自派生构建确认页。确认后通过 Service Worker 读取当前构建生成的 `self-build-files.json` 列出的静态资源；缺少清单时 fail closed，随后修改 `manifest.json` 和 `runtime-config.json`，生成 ZIP 并回读校验文件集合、manifest（仅允许 version/version_name 改变）、runtime-config、manifest.key 和 WASM 字节一致性；不查询商店、不修改当前扩展，也不把脚本/WASM 加入 `web_accessible_resources`。
 - 页面浮层的 pageContext、页面主题、应用打开和填入消息由 Service Worker 以发送者标签页为准重新校验；页面主题检测仅读取当前 HTTPS 页面的根节点/正文及视口采样点的渲染背景色与 color-scheme，以识别由全视口容器渲染的深色页面；不读取页面正文、Cookie、表单值或页面存储；浮层不能自行指定目标标签页，也不能绕过 HTTPS/origin/path 匹配。
@@ -86,8 +87,9 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | 位置 | 允许内容 |
 | --- | --- |
 | Popup `localStorage` | 主题、按用户隔离的账号目录展示信息；不含 WebDAV 地址、密码、用户名、App Password 或 Authorization header |
-| `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖、非认证 VaultProfile（名称、backend、HTTPS endpoint）；不含密码/token/App Password |
-| `chrome.storage.session` | 凭据可用性状态、Jupiter 会话、WebDAV 用户名/App Password 与当前会话 Vault Key；随浏览器会话清除 |
+| `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖、非认证 VaultProfile（名称、backend、HTTPS endpoint）、全局 PIN 校验封装和按 Vault 加密连接材料；不含明文 PIN/密码/token |
+| IndexedDB | 扩展安装级不可导出 AES-256-GCM 设备密钥；仅用于解封长期保存的 WebDAV 连接材料 |
+| `chrome.storage.session` | 凭据可用性状态、Jupiter 会话、WebDAV 用户名/App Password 与当前运行缓存的 Vault Key；随浏览器会话清除，重启后从本地密文恢复 |
 | `chrome.storage.session` 登录项 | 当前一键登录的标签页 ID、阶段和两分钟过期时间；不含 Cookie、授权码或用户资料 |
 | 内存/消息 | Normal Fill 仅在 Service Worker→Content Script 的短生命周期消息中传递明文；Advanced Reveal 额外在当前 Popup/浮层内存保留最多 60 秒；不落盘 |
 

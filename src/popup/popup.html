@@ -164,26 +164,25 @@
                 <input id="webdavVaultKey" type="password" autocomplete="off" placeholder="新建可留空，接入已有库时粘贴" aria-describedby="webdavTaskHint webdavConnectionHelp" />
                 <small id="webdavTaskHint" class="webdav-vault-key-help">留空将新建密码库；粘贴已有 Vault Key 则接入远端密码库。</small>
               </label>
-              <p id="webdavConnectionHelp" class="settings-help">认证信息仅用于本次浏览器会话，不会写入本地；连接时会申请主机权限并检查目录访问。</p>
+              <p id="webdavConnectionHelp" class="settings-help">连接材料会以扩展设备密钥加密并长期保存在本机；浏览器重启后可自动恢复 WebDAV 连接。连接时会申请主机权限并检查目录访问。</p>
             </div>
             <p id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden></p>
             <div id="webdavRecoveryKey" class="webdav-recovery-key" hidden>
               <strong>请立即安全保存 Vault Key</strong>
-              <p>它不会写入本地配置；浏览器会话结束后，重新连接这个密码库需要它。</p>
+              <p>它只用于恢复密码库加密密钥；扩展会长期记住 WebDAV 连接材料，关闭浏览器后也能继续连接。请把它作为最终恢复凭据安全保存。</p>
               <input id="webdavRecoveryKeyValue" type="text" readonly aria-label="Vault Key" />
             </div>
-            <details id="webdavLocalUnlock" class="webdav-local-unlock" hidden>
-              <summary><span>本地解锁</span><small>可选</small></summary>
+            <details id="webdavLocalUnlock" class="webdav-local-unlock" open>
+              <summary><span>查看账号密码</span><small>需要全局 PIN</small></summary>
               <div class="webdav-local-unlock-body">
-                <p>用本地密码加密保存当前连接材料。解锁密码本身不会保存。</p>
+                <p>WebDAV 登录态会长期保存在本机，日常同步和填充无需验证。查看账号密码或进入 Legacy 高级功能时，优先调用 macOS/Windows 系统验证（如 Touch ID、系统密码或 Windows Hello/PIN）；系统验证不可用时才使用备用 4 至 32 位全局 PIN。扩展不会读取系统 PIN。</p>
                 <div class="local-unlock-primary">
-                  <input id="webdavLocalUnlockPassword" type="password" autocomplete="new-password" placeholder="输入本地解锁密码" aria-label="本地解锁密码" />
-                  <button id="unlockWebDavLocalUnlock" type="button">解锁</button>
+                  <input id="webdavLocalUnlockPassword" type="password" inputmode="numeric" pattern="[0-9]{4,32}" autocomplete="current-password" placeholder="查看密码时输入全局 PIN" aria-label="全局 PIN" />
                 </div>
                 <div class="local-unlock-management" aria-label="本地解锁管理">
-                  <button id="enableWebDavLocalUnlock" type="button">启用保存</button>
-                  <button id="lockWebDavVault" type="button">立即锁定</button>
-                  <button id="disableWebDavLocalUnlock" class="danger" type="button">停用保存</button>
+                  <button id="setupWebDavSystemAuth" type="button">设置系统验证</button>
+                  <button id="enableWebDavLocalUnlock" type="button">设置/修改 PIN</button>
+                  <button id="unlockWebDavAdvanced" type="button">查看账号密码</button>
                 </div>
               </div>
             </details>

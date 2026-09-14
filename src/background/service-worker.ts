@@ -18,6 +18,8 @@ import {
   listVaultConnectionStates,
   enableLocalUnlock,
   unlockVaultLocally,
+  setGlobalPin,
+  verifyGlobalPin,
   disableLocalUnlock,
   lockVault,
   removeVault,
@@ -31,6 +33,7 @@ import {
   vaultApps,
   vaultCatalog,
 } from "./vault/vault-service";
+import { beginSystemAuthenticator, saveSystemAuthenticator, systemAuthenticatorStatus, verifySystemAuthenticator } from "./vault/system-auth";
 import { popupSessionUserFor } from "../shared/user-scope";
 import { isJupiterUrl, webDavPermissionOrigin } from "../shared/url";
 import { appsWithAvailableCredentials, clearCredentialAvailabilityCache, credentialAvailability } from "./credential-availability";
@@ -114,7 +117,13 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
     case "openApp":
       return message.vaultId ? vaultAppUrl(message.vaultId, String(message.appId)).then((url) => chrome.tabs.create({ url })) : withUserScope(message.userScope, () => openApp(message.appId));
     case "enableAdvancedMode":
-      return Promise.resolve(advancedCapabilities.prepare(sender));
+      return (message.systemAuth ? verifySystemAuthenticator(message.systemAuth) : verifyGlobalPin(message.pin ?? "")).then(() => advancedCapabilities.prepare(sender));
+    case "getSystemAuthenticatorStatus":
+      return requireVaultManager(sender, systemAuthenticatorStatus);
+    case "beginSystemAuthenticator":
+      return requireVaultManager(sender, () => beginSystemAuthenticator(message.purpose));
+    case "saveSystemAuthenticator":
+      return requireVaultManager(sender, () => saveSystemAuthenticator(message.attestation));
     case "fillFromOverlay":
       return requiresUniPassScope(message) ? withUserScope(message.userScope ?? "", () => fillFromOverlay(sender, message)) : fillFromOverlay(sender, message);
     case "fillFromPopup":
@@ -169,6 +178,16 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return requireVaultManager(sender, listVaultProfiles);
     case "listVaultConnectionStates":
       return requireVaultManager(sender, listVaultConnectionStates);
+    case "enableLocalUnlock":
+      return requireVaultManager(sender, () => enableLocalUnlock(message.vaultId, message.password));
+    case "unlockVaultLocally":
+      return requireVaultManager(sender, () => unlockVaultLocally(message.vaultId, message.password));
+    case "setGlobalPin":
+      return requireVaultManager(sender, () => setGlobalPin(message.pin));
+    case "disableLocalUnlock":
+      return requireVaultManager(sender, () => disableLocalUnlock(message.vaultId));
+    case "lockVault":
+      return requireVaultManager(sender, () => lockVault(message.vaultId));
     case "requestWebDavPermission":
       return requireVaultManager(sender, () => chrome.permissions.request({ origins: [webDavPermissionOrigin(message.endpoint)] }));
     case "testWebDavConnection":
