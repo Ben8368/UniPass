@@ -43,6 +43,10 @@ test("WebDAV settings keep connection actions inside the secondary panel", () =>
   );
   assert.doesNotMatch(componentsCss, /\.settings-save\s*\{[^}]*margin-top:\s*3px/s);
   assert.match(componentsCss, /\.settings-save\s*\{[^}]*min-width:\s*84px;[^}]*background:\s*var\(--green-strong\)/s);
+  assert.match(componentsCss, /\.version-override select \{[^}]*color-scheme:\s*dark/s);
+  assert.match(componentsCss, /\.version-override select option \{[^}]*background:\s*#101115;[^}]*color:\s*#f8fafc/s);
+  assert.match(componentsCss, /:root\[data-theme="light"\] \.version-override select \{[^}]*color-scheme:\s*light/s);
+  assert.match(componentsCss, /:root\[data-theme="light"\] \.version-override select option \{[^}]*background:\s*#ffffff;[^}]*color:\s*#172536/s);
 });
 
 test("current-page WebDAV empty state connects from the unchanged status badge", () => {

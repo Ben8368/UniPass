@@ -31,3 +31,19 @@ test("page theme honors a dark color scheme when no opaque background is present
   globalThis.getComputedStyle = () => ({ backgroundColor: "transparent", color: "transparent", colorScheme: "dark" });
   assert.equal(detectPageTheme(), "dark");
 });
+
+test("page theme samples a dark full-viewport shell when body stays white", () => {
+  page = { root: "rgb(255, 255, 255)", body: "rgb(255, 255, 255)", rootText: "rgb(0, 0, 0)", bodyText: "rgb(0, 0, 0)" };
+  globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+  const shell = {};
+  globalThis.document.elementsFromPoint = () => [shell];
+  globalThis.getComputedStyle = (element) => {
+    if (element === shell) return { backgroundColor: "rgb(31, 35, 45)", colorScheme: "normal", color: "rgb(235, 235, 235)" };
+    return {
+      backgroundColor: element === globalThis.document.body ? page.body : page.root,
+      colorScheme: "normal",
+      color: element === globalThis.document.body ? page.bodyText : page.rootText,
+    };
+  };
+  assert.equal(detectPageTheme(), "dark");
+});

@@ -52,7 +52,7 @@ Vault Core 使用 AES-256-GCM、每对象随机 12-byte nonce、`formatVersion: 
 - 浏览器扩展无法阻止目标 HTTPS 页面自身脚本读取已填入的输入框；因此必须依赖应用 URL 匹配和用户明确操作。
 - 系统剪贴板不会自动清空，避免覆盖用户后来复制的内容。
 - 跨域 iframe、关闭的 Shadow DOM、Canvas 和非标准登录控件不在通用填充承诺内。
-- 页面浮层使用 closed Shadow DOM 隔离页面样式和 DOM；其目录缓存与主题设置仅保存在浮层页面内存中，浮层移除后清除。浮层不读取页面正文、Cookie、localStorage 或表单值；打开时仅读取渲染背景色与 `color-scheme` 用于自动选择明暗主题。Normal 浮层可 Fill 但不能 Reveal；Advanced 浮层的 capability 独立绑定当前页面 document，移除时撤销。
+- 页面浮层使用 closed Shadow DOM 隔离页面样式和 DOM；其目录缓存与主题设置仅保存在浮层页面内存中，浮层移除后清除。浮层不读取页面正文、Cookie、localStorage 或表单值；打开时仅读取根节点/正文及视口采样点的渲染背景色与 color-scheme，仅用于自动选择明暗主题。Normal 浮层可 Fill 但不能 Reveal；Advanced 浮层的 capability 独立绑定当前页面 document，移除时撤销。
 - Advanced Mode 是客户端内的误操作防护和能力分层，不是针对控制本机、DevTools、调试 Service Worker 或修改扩展代码攻击者的认证边界；真实 UniPass/飞书 OAuth/Jupiter 行为依赖外部服务和登录状态，自动化测试不能替代按场景执行的手动集成验收。
 - 发布工程同时要求 Cargo.lock 的 RustSec gate、固定 Rust 1.98.1 的两次独立 WASM 构建一致、完整 SHA pin 的 GitHub Actions、Dependabot，以及 [Chrome 验收清单](docs/CHROME-ACCEPTANCE.md) 中的自动化 smoke；人工登录清单仍需单独执行。
 - 飞书若显示账号选择、扫码、验证码、CAPTCHA、权限变化或其他非预期页面，一键登录会停止，由用户手动处理。
