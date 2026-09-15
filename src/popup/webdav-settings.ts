@@ -1,4 +1,5 @@
 import type { VaultConnection, VaultProfile } from "../shared/vault";
+import type { VaultSyncStatusResult } from "../shared/types";
 import { normalizeWebDavUrl } from "../shared/url";
 import { send } from "./bridge";
 import { errorText, get, getDomRoot } from "./dom";
@@ -76,6 +77,9 @@ export class WebDavSettingsController {
       this.profile.value = selectedVaultId || ADD_PROFILE_VALUE;
       this.renderProfileOptions();
       this.applySelectedProfile();
+      const sync = await send<VaultSyncStatusResult[]>({ type: "listVaultSyncStatuses" });
+      const selected = sync.find((status) => status.vaultId === this.profile.value);
+      if (selected) this.showStatus(syncText(selected));
     } catch (error) {
       this.reportStatus(errorText(error), true);
     }
@@ -283,4 +287,11 @@ export class WebDavSettingsController {
     this.recoveryKey.value = value;
     this.recovery.hidden = false;
   }
+}
+
+function syncText(status: VaultSyncStatusResult): string {
+  if (status.state === "synced") return "已同步";
+  if (status.state === "conflict") return `${status.conflicts} 项同步冲突`;
+  if (status.state === "offline") return `离线 · ${status.dirty} 项待同步`;
+  return `${status.dirty} 项待同步`;
 }

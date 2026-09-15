@@ -60,6 +60,15 @@
 :root[data-theme="light"] .version-override select option:checked { background: #dbeafe; color: #172536; }
 .version-override input:focus, .version-override select:focus { border-color: rgba(65, 211, 155, .44); outline: none; box-shadow: 0 0 0 2px rgba(65, 211, 155, .10); }
 #webdavForm { gap: 7px; padding: 12px; }
+#importBrowserPasswords { width: 100%; min-height: 30px; }
+.browser-import-dialog { width: min(100%, 410px); }
+.browser-import-body { display: grid; gap: 8px; padding: 12px; }
+.browser-import-summary { white-space: pre-line; margin: 0; color: var(--text-1); font-size: 10px; line-height: 1.5; }
+.browser-import-preview { display: grid; max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.browser-import-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 76px; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--divider); color: var(--text-2); font-size: 9px; }
+.browser-import-row:last-child { border-bottom: 0; }
+.browser-import-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-import-actions { justify-content: flex-end; padding: 0 12px 12px; }
 #webdavForm .settings-help { font-size: 9px; line-height: 1.4; }
 #webdavForm .version-override { gap: 4px; }
 #webdavForm .version-override input, #webdavForm .version-override select { height: 30px; }

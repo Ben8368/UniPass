@@ -9,6 +9,7 @@ import type { DomStorage } from "./dom";
 import { ThemeController, type Theme } from "./theme-controller";
 import { WebDavSettingsController } from "./webdav-settings";
 import { authenticateSystemAuthenticator, registerSystemAuthenticator } from "./system-auth";
+import { BrowserPasswordImportController } from "./import-passwords";
 
 const ADVANCED_MODE_PORT_NAME = "unipass-advanced-mode";
 
@@ -49,6 +50,7 @@ export class SettingsController {
   private readonly selfBuild: SelfBuildDialogController;
   private readonly theme: ThemeController;
   private readonly advancedModeUnlock = new AdvancedModeUnlock(SELF_BUILD_CLICK_WINDOW_MS);
+  private readonly browserImport: BrowserPasswordImportController;
   private readonly saveGesture = new SaveGestureStateMachine(
     () => void this.saveOverride(),
     () => this.selfBuild.open(this.override.value.trim()),
@@ -64,6 +66,7 @@ export class SettingsController {
     private readonly onAdvancedModeChange: () => void = () => {},
   ) {
     this.webdavSettings = new WebDavSettingsController(reportStatus, () => void this.enterAdvancedMode(undefined, true), () => void this.setupSystemAuthenticator());
+    this.browserImport = new BrowserPasswordImportController(reportStatus);
     this.selfBuild = new SelfBuildDialogController(reportStatus, (disabled) => this.setSaveControlsDisabled(disabled));
     this.theme = new ThemeController(storage, themeTarget);
   }
@@ -79,6 +82,7 @@ export class SettingsController {
     this.versionForm.addEventListener("submit", (event) => { event.preventDefault(); this.resetSaveClicks(); void this.saveOverride(); });
     this.saveButton.addEventListener("click", (event) => { event.preventDefault(); this.handleSaveClick(); });
     this.webdavSettings.bind();
+    this.browserImport.bind();
     this.selfBuild.bind();
     window.addEventListener("unipass-open-webdav-settings", (event) => {
       const vaultId = event instanceof CustomEvent && typeof event.detail?.vaultId === "string" ? event.detail.vaultId : undefined;
@@ -111,6 +115,7 @@ export class SettingsController {
   dispose(): void {
     this.disposed = true;
     this.webdavSettings.clearSensitiveState();
+    this.browserImport.dispose();
     this.advancedPort?.disconnect();
     this.advancedPort = null;
     this.advancedModeActive = false;

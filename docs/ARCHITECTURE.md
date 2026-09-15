@@ -24,7 +24,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | --- | --- | --- |
 | `src/popup/` | Popup/页面浮层的会话状态、目录与账号展示、WebDAV 连接设置、当前页 WebDAV 账号创建和用户点击查看/复制/填入；`self-builder.ts` 只读取静态扩展资源并导出 ZIP | 直接调用 UniPass/Jupiter API；列表阶段批量接收明文密码；Self Builder 读取 storage 或凭据 |
 | `src/background/` | 外部请求、UniPass 登录辅助、密码解密、凭据可用性检查、Jupiter 会话、Advanced capability 生命周期，以及 Vault Service | 把密码写入持久化存储；无用户选择扩大敏感数据输出 |
-| `src/background/vault/` | `VaultService` 管理 VaultProfile/session secrets，`VaultCore` 管理 App/Account/Credential CRUD、tombstone 与目录，`WebDavBackend` 只保存 opaque encrypted bytes | Backend 不得接触 plaintext、Authorization header 不得离开 Service Worker；Core 不依赖 ETag/Git SHA/SQL version |
+| `src/background/vault/` | `VaultService` 管理 VaultProfile/session secrets，`VaultCore` 管理 App/Account/Credential CRUD、tombstone 与目录，`EncryptedVaultCache` 保存本地 opaque ciphertext，`VaultSyncEngine` 负责 WebDAV reconciliation，`WebDavBackend` 只保存 opaque encrypted bytes | Backend 不得接触 plaintext、Authorization header 不得离开 Service Worker；Core 不依赖 ETag/Git SHA/SQL version |
 | `src/shared/vault.ts` | Vault identity、`AccountRef`、通用模型、`VaultBackend`、opaque revision 与结构化错误 | 不绑定具体存储服务 |
 | `src/shared/vault-crypto.ts` | Web Crypto AES-256-GCM、versioned envelope、nonce/key import/export | 不复用 Legacy UniPass 密文格式；不上传 Vault Key |
 | `src/manage/` | 保留的宽屏 Vault 管理界面 | 不读取 Legacy 密码；不直接访问 WebDAV 网络 |
@@ -37,7 +37,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | `src/background/credential-core.ts` | 单例加载扩展本地 WASM；校验输入/输出内存范围并释放/清零 WASM 分配；提供 reveal/fill 解密、availability 状态和 ciphertext→Jupiter transformed password | 网络加载代码、持久化密码或让 availability/Jupiter 获取原始明文 |
 | `credential-core/` | `abi` 负责分配登记、边界、status 和 exports；`unipass` 负责 AES 解密/UTF-8；`jupiter` 负责 MD5/DES 转换；`secret` 负责 zeroizing secret ownership 与 key reconstruction | 变更 UniPass/Jupiter 协议、暴露给网页或承诺可阻止运行时分析 |
 
-`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`advanced-capability.ts` 只授权 plaintext Reveal，不扩大 host、tab、network 或 storage 能力；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。`VaultService` 将 `legacy-unipass` 与每个 WebDAV `vaultId` 合并为统一目录，但一个 VaultProfile 只有一个 primary backend，禁止双写。几个模块通过显式导出连接，消息契约明确区分 Fill 与 Reveal。
+`src/background/service-worker.ts` 只注册 Chrome 事件并路由消息；`advanced-capability.ts` 只授权 plaintext Reveal，不扩大 host、tab、network 或 storage 能力；`jupiter-keepalive.ts` 独占 Jupiter 登录、续期、存储和同源页面同步；`user-scope-guard.ts` 统一执行敏感操作前后的 UniPass 用户作用域校验。`VaultService` 将 `legacy-unipass` 与每个 WebDAV `vaultId` 合并为统一目录，但一个 VaultProfile 只有一个 primary backend，禁止双写。WebDAV Vault 初次同步后以 `EncryptedVaultCache` 为 primary runtime copy，`VaultSyncEngine` 在后台处理 dirty/clean/conflict；几个模块通过显式导出连接，消息契约明确区分 Fill 与 Reveal。
 `src/background/credential-availability.ts` 独立封装凭据可用性并发检查和 15 分钟会话缓存；只缓存三态结果，不返回或持久化明文密码。
 `src/background/unipass-login.ts` 只处理用户触发的 UniPass/Tec-IAM 登录：复用或新建一个登录标签页，在两分钟窗口内依次校验并点击唯一的“钛动科技”和“授权”按钮。飞书阶段固定校验 OAuth `client_id`、`redirect_uri`、非空 `state` 和授权文案；离开已知认证 origin、完成授权、关闭标签页或超时后即清除状态。
 
@@ -61,9 +61,12 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 
 ### Vault 数据流
 
-1. `VaultService` 为每个 WebDAV `VaultProfile` 创建一个 `VaultCore` 和一个 `WebDavBackend`；`vaultId + objectId` 构成业务引用，Legacy 使用固定 `legacy-unipass` vaultId。创建新 Vault 与连接已有 Vault 是两个明确状态机：新设备通过 endpoint + WebDAV credential + Vault Key 读取远端加密 manifest，vaultId 始终来自 manifest，不重新生成。未来 Cloudflare/GitHub 只需实现同一 `VaultBackend`，不改变 Core、Crypto、URL matcher 或 Fill。
+Browser password migration uses `src/shared/import/csv.ts` and `normalize.ts` to parse user-selected Chrome/Edge CSV without DOM or network coupling. The Popup previews masked records and sends only confirmed normalized records to the Service Worker; `VaultService` maps target + username to existing App/Account objects and calls `VaultCore.createAccount`/`updateCredential`.
+
+1. `VaultService` 为每个 WebDAV `VaultProfile` 创建 `EncryptedVaultCache` 作为 `VaultCore` 的 primary runtime backend，并保留 `WebDavBackend` 作为 sync backend；`vaultId + objectId` 构成业务引用，Legacy 使用固定 `legacy-unipass` vaultId。创建新 Vault 与连接已有 Vault 是两个明确状态机：新设备通过 endpoint + WebDAV credential + Vault Key 读取远端加密 manifest，vaultId 始终来自 manifest，不重新生成。未来 Cloudflare/GitHub 只需实现同一 `VaultBackend`，不改变 Core、Crypto、URL matcher 或 Fill。
 2. `VaultCore` 将 App、Account、Credential 分成独立对象。`VaultAccount.username` 是 username 单一事实源，Credential object 只保存 password（读取兼容旧的可选 username 字段）。PROPFIND 目录只加载 App/Account，Credential 只在用户操作或后台可用性检查时按需 GET；当前 URL 始终在本地用 `VaultTarget` 匹配，不发送到 WebDAV。
 3. `VaultCrypto` 在 Service Worker 内把对象序列化为 `EncryptedVaultObject` 后才交给 Backend。Backend 只见 ciphertext；WebDAV ETag 被作为 opaque revision，PUT/DELETE 使用条件请求，409/412 返回 `VaultConflictError`。业务删除写入加密 tombstone：Account 删除先 tombstone Credential 再 tombstone Account；有活跃 Account 的 App 拒绝删除。WebDAV 多对象写不具备数据库事务保证，失败会明确暴露并保留可恢复状态。
+4. `EncryptedVaultCache` 的 IndexedDB 记录按 `vaultId/objectId` 保存 ciphertext、local revision、remote ETag、`clean`/`dirty`/`conflict` 和更新时间。Core 的读写不等待 WebDAV；本地新增/修改/删除先完成并立即返回，`VaultSyncEngine` 再执行 `If-Match`/`If-None-Match` 上传和 remote-only/remote-changed 拉取。dirty 与远端同时变化时 fail closed 为 conflict；tombstone 仍保留在缓存和远端，不能 hard delete 代替业务删除。
 
 ### 密码学核心
 
@@ -88,7 +91,7 @@ Content Script（定位输入框、写值、派发事件，不提交表单）
 | --- | --- |
 | Popup `localStorage` | 主题、按用户隔离的账号目录展示信息；不含 WebDAV 地址、密码、用户名、App Password 或 Authorization header |
 | `chrome.storage.local` | Jupiter 保活配置与结果、手动网络版号覆盖、非认证 VaultProfile（名称、backend、HTTPS endpoint）、全局 PIN 校验封装和按 Vault 加密连接材料；不含明文 PIN/密码/token |
-| IndexedDB | 扩展安装级不可导出 AES-256-GCM 设备密钥；仅用于解封长期保存的 WebDAV 连接材料 |
+| IndexedDB | 扩展安装级不可导出 AES-256-GCM 设备密钥；按 Vault 保存 opaque AES-GCM ciphertext objects、revision/ETag 与同步状态；不含 plaintext credential、Vault Key 或 WebDAV secret |
 | `chrome.storage.session` | 凭据可用性状态、Jupiter 会话、WebDAV 用户名/App Password 与当前运行缓存的 Vault Key；随浏览器会话清除，重启后从本地密文恢复 |
 | `chrome.storage.session` 登录项 | 当前一键登录的标签页 ID、阶段和两分钟过期时间；不含 Cookie、授权码或用户资料 |
 | 内存/消息 | Normal Fill 仅在 Service Worker→Content Script 的短生命周期消息中传递明文；Advanced Reveal 额外在当前 Popup/浮层内存保留最多 60 秒；不落盘 |

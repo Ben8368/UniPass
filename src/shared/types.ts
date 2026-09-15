@@ -1,4 +1,15 @@
 import type { AccountRef, AppRef, VaultAccount, VaultAccountUpdate, VaultApp, VaultConnectionState, VaultTarget } from "./vault";
+import type { BrowserPasswordImportRecord } from "./import/normalize";
+
+export type BrowserImportDuplicateStrategy = "skip" | "overwrite" | "keep";
+export interface BrowserPasswordImportResult {
+  added: number;
+  skipped: number;
+  failed: Array<{ line: number; reason: string }>;
+  sync: { state: "synced" | "offline" | "conflict" | "pending"; dirty: number; conflicts: number };
+}
+export interface BrowserPasswordImportPreview { valid: number; duplicate: number; invalid: number; }
+export interface VaultSyncStatusResult { vaultId: string; state: "synced" | "offline" | "conflict" | "pending"; dirty: number; conflicts: number; }
 
 export interface UniPassApp {
   id: string | number;
@@ -84,6 +95,7 @@ export type BackgroundRequest =
   | { type: "setJupiterKeepalive"; enabled: boolean; userScope: string; appId?: string | number; accountId?: string | number; username?: string }
   | { type: "listVaultProfiles" }
   | { type: "listVaultConnectionStates" }
+  | { type: "listVaultSyncStatuses" }
   | { type: "enableLocalUnlock"; vaultId: string; password: string }
   | { type: "unlockVaultLocally"; vaultId: string; password: string }
   | { type: "setGlobalPin"; pin: string }
@@ -99,7 +111,9 @@ export type BackgroundRequest =
   | { type: "createVaultAccount"; vaultId: string; account: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string } }
   | { type: "updateVaultAccount"; vaultId: string; account: VaultAccountUpdate }
   | { type: "deleteVaultAccount"; vaultId: string; accountId: string }
-  | { type: "updateVaultCredential"; vaultId: string; accountId: string; credential: { password: string } };
+  | { type: "updateVaultCredential"; vaultId: string; accountId: string; credential: { password: string } }
+  | { type: "previewBrowserPasswords"; vaultId: string; records: BrowserPasswordImportRecord[] }
+  | { type: "importBrowserPasswords"; vaultId: string; records: BrowserPasswordImportRecord[]; strategy: BrowserImportDuplicateStrategy };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }

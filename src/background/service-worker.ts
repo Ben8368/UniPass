@@ -16,6 +16,7 @@ import {
   deleteVaultApp,
   listVaultProfiles,
   listVaultConnectionStates,
+  listVaultSyncStatuses,
   enableLocalUnlock,
   unlockVaultLocally,
   setGlobalPin,
@@ -34,6 +35,9 @@ import {
   vaultAppUrl,
   vaultApps,
   vaultCatalog,
+  importBrowserPasswords,
+  syncAllVaults,
+  previewBrowserPasswords,
 } from "./vault/vault-service";
 import { beginSystemAuthenticator, saveSystemAuthenticator, systemAuthenticatorStatus, verifySystemAuthenticator } from "./vault/system-auth";
 import { popupSessionUserFor } from "../shared/user-scope";
@@ -55,6 +59,10 @@ import { AdvancedCapabilityRegistry } from "./advanced-capability";
 import type { BackgroundRequest, BackgroundResponse } from "../shared/types";
 
 const advancedCapabilities = new AdvancedCapabilityRegistry();
+const VAULT_SYNC_ALARM = "unipass-vault-sync";
+
+void chrome.alarms.create(VAULT_SYNC_ALARM, { periodInMinutes: 5 });
+void syncAllVaults().catch(() => { /* offline startup is expected; the cache remains authoritative */ });
 
 void restoreJupiterKeepaliveAlarm().catch((error: unknown) => {
   console.warn("木星保活恢复失败", error);
@@ -62,7 +70,10 @@ void restoreJupiterKeepaliveAlarm().catch((error: unknown) => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === JUPITER_KEEPALIVE_ALARM) void runKeepJupiterAlive();
+  if (alarm.name === VAULT_SYNC_ALARM) void syncAllVaults();
 });
+
+chrome.runtime.onStartup.addListener(() => { void syncAllVaults(); });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if ((changeInfo.status === "loading" || changeInfo.status === "complete") && tab.url) {
@@ -180,6 +191,8 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return requireVaultManager(sender, listVaultProfiles);
     case "listVaultConnectionStates":
       return requireVaultManager(sender, listVaultConnectionStates);
+    case "listVaultSyncStatuses":
+      return requireVaultManager(sender, listVaultSyncStatuses);
     case "enableLocalUnlock":
       return requireVaultManager(sender, () => enableLocalUnlock(message.vaultId, message.password));
     case "unlockVaultLocally":
@@ -227,6 +240,10 @@ function handle(message: BackgroundRequest, sender: chrome.runtime.MessageSender
       return requireVaultManager(sender, () => deleteVaultAccount(message.vaultId, message.accountId));
     case "updateVaultCredential":
       return requireVaultManager(sender, () => updateVaultCredential(message.vaultId, message.accountId, message.credential));
+    case "importBrowserPasswords":
+      return requireVaultManager(sender, () => importBrowserPasswords(message.vaultId, message.records, message.strategy));
+    case "previewBrowserPasswords":
+      return requireVaultManager(sender, () => previewBrowserPasswords(message.vaultId, message.records));
     default:
       return Promise.reject(new Error("不支持的扩展请求"));
   }

@@ -165,6 +165,8 @@
                 <small id="webdavTaskHint" class="webdav-vault-key-help">留空将新建密码库；粘贴已有 Vault Key 则接入远端密码库。</small>
               </label>
               <p id="webdavConnectionHelp" class="settings-help">连接材料会以扩展设备密钥加密并长期保存在本机；浏览器重启后可自动恢复 WebDAV 连接。连接时会申请主机权限并检查目录访问。</p>
+              <button id="importBrowserPasswords" class="settings-secondary" type="button">从浏览器导入密码</button>
+              <input id="browserPasswordCsv" type="file" accept=".csv,text/csv" hidden />
             </div>
             <p id="webdavStatus" class="webdav-status" role="status" aria-live="polite" hidden></p>
             <div id="webdavRecoveryKey" class="webdav-recovery-key" hidden>
@@ -199,6 +201,33 @@
             <strong id="localBuildPluginVersion">检查中</strong><span id="localBuildTime">检查中</span>
             <strong id="networkPluginVersion">检查中</strong><small id="networkPluginVersionSource"></small>
           </form>
+        </section>
+      </div>
+
+      <div id="browserImportDialog" class="dialog-backdrop hidden" role="presentation">
+        <section class="version-dialog browser-import-dialog" role="dialog" aria-modal="true" aria-labelledby="browserImportTitle">
+          <div class="dialog-heading">
+            <div><span class="eyebrow">迁移</span><h2 id="browserImportTitle">导入浏览器密码</h2><p>CSV 只在本次页面操作期间存在，不会上传远程服务。</p></div>
+            <button id="cancelBrowserImport" class="icon-button" type="button" title="取消" aria-label="取消"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+          </div>
+          <div class="browser-import-body">
+            <p id="browserImportSummary" class="browser-import-summary"></p>
+            <div id="browserImportPreview" class="browser-import-preview" aria-label="导入预览"></div>
+            <label class="version-override" for="browserImportVault">目标密码库
+              <select id="browserImportVault"></select>
+            </label>
+            <label class="version-override" for="browserImportStrategy">遇到重复账号
+              <select id="browserImportStrategy">
+                <option value="skip">跳过</option>
+                <option value="overwrite">覆盖密码</option>
+                <option value="keep">两个都保留</option>
+              </select>
+            </label>
+          </div>
+          <div class="settings-actions browser-import-actions">
+            <button id="cancelBrowserImportSecondary" class="settings-reset" type="button">取消</button>
+            <button id="startBrowserImport" class="settings-save" type="button" disabled>开始导入</button>
+          </div>
         </section>
       </div>
 

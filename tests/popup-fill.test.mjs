@@ -10,6 +10,8 @@ const contentOverlaySource = await readFile(new URL("../src/content/page-overlay
 const settingsSource = await readFile(new URL("../src/popup/settings.ts", import.meta.url), "utf8");
 const webdavSettingsSource = await readFile(new URL("../src/popup/webdav-settings.ts", import.meta.url), "utf8");
 const currentPageAccountSource = await readFile(new URL("../src/popup/current-page-account.ts", import.meta.url), "utf8");
+const importSource = await readFile(new URL("../src/popup/import-passwords.ts", import.meta.url), "utf8");
+const cacheSource = await readFile(new URL("../src/background/vault/local-cache.ts", import.meta.url), "utf8");
 
 test("Popup delegates credential filling to the Service Worker", () => {
   assert.match(popupSource, /type: "fillFromPopup"/);
@@ -63,6 +65,17 @@ test("settings connects WebDAV inside the extension UI without opening a managem
   assert.match(workerSource, /case "testWebDavConnection":[\s\S]*requestWebDavPermission/);
   assert.match(workerSource, /case "removeVault":\s+return requireVaultManager\(sender, \(\) => removeVault\(message\.vaultId\)\)/);
   assert.doesNotMatch(workerSource, /case "openVaultManager"/);
+});
+
+test("browser CSV import stays user-triggered, masked in preview, and clears plaintext references", () => {
+  assert.match(importSource, /this\.input\.files\?\.\[0\]/);
+  assert.match(importSource, /parseBrowserPasswordCsv/);
+  assert.match(importSource, /this\.text\("••••••••"\)/);
+  assert.match(importSource, /for \(const record of this\.records\) record\.password = ""/);
+  assert.doesNotMatch(importSource, /chrome\.storage|indexedDB|fetch\(/);
+  assert.match(workerSource, /case "previewBrowserPasswords"/);
+  assert.match(workerSource, /case "importBrowserPasswords"/);
+  assert.doesNotMatch(cacheSource, /password:|vaultKey:|appPassword:/);
 });
 
 test("page overlay keeps editable keystrokes inside the Shadow DOM", () => {

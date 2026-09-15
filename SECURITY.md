@@ -6,10 +6,15 @@
 
 ## Threat Model / Accepted Risks
 
+### Browser CSV migration
+
+CSV Import is always initiated by a user-selected local file picker. UniPass never scans Downloads, reads the Chromium password database, uses private browser APIs, or deletes browser passwords. Chrome/Edge exports contain plaintext credentials; the parser and preview keep that data in page/Service Worker memory only, never upload it, persist it to `chrome.storage`/IndexedDB, put it in logs or telemetry, or include it in error text. The user is instructed to delete the file and empty the recycle bin/trash. JavaScript cannot guarantee immediate physical erasure from storage media.
+
 ### 主要保护目标
 
 - 恶意网页不能直接取得扩展保存的凭据；错误页面或错误账号不能绕过 HTTPS、origin/path 和用户触发检查完成填充。
 - WebDAV 服务端即使泄露，也只能看到加密 Vault 对象，不能直接得到 Vault plaintext 或 Vault Key。
+- local encrypted Vault cache is the primary runtime copy after initial sync; IndexedDB stores only opaque AES-GCM envelopes and sync metadata, never plaintext credentials, WebDAV App Password, or Vault Key.
 - Chrome 扩展权限、外部主机和持久化数据保持最小化；凭据不进入日志、明文持久化存储或构建产物。
 - Advanced plaintext disclosure 必须由用户显式触发，并且只在当前页面/Popup 的 ephemeral capability 生命周期内存在。
 
@@ -34,6 +39,7 @@
 - UniPass 一键登录只在用户点击离线状态按钮后启动；后台只跟踪一个登录标签页且最多两分钟。登录中的 Popup/页面浮层只在自身存活期间每秒确认 `/session/current_user`，成功后刷新自身展示，并仅关闭本次由扩展创建的后台登录标签；复用用户已有登录标签时绝不关闭。关闭浮层或窗口到期即停止检测；不写入新增敏感持久化状态。登录状态写入后可立即尝试注入，但页面内点击脚本仅接受精确的 UniPass 登录页，以及 `accounts.feishu.cn` 上固定 Tec-IAM `client_id`、固定 `redirect_uri`、非空 `state`、固定应用/权限文案和唯一可见“授权”按钮；不读取或持久化 Cookie、授权码和飞书页面数据。
 - Jupiter token 只保存在 `chrome.storage.session` 和目标站点自身 session/local storage；保活续期只静默更新已有页面会话，不派发鉴权事件、不刷新页面；关闭托管时清除扩展会话副本。
 - API、解密或目录同步失败必须显式失败；未知错误不得被缓存成“空密码”，部分目录不得覆盖上次完整目录。
+- Cache writes are local-first and marked `dirty`; successful conditional WebDAV upload becomes `clean`, while ETag conflict becomes `conflict`. Sync never applies silent last-write-wins.
 - UniPass 账户页昵称来自 `/api/v1/session/current_user` 的 `nickName`；按用户明确请求，Service Worker 可将其传入 Popup 内存作为用户名的悬停提示。昵称不得持久化、写日志、参与身份作用域或用于其他页面。
 - 用户作用域优先使用服务端稳定 ID（`id`、`userId` 或 `user_id`）；缺失时只可回退服务端登录名 `username`，再回退邮箱 `email`。显示名、昵称和默认值绝不作为身份键。三者均缺失时不执行 UniPass 目录、应用或凭据请求，Jupiter 保活不可开启；已启用保活在检测到用户切换后会停止并清除扩展会话 token。
 - UniPass 与 Jupiter 请求统一使用 12 秒超时；超时只返回通用错误，不包含密码或 token。网络版号优先取经校验的 `chrome.storage.local` 手动 override，否则只读取本地 `runtime-config.json`，不使用本地 manifest 版本作为网络版号。

@@ -41,6 +41,10 @@ credential core 固定使用 Rust 1.98.1 和 wasm32-unknown-unknown。开发调�
 
 打开 `chrome://extensions`，开启开发者模式，然后加载已解压的 `dist` 目录。请先在独立 Chrome Profile 验证；若 Chrome 因同 ID 拒绝加载，需由用户手动停用或移除商店版。不要依赖商店版设置或存储能被自动迁移。
 
+“从浏览器导入密码”使用用户主动选择的 Chrome/Edge CSV，支持 `name,url,username,password` 或重排字段的 `url,username,password`，包括引号、逗号、换行和转义引号。导入先预览，再按目标 origin/path + username 选择跳过、覆盖或保留重复记录；部分失败不会回滚成功记录。CSV 不上传、不写入 storage/IndexedDB/日志，完成后请立即删除 CSV 并清空回收站/废纸篓。
+
+WebDAV Vault 使用 local-first 模式：已同步的 AES-256-GCM ciphertext objects 保存在扩展 IndexedDB encrypted local cache，作为运行时目录和 Fill 数据源；WebDAV 仅作为跨设备恢复与同步后端。离线时目录、搜索、Fill、新增、修改和 tombstone 删除仍可用，写入进入 dirty queue；网络恢复后后台同步，ETag 412/409 标记 conflict，绝不静默覆盖。缓存不可用或首次设备没有缓存时，仍需连接 WebDAV 并提供 Vault Key，扩展不凭空创建远端 Vault。
+
 齿轮中的“密码库设置”可在“添加密码库”和任一本地已保存密码库之间直接切换，也可从“重新连接”入口切回添加；不再提供与真实 Profile 混淆的“连接已有密码库”伪选项。添加时 Vault Key 留空会新建密码库，填写已有 Vault Key 则接入远端密码库。WebDAV 用户名、App Password 和 Vault Key 会以扩展设备密钥加密并长期保存在本机，浏览器重启后自动恢复登录态；重连时可直接保存，填写新材料则替换本机连接材料。查看账号密码和 Legacy UniPass 高级功能时优先调用系统验证（macOS 的 Touch ID/系统密码、Windows Hello/PIN 等），扩展只验证系统返回的 WebAuthn 证明，不会读取具体系统 PIN；系统验证不可用时才使用备用 4 至 32 位全局 PIN。表单直接完成 WebDAV 地址、用户名和 App Password 的测试与保存，不会新开标签页。只支持 HTTPS；连接/保存前由用户手势申请具体 WebDAV origin，并执行 `PROPFIND`/必要的 `MKCOL` 检查。当前 HTTPS 页面没有匹配账号时，可直接选择已连接 Vault 并保存账号与密码；扩展会使用当前域名创建或复用网站记录。建议使用 WebDAV 专用账号或 App Password。原有手动 `X-Browser-Plugin-Version` override 和自派生构建能力保留为隐藏兼容路径。
 
 ## 项目治理

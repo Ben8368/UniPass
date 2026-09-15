@@ -7,6 +7,9 @@ import { openGlobalPin, openLocalUnlockMaterial, sealGlobalPin, sealLocalUnlockM
 import { openPersistentMaterial, sealPersistentMaterial, type PersistentSecretEnvelope } from "./persistent-secrets";
 import { WebDavBackend } from "./webdav-backend";
 import { VaultCore } from "./vault-core";
+import { EncryptedVaultCache } from "./local-cache";
+import { VaultSyncEngine, type VaultSyncStatus } from "./sync-engine";
+import { importDisplayName, normalizeBrowserPasswordRecord, type BrowserPasswordImportRecord } from "../../shared/import/normalize";
 
 const PROFILES_KEY = "unipass-vault-profiles";
 const SESSION_SECRETS_KEY = "unipass-vault-session-secrets";
@@ -18,6 +21,7 @@ const GLOBAL_PIN_FAILURES_KEY = "unipass-global-pin-failures";
 const LOCAL_UNLOCK_MAX_FAILURES = 5;
 const GLOBAL_PIN_MAX_FAILURES = 5;
 const LEGACY_VAULT_ID = "legacy-unipass";
+const syncInFlight = new Map<string, Promise<VaultSyncStatus>>();
 
 interface SessionSecret { username: string; appPassword: string; vaultKey: string; }
 export interface WebDavVaultInput {
@@ -30,6 +34,13 @@ export interface WebDavVaultInput {
   vaultKey?: string;
 }
 export interface WebDavVaultCatalogResult { entries: Array<{ app: VaultApp; accounts: VaultAccount[] }>; failures: Array<{ vaultId: string; error: string }>; }
+export type BrowserImportDuplicateStrategy = "skip" | "overwrite" | "keep";
+export interface BrowserPasswordImportResult {
+  added: number;
+  skipped: number;
+  failed: Array<{ line: number; reason: string }>;
+  sync: VaultSyncStatus;
+}
 
 export async function listVaultProfiles(): Promise<VaultProfile[]> { return validateProfiles((await chrome.storage.local.get(PROFILES_KEY))[PROFILES_KEY]); }
 export async function listVaultConnectionStates(): Promise<VaultConnectionState[]> {
@@ -102,6 +113,10 @@ export async function saveWebDavVault(input: WebDavVaultInput): Promise<VaultCon
   if (existingProfile && existingProfile.id !== profile.id) delete nextSecrets[existingProfile.id];
   nextSecrets[profile.id] = material satisfies SessionSecret;
   await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: nextSecrets });
+  // Cache population is local and best effort here: the remote Vault and its
+  // connection state are already committed, so a cache failure remains
+  // recoverable through the existing online path on the next read.
+  try { await new VaultSyncEngine(new EncryptedVaultCache(core.vaultId), backend).synchronize(); } catch { /* reconnect remains available */ }
   return { profile, ...(recoveryKey && { recoveryKey }) };
 }
 
@@ -183,11 +198,12 @@ export async function removeVault(vaultId: string): Promise<void> {
   });
   const secrets = await readSecrets(); delete secrets[vaultId];
   await chrome.storage.session.set({ [SESSION_SECRETS_KEY]: secrets });
+  try { await new EncryptedVaultCache(vaultId).clear(); } catch { /* cache cleanup is best effort after local removal */ }
   if (target.endpoint) await releaseWebDavPermissionIfUnused(target.endpoint, remaining);
 }
 export async function vaultCatalog(): Promise<WebDavVaultCatalogResult> {
   const entries: WebDavVaultCatalogResult["entries"] = []; const failures: WebDavVaultCatalogResult["failures"] = [];
-  for (const profile of await listVaultProfiles()) try { const catalog = await coreFor(profile).then((core) => core.catalog()); entries.push(...catalog.apps.map((app) => ({ app, accounts: catalog.accounts.filter((account) => account.appId === app.id) }))); } catch (error) { failures.push({ vaultId: profile.id, error: error instanceof Error ? error.message : "WebDAV Vault 同步失败" }); }
+  for (const profile of await listVaultProfiles()) try { const catalog = await coreFor(profile).then((core) => core.catalog()); entries.push(...catalog.apps.map((app) => ({ app, accounts: catalog.accounts.filter((account) => account.appId === app.id) }))); void syncProfile(profile).catch(() => {}); } catch (error) { failures.push({ vaultId: profile.id, error: error instanceof Error ? error.message : "WebDAV Vault cache unavailable" }); }
   return { entries, failures };
 }
 export async function vaultApps(): Promise<VaultApp[]> { return (await vaultCatalog()).entries.map(({ app }) => app); }
@@ -195,15 +211,108 @@ export async function vaultAccounts(vaultId: string, appId: string): Promise<Acc
 export async function vaultAppUrl(vaultId: string, appId: string): Promise<string> { const catalog = await coreFor(await profileFor(vaultId)).then((core) => core.catalog()); const app = catalog.apps.find((candidate) => candidate.id === appId); if (!app?.targets[0]) throw new Error("该应用没有可用的登录地址"); return targetToUrl(app.targets[0]); }
 export async function credentialForRef(ref: AccountRef): Promise<{ username: string; password: string }> { if (ref.vaultId === LEGACY_VAULT_ID) return credentialForAccount(ref.accountId); return coreFor(await profileFor(ref.vaultId)).then((core) => core.credential(ref)); }
 export async function credentialAvailabilityForRef(ref: AccountRef): Promise<"available" | "empty"> { if (ref.vaultId === LEGACY_VAULT_ID) return (await credentialAvailableForAccount(ref.accountId)) ? "available" : "empty"; return coreFor(await profileFor(ref.vaultId)).then((core) => core.credentialAvailability(ref)); }
-export async function createVaultApp(vaultId: string, input: Omit<VaultApp, "id" | "vaultId">): Promise<VaultApp> { return coreFor(await profileFor(vaultId)).then((core) => core.createApp(input)); }
-export async function updateVaultApp(vaultId: string, app: VaultApp): Promise<VaultApp> { return coreFor(await profileFor(vaultId)).then((core) => core.updateApp(app)); }
-export async function deleteVaultApp(vaultId: string, appId: string): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.deleteApp(appId)); }
-export async function createVaultAccount(vaultId: string, input: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string }): Promise<VaultAccount> { return coreFor(await profileFor(vaultId)).then((core) => core.createAccount(input)); }
-export async function updateVaultAccount(vaultId: string, account: VaultAccountUpdate): Promise<VaultAccount> { return coreFor(await profileFor(vaultId)).then((core) => core.updateAccount(account)); }
-export async function deleteVaultAccount(vaultId: string, accountId: string): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.deleteAccount(accountId)); }
-export async function updateVaultCredential(vaultId: string, accountId: string, credential: VaultCredential): Promise<void> { return coreFor(await profileFor(vaultId)).then((core) => core.updateCredential({ vaultId, accountId }, credential)); }
+export async function createVaultApp(vaultId: string, input: Omit<VaultApp, "id" | "vaultId">): Promise<VaultApp> { return localWrite(vaultId, (core) => core.createApp(input)); }
+export async function updateVaultApp(vaultId: string, app: VaultApp): Promise<VaultApp> { return localWrite(vaultId, (core) => core.updateApp(app)); }
+export async function deleteVaultApp(vaultId: string, appId: string): Promise<void> { return localWrite(vaultId, (core) => core.deleteApp(appId)); }
+export async function createVaultAccount(vaultId: string, input: Omit<VaultAccount, "id" | "vaultId" | "credentialId"> & { password: string }): Promise<VaultAccount> { return localWrite(vaultId, (core) => core.createAccount(input)); }
+export async function updateVaultAccount(vaultId: string, account: VaultAccountUpdate): Promise<VaultAccount> { return localWrite(vaultId, (core) => core.updateAccount(account)); }
+export async function deleteVaultAccount(vaultId: string, accountId: string): Promise<void> { return localWrite(vaultId, (core) => core.deleteAccount(accountId)); }
+export async function updateVaultCredential(vaultId: string, accountId: string, credential: VaultCredential): Promise<void> { return localWrite(vaultId, (core) => core.updateCredential({ vaultId, accountId }, credential)); }
 
-async function coreFor(profile: VaultProfile): Promise<VaultCore> { if (profile.backend !== "webdav" || !profile.endpoint) throw new Error("Vault backend 不受支持"); const secret = (await readSecrets())[profile.id]; if (!secret) throw new Error("WebDAV 连接材料不存在，请重新连接 Vault"); const core = await VaultCore.open(new WebDavBackend(profile.endpoint, secret.username, secret.appPassword), await importVaultKey(secret.vaultKey)); if (core.vaultId !== profile.id) throw new Error("远端 Vault 与本地连接配置不匹配"); return core; }
+export async function importBrowserPasswords(vaultId: string, records: BrowserPasswordImportRecord[], strategy: BrowserImportDuplicateStrategy): Promise<BrowserPasswordImportResult> {
+  const profile = await profileFor(vaultId);
+  const core = await coreFor(profile);
+  const result = await applyBrowserPasswordImport(vaultId, core, records, strategy);
+  result.sync = await syncProfile(profile);
+  return result;
+}
+
+export async function applyBrowserPasswordImport(vaultId: string, core: Pick<VaultCore, "catalog" | "createApp" | "createAccount" | "updateCredential">, records: BrowserPasswordImportRecord[], strategy: BrowserImportDuplicateStrategy): Promise<BrowserPasswordImportResult> {
+  const catalog = await core.catalog();
+  const apps = [...catalog.apps];
+  const accounts = [...catalog.accounts];
+  const result: BrowserPasswordImportResult = { added: 0, skipped: 0, failed: [], sync: { state: "pending", dirty: 0, conflicts: 0 } };
+  for (const source of records) {
+    const record = normalizeBrowserPasswordRecord(source, typeof (source as BrowserPasswordImportRecord & { line?: unknown }).line === "number" ? (source as BrowserPasswordImportRecord & { line: number }).line : 0);
+    if (!record) { result.failed.push({ line: 0, reason: "URL is invalid" }); continue; }
+    try {
+      let app = apps.find((candidate) => candidate.targets.some((target) => sameTarget(target, record.target)));
+      if (!app) {
+        app = await core.createApp({ name: importDisplayName(record), targets: [record.target] });
+        apps.push(app);
+      }
+      const duplicate = accounts.find((account) => account.appId === app!.id && account.username === record.username);
+      if (duplicate) {
+        if (strategy === "skip") { result.skipped += 1; continue; }
+        if (strategy === "overwrite") { await core.updateCredential({ vaultId, accountId: duplicate.id }, { password: record.password }); result.added += 1; continue; }
+      }
+      const account = await core.createAccount({ appId: app.id, username: record.username, password: record.password });
+      accounts.push(account);
+      result.added += 1;
+    } catch (error) {
+      result.failed.push({ line: record.line, reason: error instanceof Error && error.message ? "Vault record could not be written" : "Import failed" });
+    } finally {
+      source.password = "";
+      record.password = "";
+    }
+  }
+  return result;
+}
+export async function listVaultSyncStatuses(): Promise<Array<VaultSyncStatus & { vaultId: string }>> {
+  return Promise.all((await listVaultProfiles()).map(async (profile) => ({ vaultId: profile.id, ...await new VaultSyncEngine(new EncryptedVaultCache(profile.id), offlineBackend()).status() })));
+}
+
+export async function previewBrowserPasswords(vaultId: string, records: BrowserPasswordImportRecord[]): Promise<{ valid: number; duplicate: number; invalid: number }> {
+  const catalog = await coreFor(await profileFor(vaultId)).then((core) => core.catalog());
+  let valid = 0; let duplicate = 0; let invalid = 0;
+  for (const source of records) {
+    const record = normalizeBrowserPasswordRecord(source);
+    if (!record) { invalid += 1; continue; }
+    const app = catalog.apps.find((candidate) => candidate.targets.some((target) => sameTarget(target, record.target)));
+    if (app && catalog.accounts.some((account) => account.appId === app.id && account.username === record.username)) duplicate += 1;
+    else valid += 1;
+  }
+  return { valid, duplicate, invalid };
+}
+
+export async function syncAllVaults(): Promise<void> {
+  for (const profile of await listVaultProfiles()) await syncProfile(profile).catch(() => {});
+}
+
+async function coreFor(profile: VaultProfile): Promise<VaultCore> {
+  if (profile.backend !== "webdav" || !profile.endpoint) throw new Error("Vault backend is unsupported");
+  const secret = (await readSecrets())[profile.id]; if (!secret) throw new Error("WebDAV connection material is unavailable; reconnect the Vault");
+  const cache = new EncryptedVaultCache(profile.id);
+  if (!await cache.getManifest()) {
+    const remote = new WebDavBackend(profile.endpoint, secret.username, secret.appPassword);
+    await remote.connect();
+    await new VaultSyncEngine(cache, remote).pull();
+  }
+  const core = await VaultCore.open(cache, await importVaultKey(secret.vaultKey));
+  if (core.vaultId !== profile.id) throw new Error("Remote Vault does not match the local connection profile");
+  return core;
+}
+async function syncProfile(profile: VaultProfile): Promise<VaultSyncStatus> {
+  const active = syncInFlight.get(profile.id);
+  if (active) return active;
+  const task = runSyncProfile(profile).finally(() => syncInFlight.delete(profile.id));
+  syncInFlight.set(profile.id, task);
+  return task;
+}
+async function runSyncProfile(profile: VaultProfile): Promise<VaultSyncStatus> {
+  const secret = (await readSecrets())[profile.id];
+  if (!secret || !profile.endpoint) return { state: "offline", dirty: 0, conflicts: 0 };
+  const result = await new VaultSyncEngine(new EncryptedVaultCache(profile.id), new WebDavBackend(profile.endpoint, secret.username, secret.appPassword)).synchronize();
+  return { state: result.state, dirty: result.dirty, conflicts: result.conflicts };
+}
+async function localWrite<T>(vaultId: string, operation: (core: VaultCore) => Promise<T>): Promise<T> {
+  const profile = await profileFor(vaultId);
+  const result = await operation(await coreFor(profile));
+  void syncProfile(profile).catch(() => {});
+  return result;
+}
+function sameTarget(left: VaultApp["targets"][number] | undefined, right: VaultApp["targets"][number]): boolean { return Boolean(left && left.scheme === right.scheme && left.host === right.host && (left.pathPrefix || "/") === (right.pathPrefix || "/")); }
+function offlineBackend(): import("../../shared/vault").VaultBackend { return { async connect() {}, async getManifest() { return null; }, async list() { return []; }, async get() { return null; }, async put() { throw new Error("offline"); }, async delete() { throw new Error("offline"); } }; }
 async function profileFor(vaultId: string): Promise<VaultProfile> { const profile = (await listVaultProfiles()).find((candidate) => candidate.id === vaultId); if (!profile || !profile.enabled) throw new Error("Vault 不存在或已停用"); return profile; }
 async function readSecrets(): Promise<Record<string, SessionSecret>> {
   const value = (await chrome.storage.session.get(SESSION_SECRETS_KEY))[SESSION_SECRETS_KEY];
