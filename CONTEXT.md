@@ -14,7 +14,7 @@
 - Rust 构建统一启用 workspace、Cargo registry 与 toolchain path remap；hardened 构建默认要求 Binaryen `wasm-opt`，缺失即 fail closed，报告与 integrity 仅写入 `artifacts/hardened/`。普通 WASM 保持 byte-for-byte reproducibility；hardened seed 还选择 4 种有限等价 reconstruction strategy 之一。
 - Legacy UniPass 仍在使用；`credential-core` 新增职责冻结为 Legacy compatibility，新的 Vault AES-GCM 等能力不迁入 WASM；退役与 core 收缩见 [ADR 0003](docs/ADR/0003-crypto-boundary-and-legacy-retirement.md) / [TD-009](docs/TECH_DEBT.md)。`legacy-unipass` 与 WebDAV 分离，禁止双写。
 - WebDAV 状态机区分新建、接入远端和重连本地 profile；新设备用 endpoint + WebDAV credential + Vault Key 解密远端 manifest，旧 ID 经验证后迁移。credential 与 Vault Key 以设备密钥加密长期保存，浏览器重启后自动恢复；查看密码和 Advanced 优先用系统 WebAuthn，失败回退 4 至 32 位备用 PIN，扩展不读取系统 PIN。新建只显示一次恢复 Key，缺失 fail closed；对象分离，ETag 冲突 fail closed。
-- 验证：2026-09-15 默认门禁与 Chrome smoke 通过；144 项测试、依赖审计、类型检查、Rust QA、构建和产物审计通过。WebDAV 权限提示/回收待真实服务验收；其余集成验收于 2026-09-14 完成。
+- 验证：2026-09-15 默认门禁与 Chrome smoke 通过；Chrome 虚拟认证器覆盖系统 WebAuthn 注册、签名授权、重放拒绝与扩展 origin RP ID hash；145 项测试、依赖审计、类型检查、Rust QA、构建和产物审计通过。WebDAV 权限提示/回收待真实服务验收；其余集成验收于 2026-09-14 完成。
 - 本地构建以商店扩展 `gjphikebcceegfolnbfncepfmjnhdkam` 的公开 key 固定 ID；每次验证动态查询商店版号，并强制本地与之同主、次版本且补丁号恰高 `1`；每个新商店基线只发布一次对应 GitHub Release。仅允许开发者模式加载，不具备商店发布或签名权。
 
 ## 近期优先级

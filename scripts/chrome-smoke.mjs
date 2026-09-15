@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import puppeteer from "puppeteer-core";
 import { unzipSync } from "fflate";
 import { inspectHardenedMetadata } from "./release-artifact-check.mjs";
+import { assertSystemAuthenticatorFlow } from "./system-auth-smoke.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const execFile = promisify(execFileCallback);
@@ -51,6 +52,7 @@ try {
     assert.equal(loadedManifest.name, manifest.name);
 
     await assertWasmLoads(await waitForWorker(serviceWorkerTarget));
+    await assertSystemAuthenticatorFlow(popup, extensionId);
     derivedBuild = await assertSelfBuildFlow(popup, manifest.version, downloadDirectory, extensionId);
 
     if (process.env.CHROME_SMOKE_SKIP_RESTART !== "true") {
@@ -76,7 +78,7 @@ try {
 
     assert.deepEqual(errors, [], `extension console errors:\n${errors.join("\n")}`);
     const restartLabel = process.env.CHROME_SMOKE_SKIP_RESTART === "true" ? "restart skipped for this runner" : "restart verified";
-    console.log(`Chrome smoke GREEN: Google Chrome, MV3 manifest, popup, Service Worker, WASM and ${restartLabel}`);
+    console.log(`Chrome smoke GREEN: Google Chrome, MV3 manifest, popup, Service Worker, WASM, WebAuthn and ${restartLabel}`);
   } finally {
     await browser.close();
   }
